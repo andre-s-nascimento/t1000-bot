@@ -1,4 +1,4 @@
-/* (c) 2026 | 04/05/2026 */
+/* (c) 2026 | 07/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.io.File;
@@ -47,6 +47,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private final TelegramFacade telegramFacade;
     private final TelegramSafeExecutor safeExecutor;
     private final UserInteractionLogger userLogger;
+    private final IdeasLogger ideasLogger;
 
     @Value("${t1000.features.transcription-enabled:false}")
     private boolean transcriptionEnabled;
@@ -261,6 +262,67 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
         if (texto.equals("/start")) {
             enviarBoasVindas(chatId, message.getFrom().getFirstName());
+            return;
+        }
+
+        // Dentro de tratarTexto, antes do bloco que verifica "t1000 buscar"
+        if (texto.startsWith("t1000 anotar ideia")) {
+            // Extrai a ideia (remove o comando)
+            String idea = texto.replace("t1000 anotar ideia", "").trim();
+            if (idea.isEmpty()) {
+                telegramFacade.enviarMensagem(
+                        chatId,
+                        "❓ Você precisa escrever a ideia após o comando. Exemplo: `T1000 anotar"
+                                + " ideia: fazer café`");
+                return;
+            }
+            // Remove dois pontos iniciais se existirem
+            if (idea.startsWith(":") || idea.startsWith("：")) {
+                idea = idea.substring(1).trim();
+            }
+            if (idea.isEmpty()) {
+                telegramFacade.enviarMensagem(chatId, "❓ A ideia não pode ficar vazia.");
+                return;
+            }
+
+            // Obtém dados do usuário
+            var from = message.getFrom();
+            String userName =
+                    from.getFirstName()
+                            + (from.getLastName() != null ? " " + from.getLastName() : "");
+            long userId = from.getId();
+            long chatIdOriginal = chatId;
+            String chatName = "";
+            if (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat()) {
+                chatName = message.getChat().getTitle();
+            } else {
+                chatName = "privado";
+            }
+
+            // Salva a ideia
+            ideasLogger.saveIdea(userId, userName, chatIdOriginal, idea, chatName);
+
+            // Envia para o admin (ownerId)
+            String adminMsg =
+                    String.format(
+                            "💡 <b>Nova ideia</b>\n"
+                                    + "📝 <i>%s</i>\n"
+                                    + "👤 <b>Usuário:</b> <a href=\"tg://user?id=%d\">%s</a>\n"
+                                    + "📍 <b>Local:</b> %s\n"
+                                    + "🕒 %s",
+                            escapeHtml(idea),
+                            userId,
+                            escapeHtml(userName),
+                            escapeHtml(chatName),
+                            java.time.LocalDateTime.now()
+                                    .format(
+                                            java.time.format.DateTimeFormatter.ofPattern(
+                                                    "dd/MM/yyyy HH:mm:ss")));
+            telegramFacade.enviarMensagemHtml(ownerId, adminMsg);
+
+            // Confirma para o usuário
+            telegramFacade.enviarMensagemHtml(
+                    chatId, "✅ Ideia registrada! Obrigado pela contribuição.");
             return;
         }
 

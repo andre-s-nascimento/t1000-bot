@@ -35,7 +35,7 @@ class TelegramControllerTest {
     private TelegramFileService fileService;
     private TelegramFacade telegramFacade;
     private TelegramSafeExecutor safeExecutor; // instância real
-
+    private IdeasLogger ideasLogger;
     private TelegramController controller;
 
     @BeforeEach
@@ -47,6 +47,7 @@ class TelegramControllerTest {
         fileService = mock(TelegramFileService.class);
         telegramFacade = mock(TelegramFacade.class);
         safeExecutor = new TelegramSafeExecutor(); // real
+        ideasLogger = mock(IdeasLogger.class); // 🆕
         UserInteractionLogger userLogger = mock(UserInteractionLogger.class); // 🆕
 
         controller =
@@ -58,7 +59,8 @@ class TelegramControllerTest {
                         fileService,
                         telegramFacade,
                         safeExecutor,
-                        userLogger); // 🆕
+                        userLogger,
+                        ideasLogger); // 🆕
 
         // Configurar campos injetáveis
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);
