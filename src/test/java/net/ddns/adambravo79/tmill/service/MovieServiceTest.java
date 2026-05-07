@@ -64,7 +64,7 @@ class MovieServiceTest {
                                 1,
                                 List.of(
                                         new MovieRecord(
-                                                1L, "Filme", "2020", "", 1.0, 1.0, "",
+                                                1L, "Filme", "Movie", "2020", "", 1.0, 1.0, "",
                                                 List.of()))));
 
         movieService.buscarFilme("válido@termo#");
@@ -93,6 +93,7 @@ class MovieServiceTest {
                                         new MovieRecord(
                                                 id,
                                                 "O Agente Secreto",
+                                                "The Secret Agent",
                                                 "2025-09-10",
                                                 "desc",
                                                 10.0,
@@ -105,6 +106,7 @@ class MovieServiceTest {
                         new MovieRecord(
                                 id,
                                 "O Agente Secreto",
+                                "The Secret Agent",
                                 "2026-01-01",
                                 "desc",
                                 10.0,
@@ -134,7 +136,15 @@ class MovieServiceTest {
         stubEmptyEasterEgg();
         var movie =
                 new MovieRecord(
-                        1L, "O Agente Secreto", "2025-09-10", "desc", 10.0, 8.5, "/img", List.of());
+                        1L,
+                        "O Agente Secreto",
+                        "The Secret Agent",
+                        "2025-09-10",
+                        "desc",
+                        10.0,
+                        8.5,
+                        "/img",
+                        List.of());
         when(tmdbClient.buscarDetalhes(1L)).thenReturn(movie);
         when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
         when(tmdbClient.buscarOndeAssistir(1L)).thenReturn("N/A");
@@ -147,7 +157,8 @@ class MovieServiceTest {
     void deveUsarTBAQuandoSemData() {
         stubEmptyEasterEgg();
         Long id = 1L;
-        var movie = new MovieRecord(id, "Teste", null, "desc", 1.0, 1.0, "/img", List.of("US"));
+        var movie =
+                new MovieRecord(id, "Teste", "Test", null, "desc", 1.0, 1.0, "/img", List.of("US"));
         when(tmdbClient.buscarDetalhes(id)).thenReturn(movie);
         when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
         when(tmdbClient.buscarOndeAssistir(id)).thenReturn("N/A");
@@ -159,7 +170,9 @@ class MovieServiceTest {
     @Test
     void deveUsarGloboQuandoPaisInvalido() {
         stubEmptyEasterEgg();
-        var movie = new MovieRecord(1L, "Teste", "2020", "desc", 1.0, 1.0, "/img", List.of("XXX"));
+        var movie =
+                new MovieRecord(
+                        1L, "Teste", "Test", "2020", "desc", 1.0, 1.0, "/img", List.of("XXX"));
         when(tmdbClient.buscarDetalhes(1L)).thenReturn(movie);
         when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
         when(tmdbClient.buscarOndeAssistir(1L)).thenReturn("N/A");

@@ -223,11 +223,6 @@ public class TelegramFacade {
 
     // NOVO: enviar foto com legenda em HTML
     public void enviarFotoHtml(long chatId, String url, String legenda) {
-        if (legenda == null || legenda.isBlank()) {
-            // sem legenda, envia sem parseMode
-            enviarFoto(chatId, url, ""); // ou implementa diretamente
-            return;
-        }
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
@@ -237,7 +232,7 @@ public class TelegramFacade {
                                     .chatId(String.valueOf(chatId))
                                     .photo(new InputFile(url))
                                     .caption(legenda)
-                                    .parseMode(HTML)
+                                    .parseMode(HTML) // ← ESSENCIAL
                                     .build();
                     telegramClient.execute(photo);
                 });
@@ -257,6 +252,22 @@ public class TelegramFacade {
                                     .parseMode(HTML)
                                     .build();
                     telegramClient.execute(msg);
+                });
+    }
+
+    public void editarMensagemHtml(long chatId, int messageId, String novoTexto) {
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    var editMsg =
+                            EditMessageText.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .messageId(messageId)
+                                    .text(novoTexto)
+                                    .parseMode(HTML)
+                                    .build();
+                    telegramClient.execute(editMsg);
                 });
     }
 }

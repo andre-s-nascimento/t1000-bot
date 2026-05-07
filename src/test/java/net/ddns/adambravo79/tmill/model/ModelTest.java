@@ -58,7 +58,15 @@ class ModelTest {
     void deveCriarMovieResponse() {
         MovieRecord movieRecord =
                 new MovieRecord(
-                        1L, "Titulo", "2020", "overview", 10.0, 8.0, "/poster", List.of("US"));
+                        1L,
+                        "Titulo",
+                        "Title",
+                        "2020",
+                        "overview",
+                        10.0,
+                        8.0,
+                        "/poster",
+                        List.of("US"));
         MovieResponse resp = new MovieResponse(List.of(movieRecord));
 
         assertThat(resp.results()).hasSize(1);

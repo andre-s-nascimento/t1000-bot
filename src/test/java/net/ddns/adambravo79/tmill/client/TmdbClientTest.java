@@ -43,6 +43,7 @@ class TmdbClientTest {
         var filme =
                 new MovieRecord(
                         1L,
+                        "Duna",
                         "Dune",
                         "2021-10-01",
                         "overview",
@@ -56,7 +57,7 @@ class TmdbClientTest {
         MovieSearchResponse result = new TmdbClient(restClient).pesquisarFilme("duna");
 
         assertThat(result.results()).hasSize(1);
-        assertThat(result.results().get(0).title()).isEqualTo("Dune");
+        assertThat(result.results().get(0).title()).isEqualTo("Duna");
     }
 
     // 🔥 ALTERADO: não lança exceção, retorna busca vazia
@@ -77,6 +78,7 @@ class TmdbClientTest {
         var movie =
                 new MovieRecord(
                         2L,
+                        "Batman",
                         "Batman",
                         "2022-03-01",
                         "overview",

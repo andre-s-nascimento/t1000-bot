@@ -116,6 +116,7 @@ public class MovieService {
                 String.format(
                         """
             🎬 <b>%s</b>
+            <i>%s</i>
             📅 Ano: %s %s
             ⭐ <b>Nota:</b> <a href="%s">%.1f/10</a>
 
@@ -128,13 +129,15 @@ public class MovieService {
             📺 <b>Onde assistir:</b> %s%s
             """,
                         detalhes.title().toUpperCase(),
+                        escapeHtml(
+                                detalhes.originalTitle() != null ? detalhes.originalTitle() : ""),
                         ano,
                         bandeiras,
                         linkTmdb,
                         detalhes.voteAverage(),
                         (diretor != null && !diretor.isBlank()) ? diretor : "N/A",
                         elenco,
-                        escapeHtml(detalhes.overview()), // novo método para escapar HTML
+                        escapeHtml(detalhes.overview()),
                         streamings,
                         easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse(""));
 

@@ -73,7 +73,8 @@ class AudioToPostIntegrationTest {
     void fluxoDeBuscaDeFilme() {
         var tmdbClient = mock(TmdbClient.class);
         var registro =
-                new MovieRecord(1L, "Duna", "2021", "desc", 8.5, 9.0, "poster.jpg", List.of());
+                new MovieRecord(
+                        1L, "Duna", "Dune", "2021", "desc", 8.5, 9.0, "poster.jpg", List.of());
         when(tmdbClient.pesquisarFilme("duna"))
                 .thenReturn(new MovieSearchResponse(1, 1, 1, List.of(registro)));
 

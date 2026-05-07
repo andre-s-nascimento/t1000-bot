@@ -83,7 +83,8 @@ class TelegramControllerTest {
                         1,
                         List.of(
                                 new MovieRecord(
-                                        id, "Duna", "2021", "desc", 1.0, 1.0, "", List.of())));
+                                        id, "Duna", "Dune", "2021", "desc", 1.0, 1.0, "",
+                                        List.of())));
 
         when(movieService.buscarFilme("duna")).thenReturn(search);
         when(movieService.buscarPorId(id)).thenReturn(new MovieOrchestrationResponse("ok", "url"));
@@ -102,8 +103,9 @@ class TelegramControllerTest {
                         1,
                         1,
                         List.of(
-                                new MovieRecord(1L, "A", "2020", "", 1.0, 1.0, "", List.of()),
-                                new MovieRecord(2L, "B", "2021", "", 1.0, 1.0, "", List.of())));
+                                new MovieRecord(1L, "A", "a", "2020", "", 1.0, 1.0, "", List.of()),
+                                new MovieRecord(
+                                        2L, "B", "b", "2021", "", 1.0, 1.0, "", List.of())));
 
         when(movieService.buscarFilme("teste")).thenReturn(search);
 
@@ -126,8 +128,7 @@ class TelegramControllerTest {
     @Test
     void deveRejeitarBuscaComMenosDe3Caracteres() {
         controller.consume(buildTextUpdate(1L, "t1000 buscar ab"));
-        verify(telegramFacade)
-                .enviarMensagem(1L, "🔍 O termo de busca deve ter pelo menos 3 caracteres.");
+        verify(telegramFacade).enviarMensagem(1L, "🔍 O termo deve ter pelo menos 3 caracteres.");
         verifyNoInteractions(movieService);
     }
 
@@ -136,7 +137,7 @@ class TelegramControllerTest {
         String termoLongo = "a".repeat(101);
         controller.consume(buildTextUpdate(1L, "t1000 buscar " + termoLongo));
         verify(telegramFacade)
-                .enviarMensagem(1L, "🔍 O termo de busca é muito longo (máx. 100 caracteres).");
+                .enviarMensagem(1L, "🔍 O termo é muito longo (máx. 100 caracteres).");
         verifyNoInteractions(movieService);
     }
 
@@ -304,7 +305,8 @@ class TelegramControllerTest {
 
         verify(movieService).buscarPorId(123L);
         verify(telegramFacade)
-                .enviarFoto(eq(1L), eq("https://image.tmdb.org/t/p/w500/poster.jpg"), anyString());
+                .enviarFotoHtml(
+                        eq(1L), eq("https://image.tmdb.org/t/p/w500/poster.jpg"), anyString());
         verify(telegramFacade, never()).enviarMensagem(anyLong(), anyString());
     }
 
