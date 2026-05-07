@@ -192,7 +192,8 @@ class TelegramControllerTest {
 
         controller.consume(buildVoiceUpdate(1L, "file-id", 1L));
 
-        verify(telegramFacade, atLeast(2)).enviarMensagem(eq(1L), any());
+        // 🔥 Agora verifica enviarMensagemSemMarkdown
+        verify(telegramFacade, atLeast(2)).enviarMensagemSemMarkdown(eq(1L), any());
     }
 
     @Test
@@ -247,7 +248,7 @@ class TelegramControllerTest {
         when(message.getVoice()).thenReturn(voice);
         when(voice.getFileId()).thenReturn("file-id");
         when(voice.getFileSize()).thenReturn(1024L);
-        when(voice.getDuration()).thenReturn(120); // 🔥 duração em segundos
+        when(voice.getDuration()).thenReturn(120);
         when(message.getChat()).thenReturn(chat);
         when(chat.isGroupChat()).thenReturn(true);
         when(message.getFrom()).thenReturn(user);
@@ -257,8 +258,9 @@ class TelegramControllerTest {
 
         controller.consume(update);
 
+        // 🔥 Agora verifica enviarComBotoesHtml
         verify(telegramFacade)
-                .enviarComBotoes(eq(-100L), anyString(), any(InlineKeyboardMarkup.class));
+                .enviarComBotoesHtml(eq(-100L), anyString(), any(InlineKeyboardMarkup.class));
         verifyNoInteractions(fileService, audioService);
     }
 
