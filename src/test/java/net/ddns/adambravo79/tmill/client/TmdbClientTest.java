@@ -30,7 +30,6 @@ class TmdbClientTest {
         headersSpec = mock(RestClient.RequestHeadersSpec.class);
         responseSpec = mock(RestClient.ResponseSpec.class);
 
-        // ✅ doReturn em tudo que envolve wildcard <?>
         doReturn(getSpec).when(restClient).get();
         lenient().doReturn(headersSpec).when(getSpec).uri(any(Function.class));
         lenient().doReturn(headersSpec).when(getSpec).uri(anyString(), anyLong());
@@ -60,14 +59,15 @@ class TmdbClientTest {
         assertThat(result.results().get(0).title()).isEqualTo("Dune");
     }
 
+    // 🔥 ALTERADO: não lança exceção, retorna busca vazia
     @Test
-    void deveFalharQuandoPesquisaSemResultados() {
+    void deveRetornarBuscaVaziaQuandoPesquisaSemResultado() {
         when(responseSpec.body(MovieSearchResponse.class))
-                .thenReturn(new MovieSearchResponse(1, 0, 0, List.of()));
+                .thenReturn(new MovieSearchResponse(0, 0, 0, List.of()));
 
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> new TmdbClient(restClient).pesquisarFilme("inexistente"))
-                .withMessageContaining("Falha na busca de filmes");
+        MovieSearchResponse result = new TmdbClient(restClient).pesquisarFilme("inexistente");
+        assertThat(result.results()).isEmpty();
+        assertThat(result.totalResults()).isZero();
     }
 
     // --- buscarDetalhes ---
@@ -113,13 +113,13 @@ class TmdbClientTest {
         assertThat(elenco.get(0).name()).isEqualTo("Ator");
     }
 
+    // 🔥 ALTERADO: não lança exceção, retorna lista vazia
     @Test
-    void deveFalharQuandoElencoInvalido() {
+    void deveRetornarListaVaziaQuandoElencoInvalido() {
         when(responseSpec.body(CreditsResponse.class)).thenReturn(null);
 
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> new TmdbClient(restClient).buscarElenco(1L))
-                .withMessageContaining("Falha ao buscar elenco");
+        List<CastRecord> elenco = new TmdbClient(restClient).buscarElenco(1L);
+        assertThat(elenco).isEmpty();
     }
 
     // --- buscarOndeAssistir ---

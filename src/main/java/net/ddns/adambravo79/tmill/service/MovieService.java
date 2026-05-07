@@ -112,37 +112,38 @@ public class MovieService {
 
         String linkTmdb = "https://www.themoviedb.org/movie/" + detalhes.id();
 
-        String texto =
+        String textoHtml =
                 String.format(
                         """
-            🎬 *%s*
+            🎬 <b>%s</b>
             📅 Ano: %s %s
-            ⭐ *Nota:* [%.1f/10](%s)
+            ⭐ <b>Nota:</b> <a href="%s">%.1f/10</a>
 
-            %s
-            👥 *Elenco:* %s
+            🎬 <b>Diretor:</b> %s
 
-            📖 *Sinopse:* %s
+            👥 <b>Elenco:</b> %s
 
-            📺 *Onde assistir:* %s%s
+            📖 <b>Sinopse:</b> %s
+
+            📺 <b>Onde assistir:</b> %s%s
             """,
                         detalhes.title().toUpperCase(),
                         ano,
                         bandeiras,
-                        detalhes.voteAverage(),
                         linkTmdb,
-                        directorLine,
+                        detalhes.voteAverage(),
+                        (diretor != null && !diretor.isBlank()) ? diretor : "N/A",
                         elenco,
-                        escapeMarkdown(detalhes.overview()),
+                        escapeHtml(detalhes.overview()), // novo método para escapar HTML
                         streamings,
                         easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse(""));
 
         String urlPoster =
-                detalhes.posterPath() != null && !detalhes.posterPath().isBlank()
+                (detalhes.posterPath() != null && !detalhes.posterPath().isBlank())
                         ? "https://image.tmdb.org/t/p/w500" + detalhes.posterPath()
                         : "";
 
-        return new MovieOrchestrationResponse(texto, urlPoster);
+        return new MovieOrchestrationResponse(textoHtml, urlPoster);
     }
 
     /** Converte código de país ISO em emoji de bandeira. */
@@ -156,24 +157,12 @@ public class MovieService {
     }
 
     /** Escapa caracteres especiais para evitar conflitos com Markdown. */
-    private String escapeMarkdown(String texto) {
-        return texto.replace("_", "\\_")
-                .replace("*", "\\*")
-                .replace("[", "\\[")
-                .replace("]", "\\]")
-                .replace("(", "\\(")
-                .replace(")", "\\)");
-    }
-
-    private Optional<String> getEasterEgg(long movieId) {
-        if (movieId == 280L) {
-            log.info("Easter Egg ativado para 'O Exterminador do Futuro 2' (ID: 280)");
-            return Optional.of(
-                    "\n\n"
-                            + "🤖 *Review do T-1000:* \"Eu já vi esse filme, e não gostei muito do"
-                            + " final\"");
-        }
-        // Futuro: adicionar outros IDs com mensagens especiais
-        return Optional.empty();
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }

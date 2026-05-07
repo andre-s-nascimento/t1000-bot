@@ -1,4 +1,4 @@
-/* (c) 2026 | 02/05/2026 */
+/* (c) 2026 | 07/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.*;
@@ -314,8 +314,9 @@ class TelegramControllerTest {
         controller.consume(buildCallbackUpdate(1L, "id:123"));
 
         verify(movieService).buscarPorId(123L);
-        verify(telegramFacade).enviarMensagem(eq(1L), contains("texto"));
+        verify(telegramFacade).enviarMensagemHtml(eq(1L), contains("texto"));
         verify(telegramFacade, never()).enviarFoto(anyLong(), anyString(), anyString());
+        verify(telegramFacade, never()).enviarMensagem(anyLong(), anyString());
     }
 
     @Test

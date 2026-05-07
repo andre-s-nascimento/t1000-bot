@@ -1,4 +1,4 @@
-/* (c) 2026 | 01/05/2026 */
+/* (c) 2026 | 07/05/2026 */
 package net.ddns.adambravo79.tmill.telegram.core;
 
 import org.springframework.stereotype.Component;
@@ -28,7 +28,8 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 public class TelegramFacade {
 
-    private static final String MARKDOWN = "Markdown";
+    private static final String MARKDOWN = "MarkdownV2";
+    private static final String HTML = "HTML";
 
     private final TelegramClient telegramClient;
     private final TelegramSafeExecutor safeExecutor;
@@ -75,6 +76,7 @@ public class TelegramFacade {
      * @param legenda legenda da foto.
      */
     public void enviarFoto(long chatId, String url, String legenda) {
+        log.debug("Enviando foto para chatId={} com legenda (escapada?): {}", chatId, legenda);
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
@@ -84,7 +86,7 @@ public class TelegramFacade {
                                     .chatId(String.valueOf(chatId))
                                     .photo(new InputFile(url))
                                     .caption(legenda)
-                                    .parseMode(MARKDOWN)
+                                    // .parseMode(MARKDOWN)
                                     .build();
 
                     telegramClient.execute(photo);
@@ -184,6 +186,75 @@ public class TelegramFacade {
                                     .chatId(String.valueOf(chatId))
                                     .text(texto)
                                     // sem .parseMode
+                                    .build();
+                    telegramClient.execute(msg);
+                });
+    }
+
+    public void enviarComBotoesSemParse(long chatId, String texto, InlineKeyboardMarkup markup) {
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    var msg =
+                            SendMessage.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .text(texto)
+                                    .replyMarkup(markup)
+                                    .build();
+                    telegramClient.execute(msg);
+                });
+    }
+
+    public void enviarMensagemHtml(long chatId, String texto) {
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    var msg =
+                            SendMessage.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .text(texto)
+                                    .parseMode(HTML)
+                                    .build();
+                    telegramClient.execute(msg);
+                });
+    }
+
+    // NOVO: enviar foto com legenda em HTML
+    public void enviarFotoHtml(long chatId, String url, String legenda) {
+        if (legenda == null || legenda.isBlank()) {
+            // sem legenda, envia sem parseMode
+            enviarFoto(chatId, url, ""); // ou implementa diretamente
+            return;
+        }
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    var photo =
+                            SendPhoto.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .photo(new InputFile(url))
+                                    .caption(legenda)
+                                    .parseMode(HTML)
+                                    .build();
+                    telegramClient.execute(photo);
+                });
+    }
+
+    // NOVO: enviar mensagem com botões em HTML
+    public void enviarComBotoesHtml(long chatId, String texto, InlineKeyboardMarkup markup) {
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    var msg =
+                            SendMessage.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .text(texto)
+                                    .replyMarkup(markup)
+                                    .parseMode(HTML)
                                     .build();
                     telegramClient.execute(msg);
                 });

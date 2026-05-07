@@ -28,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
 import net.ddns.adambravo79.tmill.client.BloggerClient;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
+import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
@@ -277,12 +278,16 @@ public class TelegramController implements LongPollingUpdateConsumer {
                     chatId, "🔍 O termo de busca é muito longo (máx. 100 caracteres).");
             return;
         }
-
         var busca = movieService.buscarFilme(nome);
+        try {
 
-        if (busca == null || busca.results() == null || busca.results().isEmpty()) {
-            log.warn("⚠️ Filme não encontrado chatId={} query='{}'", chatId, nome);
-            telegramFacade.enviarMensagem(chatId, "❌ Filme não encontrado.");
+            if (busca == null || busca.results() == null || busca.results().isEmpty()) {
+                log.warn("⚠️ Filme não encontrado chatId={} query='{}'", chatId, nome);
+                telegramFacade.enviarMensagem(chatId, "❌ Filme não encontrado.");
+                return;
+            }
+        } catch (MovieNotFoundException e) {
+            telegramFacade.enviarMensagem(chatId, "❌ " + e.getMessage());
             return;
         }
 
@@ -290,7 +295,15 @@ public class TelegramController implements LongPollingUpdateConsumer {
             var id = busca.results().get(0).id();
             var resposta = movieService.buscarPorId(id);
             log.info("✅ Filme encontrado único chatId={} movieId={}", chatId, id);
-            telegramFacade.enviarFoto(chatId, resposta.urlFoto(), resposta.textoFormatado());
+            String fotoUrl = resposta.urlFoto();
+            if (fotoUrl != null
+                    && !fotoUrl.isBlank()
+                    && (fotoUrl.startsWith("http://") || fotoUrl.startsWith("https://"))) {
+                telegramFacade.enviarFotoHtml(chatId, fotoUrl, resposta.textoFormatado());
+            } else {
+                telegramFacade.enviarMensagemHtml(
+                        chatId, resposta.textoFormatado() + "\n\n_(sem imagem)_");
+            }
             return;
         }
 
@@ -305,19 +318,19 @@ public class TelegramController implements LongPollingUpdateConsumer {
         String saudacao =
                 String.format(
                         """
-            🤖 Olá, %s! Eu sou o **Tmill Bot**, o robô de metal líquido das transcrições e buscas.
+            🤖 Olá, <b>%s</b>! Eu sou o <b>Tmill Bot</b>, o robô de metal líquido das transcrições e buscas.
 
-            📌 **O que posso fazer?**
-            🎬 Buscar filmes: `t1000 buscar <nome do filme>`
+            📌 <b>O que posso fazer?</b>
+            🎬 Buscar filmes: <code>t1000 buscar &lt;nome do filme&gt;</code>
             🎙️ Transcrever áudios: envie uma mensagem de voz ou áudio.
 
-            💡 **Em grupos/canais:**
-            Ao enviar um áudio, aparecerão botões para você escolher a transcrição **bruta** (🎙️) ou **refinada** (✨). O resultado chegará no seu **chat privado**.
+            💡 <b>Em grupos/canais:</b>
+            Ao enviar um áudio, aparecerão botões para você escolher a transcrição <b>bruta</b> (🎙️) ou <b>refinada</b> (✨). O resultado chegará no seu <b>chat privado</b>.
 
             Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
             """,
-                        firstName);
-        telegramFacade.enviarMensagem(chatId, saudacao);
+                        escapeHtml(firstName));
+        telegramFacade.enviarMensagemHtml(chatId, saudacao);
     }
 
     // =========================
@@ -485,9 +498,11 @@ public class TelegramController implements LongPollingUpdateConsumer {
             if (fotoUrl != null
                     && !fotoUrl.isBlank()
                     && (fotoUrl.startsWith("http://") || fotoUrl.startsWith("https://"))) {
+                log.info("Texto formatado para o filme {}: {}", id, resposta.textoFormatado());
                 telegramFacade.enviarFoto(chatId, fotoUrl, resposta.textoFormatado());
             } else {
-                telegramFacade.enviarMensagem(
+                log.info("Texto formatado para o filme {}: {}", id, resposta.textoFormatado());
+                telegramFacade.enviarMensagemHtml(
                         chatId, resposta.textoFormatado() + "\n\n_(sem imagem)_");
             }
             // Edita a mensagem original dos botões removendo o teclado
@@ -687,7 +702,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
             }
         }
         var markup = InlineKeyboardMarkup.builder().keyboard(rows).build();
-        telegramFacade.enviarComBotoes(
+        telegramFacade.enviarComBotoesSemParse(
                 chatId, "🧐 Encontrei vários resultados. Qual você quer?", markup);
     }
 
@@ -728,11 +743,11 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 .replace("+", "\\+")
                 .replace("-", "\\-")
                 .replace("=", "\\=")
-                .replace("|", "\\|")
+                // NÃO escapar o pipe (|) para preservar o spoiler
                 .replace("{", "\\{")
                 .replace("}", "\\}")
-                .replace(".", "\\.")
-                .replace("!", "\\!");
+                .replace(".", "\\.") // ✅ ESCAPA O PONTO
+                .replace("!", "\\!"); // ✅ ESCAPA EXCLAMAÇÃO (se necessário)
     }
 
     private List<String> dividirMensagem(String texto, int limite) {
@@ -750,5 +765,14 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private String fecharMarkdown(String texto) {
         long count = texto.chars().filter(c -> c == '*').count();
         return (count % 2 != 0) ? texto + "*" : texto;
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }
