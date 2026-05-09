@@ -94,16 +94,16 @@ public class DailyDigestService {
         // Buscar mensagens de texto
         List<Map<String, Object>> messages =
                 jdbcTemplate.queryForList(
-                        "SELECT user_name, text FROM messages WHERE timestamp BETWEEN ? AND ? ORDER"
-                                + " BY timestamp ASC",
+                        "SELECT user_name, text FROM messages WHERE datetime(timestamp,"
+                                + " 'localtime') BETWEEN ? AND ? ORDER BY timestamp ASC",
                         from,
                         to);
 
         // Buscar transcrições de áudio
         List<Map<String, Object>> transcripts =
                 jdbcTemplate.queryForList(
-                        "SELECT user_name, text FROM transcripts WHERE timestamp BETWEEN ? AND ?"
-                                + " ORDER BY timestamp ASC",
+                        "SELECT user_name, text FROM transcripts WHERE datetime(timestamp,"
+                                + " 'localtime') BETWEEN ? AND ? ORDER BY timestamp ASC",
                         from,
                         to);
 
