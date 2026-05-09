@@ -1,10 +1,14 @@
-/* (c) 2026 | 07/05/2026 */
+/* (c) 2026 | 09/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.GroqClient;
@@ -26,32 +30,66 @@ public class DailyDigestService {
   @Value("${digest.enabled:false}")
   private boolean digestEnabled;
 
-  @Value("${digest.chat-id:0}")
-  private long digestChatId;
+  @Value("${digest.chat-ids:}")
+  private String digestChatIdsStr;
 
-  @Value("${digest.interval:day}") // "day" or "split"
-  private String digestInterval;
+  private final Set<Long> digestChatIds = new HashSet<>();
 
-  // Job para resumo da manhã (20:30 do dia anterior até 08:29 do dia atual)
+  @PostConstruct
+  public void init() {
+    if (digestChatIdsStr != null && !digestChatIdsStr.isBlank()) {
+      for (String s : digestChatIdsStr.split(",")) {
+        try {
+          digestChatIds.add(Long.parseLong(s.trim()));
+        } catch (NumberFormatException e) {
+          log.warn("ID inválido em digest.chat-ids: {}", s);
+        }
+      }
+      log.info("📊 Digests serão enviados para os chats: {}", digestChatIds);
+    } else {
+      log.info("Nenhum chat configurado para digest. As mensagens não serão enviadas.");
+    }
+  }
+
+  // Resumo da manhã: cobre das 20:30 do dia anterior até 08:29 do dia atual
   @Scheduled(cron = "0 30 8 * * *", zone = "America/Sao_Paulo")
   public void generateMorningDigest() {
-    if (!digestEnabled || digestChatId == 0) return;
-    generateDigest(
-        LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).minusDays(1).withHour(20).withMinute(30),
-        LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).withHour(8).withMinute(30));
+    log.info("🔁 Método generateMorningDigest foi chamado.");
+    if (!digestEnabled) {
+      log.debug("Digest desabilitado por configuração.");
+      return;
+    }
+    if (digestChatIds.isEmpty()) {
+      log.warn("Nenhum chat configurado para envio do digest da manhã.");
+      return;
+    }
+    LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+    LocalDateTime from = now.minusDays(1).withHour(20).withMinute(30).withSecond(0);
+    LocalDateTime to = now.withHour(8).withMinute(30).withSecond(0);
+    generateDigest(from, to, "RESUMO DA MADRUGADA/MANHÃ");
   }
 
-  // Job para resumo da noite (08:30 até 20:29 do mesmo dia)
+  // Resumo da noite: cobre das 08:30 até 20:29 do mesmo dia
   @Scheduled(cron = "0 30 20 * * *", zone = "America/Sao_Paulo")
   public void generateEveningDigest() {
-    if (!digestEnabled || digestChatId == 0) return;
-    generateDigest(
-        LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).withHour(8).withMinute(30),
-        LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).withHour(20).withMinute(30));
+    if (!digestEnabled) {
+      log.debug("Digest desabilitado por configuração.");
+      return;
+    }
+    if (digestChatIds.isEmpty()) {
+      log.warn("Nenhum chat configurado para envio do digest da noite.");
+      return;
+    }
+    LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+    LocalDateTime from = now.withHour(8).withMinute(30).withSecond(0);
+    LocalDateTime to = now.withHour(20).withMinute(30).withSecond(0);
+    generateDigest(from, to, "RESUMO DO DIA");
   }
 
-  private void generateDigest(LocalDateTime from, LocalDateTime to) {
-    // Coletar mensagens de texto
+  private void generateDigest(LocalDateTime from, LocalDateTime to, String periodLabel) {
+    log.info("Gerando {} período {} - {}", periodLabel, from, to);
+
+    // Buscar mensagens de texto
     List<Map<String, Object>> messages =
         jdbcTemplate.queryForList(
             "SELECT user_name, text FROM messages WHERE timestamp BETWEEN ? AND ? ORDER BY"
@@ -59,7 +97,7 @@ public class DailyDigestService {
             from,
             to);
 
-    // Coletar transcrições
+    // Buscar transcrições de áudio
     List<Map<String, Object>> transcripts =
         jdbcTemplate.queryForList(
             "SELECT user_name, text FROM transcripts WHERE timestamp BETWEEN ? AND ? ORDER BY"
@@ -68,53 +106,68 @@ public class DailyDigestService {
             to);
 
     if (messages.isEmpty() && transcripts.isEmpty()) {
-      log.info("Nenhuma mensagem ou transcrição no período {} - {}", from, to);
+      log.info("Nenhuma mensagem ou transcrição no período.");
       return;
     }
 
     // Construir prompt
     StringBuilder prompt = new StringBuilder();
     prompt
+        .append("Você é um assistente especializado em resumir conversas de um grupo de cinema. ")
         .append(
-            "Você é um assistente que resume conversas de um grupo de cinema. Abaixo estão as"
-                + " mensagens e transcrições de áudio do período de ")
-        .append(from)
-        .append(" até ")
-        .append(to)
+            "Considere que as mensagens podem ser textos ou transcrições de áudios (já corrigidos)."
+                + " ")
         .append(
-            ". Faça um resumo de no máximo 300 palavras destacando os principais assuntos"
-                + " discutidos, quem participou mais, e adicione um toque de humor típico do"
-                + " Exterminador do Futuro (T-1000) no final.\n\n");
-    prompt.append("Mensagens:\n");
+            "Faça um resumo de no máximo 300 palavras, destacando os principais assuntos"
+                + " discutidos, ")
+        .append(
+            "quem participou mais, e inclua um toque de humor no estilo do Exterminador do Futuro"
+                + " (T-1000). ")
+        .append(
+            "Não mencione que você é uma IA, apenas escreva o resumo em português do Brasil.\n\n")
+        .append("Abaixo estão as interações do período (cada linha é usuário: mensagem):\n");
+
     for (Map<String, Object> msg : messages) {
-      prompt
-          .append("- ")
-          .append(msg.get("user_name"))
-          .append(": ")
-          .append(msg.get("text"))
-          .append("\n");
+      String user = (String) msg.get("user_name");
+      String text = (String) msg.get("text");
+      prompt.append(user).append(": ").append(text).append("\n");
     }
-    prompt.append("\nTranscrições:\n");
     for (Map<String, Object> trans : transcripts) {
-      prompt
-          .append("- ")
-          .append(trans.get("user_name"))
-          .append(": ")
-          .append(trans.get("text"))
-          .append("\n");
+      String user = (String) trans.get("user_name");
+      String text = (String) trans.get("text");
+      prompt.append(user).append(" (áudio): ").append(text).append("\n");
     }
 
-    // Chamar Groq
+    String promptStr = prompt.toString();
+    // 8000 caracteres é um limite seguro para a maioria dos modelos
+    if (promptStr.length() > 8000) {
+      promptStr = promptStr.substring(0, 8000);
+      log.warn("Prompt truncado para 8000 caracteres.");
+    }
+
     try {
-      String summary = groqClient.refinarTexto(prompt.toString());
+      String summary = groqClient.refinarTexto(promptStr);
       if (summary == null || summary.isBlank()) {
-        log.warn("Resumo vazio recebido da IA");
+        log.warn("Resumo vazio retornado pela IA.");
         return;
       }
-      // Enviar para o chat configurado
-      String message = "<b>📊 Resumo do período</b>\n" + summary;
-      telegramFacade.enviarMensagemHtml(digestChatId, message);
-      log.info("Resumo enviado para chatId={}", digestChatId);
+
+      DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+      String header =
+          String.format(
+              "<b>📊 %s</b>\n<i>Período: %s - %s</i>\n\n",
+              periodLabel, from.format(dateFormat), to.format(dateFormat));
+      String finalMessage = header + summary;
+
+      // Enviar para cada chat configurado
+      for (Long chatId : digestChatIds) {
+        try {
+          telegramFacade.enviarMensagemHtml(chatId, finalMessage);
+          log.info("Resumo enviado para chatId={}", chatId);
+        } catch (Exception e) {
+          log.error("Erro ao enviar resumo para chatId={}", chatId, e);
+        }
+      }
     } catch (Exception e) {
       log.error("Erro ao gerar resumo com IA", e);
     }
