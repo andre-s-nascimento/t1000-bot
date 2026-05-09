@@ -49,6 +49,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private final TelegramSafeExecutor safeExecutor;
     private final UserInteractionLogger userLogger;
     private final IdeasLogger ideasLogger;
+    private final MessageStoreService messageStoreService;
 
     @Value("${t1000.features.transcription-enabled:false}")
     private boolean transcriptionEnabled;
@@ -179,6 +180,16 @@ public class TelegramController implements LongPollingUpdateConsumer {
         if (texto.equals("/start")) {
             enviarBoasVindas(chatId, message.getFrom().getFirstName());
             return;
+        }
+
+        // Dentro de tratarTexto, após o /start e antes de processar comandos, salve a mensagem:
+        if (!texto.startsWith("t1000") && !texto.startsWith("/start")) {
+            String userName =
+                    message.getFrom().getFirstName()
+                            + (message.getFrom().getLastName() != null
+                                    ? " " + message.getFrom().getLastName()
+                                    : "");
+            messageStoreService.saveMessage(chatId, message.getFrom().getId(), userName, texto);
         }
 
         if (texto.startsWith("t1000 anotar ideia")) {
@@ -366,9 +377,15 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
         File file = fileService.baixarArquivo(fileId);
 
+        String userName = message.getFrom().getFirstName();
+        if (message.getFrom().getLastName() != null)
+            userName += " " + message.getFrom().getLastName();
+
         audioService.processarFluxoAudio(
                 file,
                 chatId,
+                userId,
+                userName,
                 (texto, isUltima) -> {
                     log.debug(
                             "📄 Texto transcrito chatId={} size={} ultima={}",
@@ -575,7 +592,9 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
                         audioService.processarFluxoAudio(
                                 audioFile,
-                                userId,
+                                request.groupId(),
+                                request.senderId(),
+                                request.senderName(),
                                 (texto, isUltima) -> {
                                     if ("trans_bruto".equals(tipo) && !isUltima)
                                         resultado[0] = texto;
