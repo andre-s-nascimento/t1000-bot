@@ -92,16 +92,16 @@ public class DailyDigestService {
     // Buscar mensagens de texto
     List<Map<String, Object>> messages =
         jdbcTemplate.queryForList(
-            "SELECT user_name, text FROM messages WHERE timestamp BETWEEN ? AND ? ORDER BY"
-                + " timestamp ASC",
+            "SELECT user_name, text FROM messages WHERE timestamp BETWEEN ? AND ? ORDER"
+                + " BY timestamp ASC",
             from,
             to);
 
     // Buscar transcrições de áudio
     List<Map<String, Object>> transcripts =
         jdbcTemplate.queryForList(
-            "SELECT user_name, text FROM transcripts WHERE timestamp BETWEEN ? AND ? ORDER BY"
-                + " timestamp ASC",
+            "SELECT user_name, text FROM transcripts WHERE timestamp BETWEEN ? AND ?"
+                + " ORDER BY timestamp ASC",
             from,
             to);
 
@@ -124,7 +124,9 @@ public class DailyDigestService {
             "quem participou mais, e inclua um toque de humor no estilo do Exterminador do Futuro"
                 + " (T-1000). ")
         .append(
-            "Não mencione que você é uma IA, apenas escreva o resumo em português do Brasil.\n\n")
+            "**IMPORTANTE:** Use formatação HTML para negrito (<b>texto</b>) e itálico"
+                + " (<i>texto</i>). ")
+        .append("NÃO use Markdown (nem **, nem *). Escreva o resumo em português do Brasil.\n\n")
         .append("Abaixo estão as interações do período (cada linha é usuário: mensagem):\n");
 
     for (Map<String, Object> msg : messages) {
@@ -152,12 +154,15 @@ public class DailyDigestService {
         return;
       }
 
+      // Converte possíveis markdown para HTML (fallback)
+      String summaryHtml = markdownToHtml(summary);
+
       DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
       String header =
           String.format(
               "<b>📊 %s</b>\n<i>Período: %s - %s</i>\n\n",
               periodLabel, from.format(dateFormat), to.format(dateFormat));
-      String finalMessage = header + summary;
+      String finalMessage = header + summaryHtml;
 
       // Enviar para cada chat configurado
       for (Long chatId : digestChatIds) {
@@ -171,5 +176,14 @@ public class DailyDigestService {
     } catch (Exception e) {
       log.error("Erro ao gerar resumo com IA", e);
     }
+  }
+
+  private String markdownToHtml(String text) {
+    // Proteger itens já com tags HTML
+    // Converter **negrito** primeiro (para não confundir com itálico)
+    String html = text.replaceAll("\\*\\*([^*]+)\\*\\*", "<b>$1</b>");
+    // Depois converter *itálico* (que não seja parte de negrito)
+    html = html.replaceAll("(?<!\\*)\\*([^*]+)\\*(?!\\*)", "<i>$1</i>");
+    return html;
   }
 }

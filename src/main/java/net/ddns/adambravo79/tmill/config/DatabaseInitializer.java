@@ -18,38 +18,26 @@ public class DatabaseInitializer {
 
   @PostConstruct
   public void init() {
+    // cria tabela se não existir
+    jdbcTemplate.execute(
+        """
+            CREATE TABLE IF NOT EXISTS transcripts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                user_name TEXT,
+                text TEXT NOT NULL,
+                raw_text TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """);
+    // se a tabela já existir sem a coluna raw_text, adiciona
     try {
-      jdbcTemplate.execute(
-          """
-              CREATE TABLE IF NOT EXISTS messages (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  chat_id INTEGER NOT NULL,
-                  user_id INTEGER NOT NULL,
-                  user_name TEXT,
-                  text TEXT NOT NULL,
-                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-              )
-          """);
-      log.info("Tabela 'messages' verificada/criada com sucesso.");
+      jdbcTemplate.execute("ALTER TABLE transcripts ADD COLUMN raw_text TEXT");
+      log.info("Coluna raw_text adicionada à tabela transcripts");
     } catch (Exception e) {
-      log.error("Erro ao criar tabela messages", e);
-    }
-
-    try {
-      jdbcTemplate.execute(
-          """
-              CREATE TABLE IF NOT EXISTS transcripts (
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  chat_id INTEGER NOT NULL,
-                  user_id INTEGER NOT NULL,
-                  user_name TEXT,
-                  text TEXT NOT NULL,
-                  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-              )
-          """);
-      log.info("Tabela 'transcripts' verificada/criada com sucesso.");
-    } catch (Exception e) {
-      log.error("Erro ao criar tabela transcripts", e);
+      // coluna já existe (ignorar erro)
+      log.debug("Coluna raw_text já presente na tabela transcripts");
     }
   }
 }
