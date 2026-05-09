@@ -1,4 +1,4 @@
-/* (c) 2026 | 27/04/2026 */
+/* (c) 2026 | 06/05/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import static org.assertj.core.api.Assertions.*;
@@ -30,7 +30,6 @@ class TmdbClientTest {
         headersSpec = mock(RestClient.RequestHeadersSpec.class);
         responseSpec = mock(RestClient.ResponseSpec.class);
 
-        // ✅ doReturn em tudo que envolve wildcard <?>
         doReturn(getSpec).when(restClient).get();
         lenient().doReturn(headersSpec).when(getSpec).uri(any(Function.class));
         lenient().doReturn(headersSpec).when(getSpec).uri(anyString(), anyLong());
@@ -44,6 +43,7 @@ class TmdbClientTest {
         var filme =
                 new MovieRecord(
                         1L,
+                        "Duna",
                         "Dune",
                         "2021-10-01",
                         "overview",
@@ -57,17 +57,18 @@ class TmdbClientTest {
         MovieSearchResponse result = new TmdbClient(restClient).pesquisarFilme("duna");
 
         assertThat(result.results()).hasSize(1);
-        assertThat(result.results().get(0).title()).isEqualTo("Dune");
+        assertThat(result.results().get(0).title()).isEqualTo("Duna");
     }
 
+    // 🔥 ALTERADO: não lança exceção, retorna busca vazia
     @Test
-    void deveFalharQuandoPesquisaSemResultados() {
+    void deveRetornarBuscaVaziaQuandoPesquisaSemResultado() {
         when(responseSpec.body(MovieSearchResponse.class))
-                .thenReturn(new MovieSearchResponse(1, 0, 0, List.of()));
+                .thenReturn(new MovieSearchResponse(0, 0, 0, List.of()));
 
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> new TmdbClient(restClient).pesquisarFilme("inexistente"))
-                .withMessageContaining("Falha na busca de filmes");
+        MovieSearchResponse result = new TmdbClient(restClient).pesquisarFilme("inexistente");
+        assertThat(result.results()).isEmpty();
+        assertThat(result.totalResults()).isZero();
     }
 
     // --- buscarDetalhes ---
@@ -77,6 +78,7 @@ class TmdbClientTest {
         var movie =
                 new MovieRecord(
                         2L,
+                        "Batman",
                         "Batman",
                         "2022-03-01",
                         "overview",
@@ -103,7 +105,9 @@ class TmdbClientTest {
     @Test
     void deveBuscarElencoComSucesso() {
         when(responseSpec.body(CreditsResponse.class))
-                .thenReturn(new CreditsResponse(List.of(new CastRecord("Ator", "Personagem"))));
+                .thenReturn(
+                        new CreditsResponse(
+                                List.of(new CastRecord("Ator", "Personagem")), List.of()));
 
         List<CastRecord> elenco = new TmdbClient(restClient).buscarElenco(1L);
 
@@ -111,13 +115,13 @@ class TmdbClientTest {
         assertThat(elenco.get(0).name()).isEqualTo("Ator");
     }
 
+    // 🔥 ALTERADO: não lança exceção, retorna lista vazia
     @Test
-    void deveFalharQuandoElencoInvalido() {
+    void deveRetornarListaVaziaQuandoElencoInvalido() {
         when(responseSpec.body(CreditsResponse.class)).thenReturn(null);
 
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> new TmdbClient(restClient).buscarElenco(1L))
-                .withMessageContaining("Falha ao buscar elenco");
+        List<CastRecord> elenco = new TmdbClient(restClient).buscarElenco(1L);
+        assertThat(elenco).isEmpty();
     }
 
     // --- buscarOndeAssistir ---

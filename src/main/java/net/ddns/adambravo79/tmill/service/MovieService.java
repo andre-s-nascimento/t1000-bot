@@ -1,4 +1,4 @@
-/* (c) 2026 | 01/05/2026 */
+/* (c) 2026 | 06/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.util.Optional;
@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
+import net.ddns.adambravo79.tmill.model.CastRecord;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
 
@@ -23,9 +24,11 @@ import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
 public class MovieService {
 
     private final TmdbClient tmdbClient;
+    private final EasterEggService easterEggService;
 
-    public MovieService(TmdbClient tmdbClient) {
+    public MovieService(TmdbClient tmdbClient, EasterEggService easterEggService) {
         this.tmdbClient = tmdbClient;
+        this.easterEggService = easterEggService;
     }
 
     /**
@@ -77,11 +80,19 @@ public class MovieService {
             throw new MovieNotFoundException("Detalhes do filme não encontrados para ID: " + id);
         }
 
+        // Elenco (top 5)
         var elenco =
                 tmdbClient.buscarElenco(id).stream()
                         .limit(5)
-                        .map(c -> c.name())
+                        .map(CastRecord::name)
                         .collect(Collectors.joining(", "));
+
+        // Diretor (apenas nome, sem link)
+        String diretor = tmdbClient.buscarDiretor(id);
+        String directorLine =
+                (diretor != null && !diretor.isBlank())
+                        ? "🎬 *Diretor:* " + diretor + "\n"
+                        : "\n"; // se não houver diretor, deixa uma linha em branco
 
         var streamings = tmdbClient.buscarOndeAssistir(id);
 
@@ -101,35 +112,41 @@ public class MovieService {
 
         String linkTmdb = "https://www.themoviedb.org/movie/" + detalhes.id();
 
-        String texto =
+        String textoHtml =
                 String.format(
                         """
-            🎬 *%s*
+            🎬 <b>%s</b>
+            <i>%s</i>
             📅 Ano: %s %s
-            ⭐ *Nota:* [%.1f/10](%s)
+            ⭐ <b>Nota:</b> <a href="%s">%.1f/10</a>
 
-            📺 *Onde assistir:* %s
+            🎬 <b>Diretor:</b> %s
 
-            👥 *Elenco:* %s
+            👥 <b>Elenco:</b> %s
 
-            📖 *Sinopse:* %s%s
+            📖 <b>Sinopse:</b> %s
+
+            📺 <b>Onde assistir:</b> %s%s
             """,
                         detalhes.title().toUpperCase(),
+                        escapeHtml(
+                                detalhes.originalTitle() != null ? detalhes.originalTitle() : ""),
                         ano,
                         bandeiras,
-                        detalhes.voteAverage(),
                         linkTmdb,
-                        streamings,
+                        detalhes.voteAverage(),
+                        (diretor != null && !diretor.isBlank()) ? diretor : "N/A",
                         elenco,
-                        escapeMarkdown(detalhes.overview()),
-                        getEasterEgg(id).orElse(""));
+                        escapeHtml(detalhes.overview()),
+                        streamings,
+                        easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse(""));
 
         String urlPoster =
-                detalhes.posterPath() != null && !detalhes.posterPath().isBlank()
+                (detalhes.posterPath() != null && !detalhes.posterPath().isBlank())
                         ? "https://image.tmdb.org/t/p/w500" + detalhes.posterPath()
                         : "";
 
-        return new MovieOrchestrationResponse(texto, urlPoster);
+        return new MovieOrchestrationResponse(textoHtml, urlPoster);
     }
 
     /** Converte código de país ISO em emoji de bandeira. */
@@ -143,24 +160,12 @@ public class MovieService {
     }
 
     /** Escapa caracteres especiais para evitar conflitos com Markdown. */
-    private String escapeMarkdown(String texto) {
-        return texto.replace("_", "\\_")
-                .replace("*", "\\*")
-                .replace("[", "\\[")
-                .replace("]", "\\]")
-                .replace("(", "\\(")
-                .replace(")", "\\)");
-    }
-
-    private Optional<String> getEasterEgg(long movieId) {
-        if (movieId == 280L) {
-            log.info("Easter Egg ativado para 'O Exterminador do Futuro 2' (ID: 280)");
-            return Optional.of(
-                    "\n\n"
-                            + "🤖 *Review do T-1000:* \"Eu já vi esse filme, e não gostei muito do"
-                            + " final\"");
-        }
-        // Futuro: adicionar outros IDs com mensagens especiais
-        return Optional.empty();
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }

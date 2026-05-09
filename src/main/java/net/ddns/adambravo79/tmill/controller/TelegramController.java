@@ -1,4 +1,4 @@
-/* (c) 2026 | 04/05/2026 */
+/* (c) 2026 | 07/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.io.File;
@@ -26,9 +26,13 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
+import net.ddns.adambravo79.tmill.cache.TranscriptionCacheEntry;
+import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.client.BloggerClient;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
+import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
+import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramSafeExecutor;
@@ -46,6 +50,10 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private final TelegramFacade telegramFacade;
     private final TelegramSafeExecutor safeExecutor;
     private final UserInteractionLogger userLogger;
+    private final IdeasLogger ideasLogger;
+    private final MessageStoreService messageStoreService;
+    private final TranscriptStoreService transcriptStoreService;
+    private final TranscriptionCacheService transcriptionCacheService;
 
     @Value("${t1000.features.transcription-enabled:false}")
     private boolean transcriptionEnabled;
@@ -62,40 +70,26 @@ public class TelegramController implements LongPollingUpdateConsumer {
     @Value("${telegram.bot.name:@t1000paneleiro_bot}")
     private String botUsername;
 
-    // NOVO: Lista de grupos autorizados (via .env)
     @Value("${bot.allowed-chats:}")
     private String allowedChatsStr;
 
     private final Set<Long> allowedGroups = new HashSet<>();
-    private final Set<Long> warnedGroups = ConcurrentHashMap.newKeySet(); // evita spam de log
+    private final Set<Long> warnedGroups = ConcurrentHashMap.newKeySet();
+    private final Set<Long> warnedUsersFor403 = ConcurrentHashMap.newKeySet();
 
-    private static final long MAX_AUDIO_SIZE_BYTES = 20 * 1024 * 1024; // fallback
-
-    // Cache para tokens curtos (callback data)
     private final Map<String, AudioRequest> pendingGroupAudio = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor();
 
-    // =========================
-    // 🧹 INICIALIZAÇÃO
-    // =========================
     @PostConstruct
     public void init() {
-        // Carrega lista de grupos permitidos
         if (allowedChatsStr != null && !allowedChatsStr.isBlank()) {
             for (String s : allowedChatsStr.split(",")) {
                 try {
                     long id = Long.parseLong(s.trim());
-                    // Aceita apenas IDs negativos (grupos/canais)
-                    if (id < 0) {
-                        allowedGroups.add(id);
-                    } else {
-                        log.warn(
-                                "ID positivo na lista de autorizados será ignorado (use APENAS"
-                                        + " grupos): {}",
-                                id);
-                    }
+                    if (id < 0) allowedGroups.add(id);
+                    else log.warn("ID positivo ignorado (use apenas grupos): {}", id);
                 } catch (NumberFormatException e) {
-                    log.warn("Chat ID inválido na lista de autorizados: {}", s);
+                    log.warn("Chat ID inválido: {}", s);
                 }
             }
             log.info("📋 Grupos autorizados: {}", allowedGroups);
@@ -103,111 +97,63 @@ public class TelegramController implements LongPollingUpdateConsumer {
             log.info("📋 Nenhum grupo autorizado configurado – todos os grupos serão ignorados.");
         }
 
-        // Limpeza periódica dos tokens
         cleaner.scheduleAtFixedRate(
                 () -> {
                     long now = System.currentTimeMillis();
                     pendingGroupAudio
                             .entrySet()
                             .removeIf(entry -> now - entry.getValue().timestamp() > 3600000);
-                    log.debug(
-                            "🧹 Cache de tokens limpo. Tamanho atual: {}",
-                            pendingGroupAudio.size());
+                    log.debug("🧹 Cache de tokens limpo. Tamanho: {}", pendingGroupAudio.size());
                 },
                 1,
                 1,
                 TimeUnit.HOURS);
     }
 
-    // =========================
-    // 🚀 ENTRYPOINT
-    // =========================
-
     @Override
     public void consume(List<Update> updates) {
         if (updates == null || updates.isEmpty()) return;
-        log.info("📩 Recebidos {} updates do Telegram", updates.size());
+        log.info("📩 Recebidos {} updates", updates.size());
         updates.parallelStream().forEach(this::processarUpdate);
     }
 
     public void consume(Update update) {
         if (update != null) {
-            log.info("📩 Recebido update único do Telegram");
+            log.info("📩 Update único");
             processarUpdate(update);
         }
     }
 
-    // NOVO: Verifica se o chat está autorizado (privados sempre OK, grupos só se estiverem na
-    // lista)
     private boolean isChatAllowed(long chatId) {
-        // Chats privados (ID positivo) são sempre permitidos
         if (chatId > 0) return true;
-        // Grupos/canais (ID negativo) só são permitidos se estiverem na lista (ou se a lista
-        // estiver
-        // vazia -> comportamento antigo)
-        if (allowedGroups.isEmpty())
-            return true; // lista vazia = todos grupos permitidos (fallback seguro)
+        if (allowedGroups.isEmpty()) return true;
         return allowedGroups.contains(chatId);
     }
 
-    // =========================
-    // 🧠 CORE ROUTER
-    // =========================
-
     private void processarUpdate(Update update) {
-        // --- VALIDAÇÃO DE CHAT AUTORIZADO (antes de qualquer log ou processamento) ---
         Long chatId = null;
-        if (update.hasMessage()) {
-            chatId = update.getMessage().getChatId();
-        } else if (update.hasCallbackQuery()) {
+        if (update.hasMessage()) chatId = update.getMessage().getChatId();
+        else if (update.hasCallbackQuery())
             chatId = update.getCallbackQuery().getMessage().getChatId();
-        }
         if (chatId != null && !isChatAllowed(chatId)) {
-            if (warnedGroups.add(chatId)) {
-                log.warn("⛔ Grupo não autorizado. Ignorando mensagens do chatId={}", chatId);
-            }
-            return; // abandona o processamento completamente
+            if (warnedGroups.add(chatId)) log.warn("⛔ Grupo não autorizado: {}", chatId);
+            return;
         }
-        // --- FIM DA VALIDAÇÃO ---
 
-        // --- LOG DE USUÁRIO (apenas se o chat foi autorizado) ---
         if (update.hasCallbackQuery()) {
             var callback = update.getCallbackQuery();
             var from = callback != null ? callback.getFrom() : null;
             if (from != null) {
-                String name =
+                userLogger.logUser(
+                        from.getId(),
                         from.getFirstName()
-                                + (from.getLastName() != null ? " " + from.getLastName() : "");
-                userLogger.logUser(from.getId(), name, "callback:" + callback.getData());
+                                + (from.getLastName() != null ? " " + from.getLastName() : ""),
+                        "callback:" + callback.getData());
             }
-        } else if (update.hasMessage()) {
-            var message = update.getMessage();
-            var from = message != null ? message.getFrom() : null;
-            if (from != null) {
-                String name =
-                        from.getFirstName()
-                                + (from.getLastName() != null ? " " + from.getLastName() : "");
-                String action =
-                        message.hasText()
-                                ? "text"
-                                : (message.hasVoice()
-                                        ? "voice"
-                                        : (message.hasAudio() ? "audio" : "other"));
-                userLogger.logUser(from.getId(), name, "message:" + action);
-            }
-        }
-        // --- FIM DO LOG ---
-
-        if (update.hasCallbackQuery()) {
-            long cbChatId = update.getCallbackQuery().getMessage().getChatId();
-            log.info(
-                    "🔘 Callback recebido chatId={} data={}",
-                    cbChatId,
-                    update.getCallbackQuery().getData());
+            long cbChatId = callback.getMessage().getChatId();
+            log.info("🔘 Callback recebido chatId={} data={}", cbChatId, callback.getData());
             safeExecutor.run(
-                    cbChatId,
-                    telegramFacade::enviarMensagem,
-                    () -> tratarCallback(update.getCallbackQuery()));
+                    cbChatId, telegramFacade::enviarMensagem, () -> tratarCallback(callback));
             return;
         }
 
@@ -215,24 +161,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
         Message message = update.getMessage();
         long msgChatId = message.getChatId();
-        long userId = message.getFrom().getId();
-
-        String tipoMensagem;
-        if (message.hasText()) {
-            tipoMensagem = "texto";
-        } else if (message.hasVoice()) {
-            tipoMensagem = "voz";
-        } else if (message.hasAudio()) {
-            tipoMensagem = "áudio";
-        } else {
-            tipoMensagem = "outro";
-        }
-
-        String nomeRemetente = message.getFrom().getFirstName();
-        if (message.getFrom().getLastName() != null) {
-            nomeRemetente += " " + message.getFrom().getLastName();
-        }
-        log.info("🎙️ Áudio recebido de {} (userId={})", nomeRemetente, message.getFrom().getId());
         if (message.hasVoice() || message.hasAudio()) {
             safeExecutor.run(
                     msgChatId,
@@ -249,10 +177,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
         }
     }
 
-    // =========================
-    // 🎬 TEXTO
-    // =========================
-
     private void tratarTexto(Message message, long chatId) {
         String texto = message.getText().toLowerCase().trim();
         log.debug("🔎 Processando texto chatId={} texto='{}'", chatId, texto);
@@ -262,25 +186,85 @@ public class TelegramController implements LongPollingUpdateConsumer {
             return;
         }
 
+        // Dentro de tratarTexto, após o /start e antes de processar comandos, salve a mensagem:
+        if (!texto.startsWith("t1000") && !texto.startsWith("/start")) {
+            String userName =
+                    message.getFrom().getFirstName()
+                            + (message.getFrom().getLastName() != null
+                                    ? " " + message.getFrom().getLastName()
+                                    : "");
+            messageStoreService.saveMessage(chatId, message.getFrom().getId(), userName, texto);
+        }
+
+        if (texto.startsWith("t1000 anotar ideia")) {
+            String idea = texto.replace("t1000 anotar ideia", "").trim();
+            if (idea.isEmpty()) {
+                telegramFacade.enviarMensagem(
+                        chatId,
+                        "❓ Digite a ideia após o comando. Ex: `T1000 anotar ideia: fazer café`");
+                return;
+            }
+            if (idea.startsWith(":") || idea.startsWith("：")) idea = idea.substring(1).trim();
+            if (idea.isEmpty()) {
+                telegramFacade.enviarMensagem(chatId, "❓ A ideia não pode ficar vazia.");
+                return;
+            }
+
+            var from = message.getFrom();
+            String userName =
+                    from.getFirstName()
+                            + (from.getLastName() != null ? " " + from.getLastName() : "");
+            long userId = from.getId();
+            String chatName =
+                    (message.getChat().isGroupChat() || message.getChat().isSuperGroupChat())
+                            ? message.getChat().getTitle()
+                            : "privado";
+
+            ideasLogger.saveIdea(userId, userName, chatId, idea, chatName);
+
+            String adminMsg =
+                    String.format(
+                            "💡 <b>Nova ideia</b>\n"
+                                    + "📝 <i>%s</i>\n"
+                                    + "👤 <b>Usuário:</b> <a href=\"tg://user?id=%d\">%s</a>\n"
+                                    + "📍 <b>Local:</b> %s\n"
+                                    + "🕒 %s",
+                            escapeHtml(idea),
+                            userId,
+                            escapeHtml(userName),
+                            escapeHtml(chatName),
+                            java.time.LocalDateTime.now()
+                                    .format(
+                                            java.time.format.DateTimeFormatter.ofPattern(
+                                                    "dd/MM/yyyy HH:mm:ss")));
+            telegramFacade.enviarMensagemHtml(ownerId, adminMsg);
+            telegramFacade.enviarMensagemHtml(
+                    chatId, "✅ Ideia registrada! Obrigado pela contribuição.");
+            return;
+        }
+
         if (!texto.startsWith("t1000 buscar")) return;
 
         String nome = texto.replace("t1000 buscar", "").trim();
-
         if (nome.length() < 3) {
-            telegramFacade.enviarMensagem(
-                    chatId, "🔍 O termo de busca deve ter pelo menos 3 caracteres.");
+            telegramFacade.enviarMensagem(chatId, "🔍 O termo deve ter pelo menos 3 caracteres.");
             return;
         }
         if (nome.length() > 100) {
             telegramFacade.enviarMensagem(
-                    chatId, "🔍 O termo de busca é muito longo (máx. 100 caracteres).");
+                    chatId, "🔍 O termo é muito longo (máx. 100 caracteres).");
             return;
         }
 
-        var busca = movieService.buscarFilme(nome);
+        MovieSearchResponse busca;
+        try {
+            busca = movieService.buscarFilme(nome);
+        } catch (MovieNotFoundException e) {
+            telegramFacade.enviarMensagem(chatId, "❌ " + e.getMessage());
+            return;
+        }
 
         if (busca == null || busca.results() == null || busca.results().isEmpty()) {
-            log.warn("⚠️ Filme não encontrado chatId={} query='{}'", chatId, nome);
             telegramFacade.enviarMensagem(chatId, "❌ Filme não encontrado.");
             return;
         }
@@ -288,15 +272,20 @@ public class TelegramController implements LongPollingUpdateConsumer {
         if (busca.results().size() == 1) {
             var id = busca.results().get(0).id();
             var resposta = movieService.buscarPorId(id);
-            log.info("✅ Filme encontrado único chatId={} movieId={}", chatId, id);
-            telegramFacade.enviarFoto(chatId, resposta.urlFoto(), resposta.textoFormatado());
+            log.info("✅ Filme único chatId={} movieId={}", chatId, id);
+            String fotoUrl = resposta.urlFoto();
+            if (fotoUrl != null
+                    && !fotoUrl.isBlank()
+                    && (fotoUrl.startsWith("http://") || fotoUrl.startsWith("https://"))) {
+                telegramFacade.enviarFotoHtml(chatId, fotoUrl, resposta.textoFormatado());
+            } else {
+                telegramFacade.enviarMensagemHtml(
+                        chatId, resposta.textoFormatado() + "\n\n_(sem imagem)_");
+            }
             return;
         }
 
-        log.info(
-                "🧐 Vários resultados encontrados chatId={} total={}",
-                chatId,
-                busca.results().size());
+        log.info("🧐 Vários resultados: {} total={}", chatId, busca.results().size());
         enviarOpcoesDesambiguacao(chatId, busca.results());
     }
 
@@ -304,25 +293,26 @@ public class TelegramController implements LongPollingUpdateConsumer {
         String saudacao =
                 String.format(
                         """
-            🤖 Olá, %s! Eu sou o **Tmill Bot**, o robô de metal líquido das transcrições e buscas.
+            🤖 Olá, <b>%s</b>! Eu sou o <b>Tmill Bot</b>, o robô de metal líquido das transcrições e buscas.
 
-            📌 **O que posso fazer?**
-            🎬 Buscar filmes: `t1000 buscar <nome do filme>`
+            📌 <b>O que posso fazer?</b>
+            🎬 Buscar filmes: <code>t1000 buscar &lt;nome do filme&gt;</code>
             🎙️ Transcrever áudios: envie uma mensagem de voz ou áudio.
 
-            💡 **Em grupos/canais:**
-            Ao enviar um áudio, aparecerão botões para você escolher a transcrição **bruta** (🎙️) ou **refinada** (✨). O resultado chegará no seu **chat privado**.
+            💡 <b>Em grupos/canais:</b>
+            Ao enviar um áudio, aparecerão botões para você escolher a transcrição <b>bruta</b> (🎙️) ou <b>refinada</b> (✨). O resultado chegará no seu <b>chat privado</b>.
 
-            Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
+            💡 Dar sugestões de melhoria do Bot <code>t1000 anotar ideia Achar os pais adotivos do John Connor... </code>
+
+            Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot e bom humor.
             """,
-                        firstName);
-        telegramFacade.enviarMensagem(chatId, saudacao);
+                        escapeHtml(firstName));
+        telegramFacade.enviarMensagemHtml(chatId, saudacao);
     }
 
     // =========================
     // 🎙️ AUDIO
     // =========================
-
     private void tratarFluxoAudio(Message message, long chatId) {
         if (!transcriptionEnabled) {
             log.warn("⚠️ Transcrição desativada chatId={}", chatId);
@@ -363,53 +353,146 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
         boolean isGroup = isGroupChat(message);
 
+        // ========== GRUPO: pré‑processamento em background ==========
         if (isGroup) {
-            long senderId = message.getFrom().getId();
-            String senderName = message.getFrom().getFirstName();
-            if (message.getFrom().getLastName() != null) {
-                senderName += " " + message.getFrom().getLastName();
-            }
-            int duration =
+            final long senderId = message.getFrom().getId();
+            final String firstName = message.getFrom().getFirstName();
+            final String lastName = message.getFrom().getLastName();
+            final String senderName = firstName + (lastName != null ? " " + lastName : "");
+            final int duration =
                     message.hasVoice()
                             ? message.getVoice().getDuration()
                             : message.getAudio().getDuration();
+            final long fixedChatId = chatId;
+            final String fixedFileId = fileId;
+
             log.info(
                     "🎙️ Áudio recebido em grupo chatId={} fileId={} de {} duração={}s",
-                    chatId,
-                    fileId,
+                    fixedChatId,
+                    fixedFileId,
                     senderName,
                     duration);
-            enviarBotoesTranscricaoEmGrupo(chatId, fileId, senderName, senderId, duration);
+
+            // Processa em background (baixa, converte, transcreve, refina)
+            CompletableFuture.supplyAsync(() -> fileService.baixarArquivo(fixedFileId))
+                    .thenCompose(
+                            audioFile ->
+                                    audioService.processarEArmazenar(
+                                            audioFile, fixedChatId, senderId, senderName))
+                    .whenComplete(
+                            (result, ex) -> {
+                                if (ex == null && result != null) {
+                                    // Armazena no cache
+                                    transcriptionCacheService.put(
+                                            fixedFileId, result.bruto(), result.refinado());
+
+                                    // Salva refinado no banco para o digest
+                                    transcriptStoreService.saveTranscriptWithRaw(
+                                            fixedChatId,
+                                            senderId,
+                                            senderName,
+                                            result.bruto(),
+                                            result.refinado());
+
+                                    // Gera token curto
+                                    String token =
+                                            Long.toHexString(System.nanoTime())
+                                                    + Integer.toHexString(
+                                                            fixedFileId.hashCode() & 0xFFFF);
+                                    if (token.length() > 20) token = token.substring(0, 20);
+                                    pendingGroupAudio.put(
+                                            token,
+                                            new AudioRequest(
+                                                    fixedFileId,
+                                                    fixedChatId,
+                                                    System.currentTimeMillis(),
+                                                    senderId,
+                                                    senderName));
+
+                                    // Prepara mensagem com botões
+                                    long minutos = duration / 60;
+                                    long segundos = duration % 60;
+                                    String duracaoFormatada =
+                                            String.format("%dmin e %ds", minutos, segundos);
+                                    String silasCastHint =
+                                            (duration > 300)
+                                                    ? ", praticamente um SilasCast 🗣"
+                                                    : "";
+                                    String mensagemBotoes =
+                                            String.format(
+                                                    "🎧 Áudio de <b>%s</b> (%s%s) processado!\n\n"
+                                                            + "Clique num botão para receber a"
+                                                            + " transcrição no seu privado:",
+                                                    escapeHtml(senderName),
+                                                    duracaoFormatada,
+                                                    silasCastHint);
+
+                                    InlineKeyboardMarkup markup =
+                                            InlineKeyboardMarkup.builder()
+                                                    .keyboard(
+                                                            List.of(
+                                                                    new InlineKeyboardRow(
+                                                                            InlineKeyboardButton
+                                                                                    .builder()
+                                                                                    .text(
+                                                                                            "🎙️ Transcrição"
+                                                                                                + " Bruta")
+                                                                                    .callbackData(
+                                                                                            "trans_bruto|"
+                                                                                                    + token)
+                                                                                    .build(),
+                                                                            InlineKeyboardButton
+                                                                                    .builder()
+                                                                                    .text(
+                                                                                            "✨ Transcrição"
+                                                                                                + " Refinada")
+                                                                                    .callbackData(
+                                                                                            "trans_refinado|"
+                                                                                                    + token)
+                                                                                    .build())))
+                                                    .build();
+
+                                    // Envia a mensagem com botões (agora que o processamento
+                                    // terminou)
+                                    telegramFacade.enviarComBotoesHtml(
+                                            fixedChatId, mensagemBotoes, markup);
+                                } else {
+                                    log.error("Falha no pré‑processamento do áudio", ex);
+                                    telegramFacade.enviarMensagem(
+                                            fixedChatId,
+                                            "❌ Erro ao processar o áudio. Tente novamente.");
+                                }
+                            });
             return;
         }
 
-        // Comportamento original para chat privado
+        // ========== CHAT PRIVADO: comportamento original (processamento imediato) ==========
         long userId = message.getFrom().getId();
         boolean isOwner = userId == ownerId;
 
         File file = fileService.baixarArquivo(fileId);
+        String userName = message.getFrom().getFirstName();
+        if (message.getFrom().getLastName() != null)
+            userName += " " + message.getFrom().getLastName();
 
         audioService.processarFluxoAudio(
                 file,
                 chatId,
+                userId,
+                userName,
                 (texto, isUltima) -> {
-                    log.debug(
-                            "📄 Texto transcrito chatId={} size={} ultima={}",
-                            chatId,
-                            texto.length(),
-                            isUltima);
                     if (texto.length() > telegramMessageLimit) {
-                        dividirMensagem(texto, telegramMessageLimit).stream()
-                                .map(this::fecharMarkdown)
-                                .forEach(parte -> telegramFacade.enviarMensagem(chatId, parte));
+                        dividirMensagem(texto, telegramMessageLimit)
+                                .forEach(
+                                        parte ->
+                                                telegramFacade.enviarMensagemSemMarkdown(
+                                                        chatId, parte));
                         return;
                     }
-
-                    if (Boolean.TRUE.equals(isUltima) && isOwner) {
-                        log.info("📝 Enviando resposta com botões Blogger chatId={}", chatId);
-                        enviarRespostaComBotoesBlogger(chatId, texto);
+                    if (isUltima && isOwner) {
+                        enviarRespostaComBotoesBloggerHtml(chatId, texto);
                     } else {
-                        telegramFacade.enviarMensagem(chatId, texto);
+                        telegramFacade.enviarMensagemSemMarkdown(chatId, texto);
                     }
                 });
     }
@@ -417,6 +500,27 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private boolean isGroupChat(Message message) {
         var chat = message.getChat();
         return chat.isGroupChat() || chat.isSuperGroupChat() || chat.isChannelChat();
+    }
+
+    private void enviarRespostaComBotoesBloggerHtml(long chatId, String texto) {
+        cache.salvar(chatId, texto);
+        InlineKeyboardMarkup markup =
+                InlineKeyboardMarkup.builder()
+                        .keyboard(
+                                List.of(
+                                        new InlineKeyboardRow(
+                                                InlineKeyboardButton.builder()
+                                                        .text("📝 Publicar")
+                                                        .callbackData("blogger:publicar")
+                                                        .build(),
+                                                InlineKeyboardButton.builder()
+                                                        .text("❌ Cancelar")
+                                                        .callbackData("blogger:cancelar")
+                                                        .build())))
+                        .build();
+        // 🔥 Usar HTML – o texto refinado pode conter pontuação especial, mas HTML não requer
+        // escape
+        telegramFacade.enviarComBotoesHtml(chatId, texto, markup);
     }
 
     private void enviarBotoesTranscricaoEmGrupo(
@@ -437,12 +541,13 @@ public class TelegramController implements LongPollingUpdateConsumer {
         String duracaoFormatada = String.format("%dmin e %ds", minutos, segundos);
         String silasCastHint = (durationSeconds > 300) ? ", praticamente um SilasCast 🗣" : "";
 
+        // 🔥 HTML em vez de MarkdownV2 – não precisa escapar '!'
         String mensagem =
                 String.format(
-                        "🎧 Áudio recebido de *%s*, com ⌛%s%s! \n\n"
+                        "🎧 Áudio recebido de <b>%s</b>, com ⌛%s%s! \n\n"
                             + "Clique num botão abaixo para receber a transcrição 📝 desejada no"
                             + " seu chat privado 💬.",
-                        escapeMarkdown(senderName), duracaoFormatada, silasCastHint);
+                        escapeHtml(senderName), duracaoFormatada, silasCastHint);
 
         InlineKeyboardMarkup markup =
                 InlineKeyboardMarkup.builder()
@@ -459,7 +564,8 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                                         .build())))
                         .build();
 
-        telegramFacade.enviarComBotoes(groupId, mensagem, markup);
+        // Usar o método HTML do facade
+        telegramFacade.enviarComBotoesHtml(groupId, mensagem, markup);
     }
 
     // =========================
@@ -469,7 +575,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private void tratarCallback(CallbackQuery cb) {
         String data = cb.getData();
         long chatId = cb.getMessage().getChatId();
-        log.debug("🔘 Tratando callback chatId={} data={}", chatId, data);
+        log.debug("🔘 callback chatId={} data={}", chatId, data);
 
         if (data.startsWith("trans_bruto|") || data.startsWith("trans_refinado|")) {
             tratarCallbackTranscricaoComToken(cb, data);
@@ -484,21 +590,19 @@ public class TelegramController implements LongPollingUpdateConsumer {
             if (fotoUrl != null
                     && !fotoUrl.isBlank()
                     && (fotoUrl.startsWith("http://") || fotoUrl.startsWith("https://"))) {
-                telegramFacade.enviarFoto(chatId, fotoUrl, resposta.textoFormatado());
+                telegramFacade.enviarFotoHtml(chatId, fotoUrl, resposta.textoFormatado());
             } else {
-                telegramFacade.enviarMensagem(
+                telegramFacade.enviarMensagemHtml(
                         chatId, resposta.textoFormatado() + "\n\n_(sem imagem)_");
             }
-            // Edita a mensagem original dos botões removendo o teclado
             int messageId = cb.getMessage().getMessageId();
             String newText = "✅ Filme selecionado: " + resposta.textoFormatado().split("\n")[0];
-            telegramFacade.editarMensagem(chatId, messageId, newText);
+            telegramFacade.editarMensagemHtml(chatId, messageId, newText);
             return;
         }
 
         if ("blogger:cancelar".equals(data)) {
             cache.remover(chatId);
-            log.info("🛑 Publicação cancelada chatId={}", chatId);
             telegramFacade.enviarMensagem(chatId, "❌ Publicação cancelada.");
             return;
         }
@@ -506,17 +610,14 @@ public class TelegramController implements LongPollingUpdateConsumer {
         if ("blogger:publicar".equals(data)) {
             String texto = cache.recuperar(chatId);
             if (texto == null) {
-                log.warn("⚠️ Nenhuma transcrição disponível para publicar chatId={}", chatId);
                 telegramFacade.enviarMensagem(chatId, "⚠️ Nenhuma transcrição disponível.");
                 return;
             }
             String url = bloggerClient.criarRascunho("Post automático", texto);
             if (url != null) {
-                log.info("✅ Publicação realizada chatId={} url={}", chatId, url);
                 telegramFacade.enviarMensagem(chatId, "✅ Publicado: " + url);
                 cache.remover(chatId);
             } else {
-                log.error("❌ Falha ao publicar no Blogger chatId={}", chatId);
                 telegramFacade.enviarMensagem(chatId, "❌ Falha ao publicar.");
             }
         }
@@ -549,6 +650,24 @@ public class TelegramController implements LongPollingUpdateConsumer {
             return;
         }
 
+        // Dentro de tratarCallbackTranscricaoComToken, após obter request e antes de processar
+        String fileId = request.fileId();
+        TranscriptionCacheEntry cached = transcriptionCacheService.get(fileId);
+        if (cached != null) {
+            // Cache hit: envia o resultado imediatamente (sem chamar Groq)
+            String textoEscolhido =
+                    "trans_bruto".equals(tipo) ? cached.getTextoBruto() : cached.getTextoRefinado();
+            String prefixo =
+                    tipo.equals("trans_bruto")
+                            ? "🎙️ Transcrição Bruta:\n"
+                            : "✨ Transcrição Refinada:\n";
+            String mensagem = prefixo + textoEscolhido;
+            // ... enviar mensagem (igual ao fluxo normal)
+            telegramFacade.enviarMensagemSemMarkdown(userId, mensagem);
+            log.info("✅ Transcrição entregue via cache para userId={} tipo={}", userId, tipo);
+            return;
+        }
+
         log.info(
                 "📊 Clique no botão {} | clicador={} (id={}) | áudio enviado por: {} (id={}) |"
                         + " chatId={} | token={}",
@@ -560,7 +679,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 chatId,
                 token);
 
-        String fileId = request.fileId();
         long groupId = request.groupId();
 
         telegramFacade.answerCallbackQuery(
@@ -574,7 +692,9 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
                         audioService.processarFluxoAudio(
                                 audioFile,
-                                userId,
+                                request.groupId(),
+                                request.senderId(),
+                                request.senderName(),
                                 (texto, isUltima) -> {
                                     if ("trans_bruto".equals(tipo) && !isUltima)
                                         resultado[0] = texto;
@@ -615,25 +735,31 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                         && errorMsg.contains("can't initiate conversation");
 
                         if (isForbidden && groupId != 0) {
-                            try {
-                                String userMention =
-                                        callback.getFrom().getUserName() != null
-                                                ? "@" + callback.getFrom().getUserName()
-                                                : "Usuário";
-                                telegramFacade.enviarMensagem(
-                                        groupId,
-                                        "⚠️ "
-                                                + userMention
-                                                + ", você precisa iniciar uma conversa com o bot no"
-                                                + " privado antes de receber transcrições. Envie"
-                                                + " /start para @"
-                                                + botUsername
-                                                + ".");
-                            } catch (Exception ex) {
-                                log.error(
-                                        "Falha ao enviar aviso de 403 para o grupo {}",
-                                        groupId,
-                                        ex);
+                            if (warnedUsersFor403.add(userId)) {
+                                try {
+                                    String userMention =
+                                            callback.getFrom().getUserName() != null
+                                                    ? "@" + callback.getFrom().getUserName()
+                                                    : "Usuário";
+                                    telegramFacade.enviarMensagem(
+                                            groupId,
+                                            "⚠️ "
+                                                    + userMention
+                                                    + ", você precisa iniciar uma conversa com o"
+                                                    + " bot no privado antes de receber"
+                                                    + " transcrições. Envie /start para @"
+                                                    + botUsername
+                                                    + ".");
+                                } catch (Exception ex) {
+                                    log.error(
+                                            "Falha ao enviar aviso de 403 para o grupo {}",
+                                            groupId,
+                                            ex);
+                                }
+                            } else {
+                                log.debug(
+                                        "Usuário {} já avisado sobre 403, suprimindo novo aviso.",
+                                        userId);
                             }
                         } else {
                             try {
@@ -654,17 +780,11 @@ public class TelegramController implements LongPollingUpdateConsumer {
         telegramFacade.editarMensagem(chatId, messageId, novoTexto);
     }
 
-    // =========================
-    // 🧩 UI HELPERS
-    // =========================
-
     private void enviarOpcoesDesambiguacao(long chatId, List<MovieRecord> resultados) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         InlineKeyboardRow current = new InlineKeyboardRow();
-        var lista = resultados.stream().limit(10).toList();
-
-        for (int i = 0; i < lista.size(); i++) {
-            var filme = lista.get(i);
+        for (int i = 0; i < resultados.size() && i < 10; i++) {
+            var filme = resultados.get(i);
             String ano =
                     (filme.releaseDate() != null && filme.releaseDate().length() >= 4)
                             ? " (" + filme.releaseDate().substring(0, 4) + ")"
@@ -674,13 +794,13 @@ public class TelegramController implements LongPollingUpdateConsumer {
                             .text(filme.title() + ano)
                             .callbackData("id:" + filme.id())
                             .build());
-            if ((i + 1) % 2 == 0 || (i + 1) == lista.size()) {
+            if ((i + 1) % 2 == 0 || (i + 1) == resultados.size()) {
                 rows.add(current);
                 current = new InlineKeyboardRow();
             }
         }
         var markup = InlineKeyboardMarkup.builder().keyboard(rows).build();
-        telegramFacade.enviarComBotoes(
+        telegramFacade.enviarComBotoesSemParse(
                 chatId, "🧐 Encontrei vários resultados. Qual você quer?", markup);
     }
 
@@ -703,10 +823,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
         telegramFacade.enviarComBotoes(chatId, texto, markup);
     }
 
-    // =========================
-    // ✂️ UTIL
-    // =========================
-
     private String escapeMarkdown(String text) {
         return text.replace("_", "\\_")
                 .replace("*", "\\*")
@@ -721,7 +837,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 .replace("+", "\\+")
                 .replace("-", "\\-")
                 .replace("=", "\\=")
-                .replace("|", "\\|")
                 .replace("{", "\\{")
                 .replace("}", "\\}")
                 .replace(".", "\\.")
@@ -743,5 +858,14 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private String fecharMarkdown(String texto) {
         long count = texto.chars().filter(c -> c == '*').count();
         return (count % 2 != 0) ? texto + "*" : texto;
+    }
+
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }

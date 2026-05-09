@@ -1,10 +1,11 @@
-/* (c) 2026 | 02/05/2026 */
+/* (c) 2026 | 09/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 
@@ -16,15 +17,6 @@ import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
 import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 
-/**
- * Serviço responsável por orquestrar o pipeline de processamento de áudio.
- *
- * <p>Etapas do fluxo: 1. Converte o arquivo OGA para WAV. 2. Transcreve o áudio bruto via {@link
- * GroqClient}. 3. Refina o texto transcrito. 4. Armazena a transcrição refinada em {@link
- * TranscricaoCache}. 5. Retorna os resultados via callback.
- *
- * <p>Em caso de falha, lança {@link AudioProcessingException} com contexto detalhado.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -33,17 +25,23 @@ public class AudioPipelineService {
     private final AudioService audioService;
     private final GroqClient groqClient;
     private final TranscricaoCache transcricaoCache;
+    private final TranscriptStoreService transcriptStoreService; // 🆕
 
     /**
      * Processa o fluxo completo de áudio, desde a conversão até a transcrição refinada.
      *
      * @param ogaFile arquivo de áudio recebido (formato OGA).
      * @param chatId identificador do chat para cache da transcrição.
+     * @param userId identificador do usuário que enviou o áudio.
+     * @param userName nome do usuário (primeiro + último, se houver).
      * @param callback função de retorno que recebe o texto transcrito e um indicador de refinamento.
-     * @throws AudioProcessingException em caso de falha em qualquer etapa do pipeline.
      */
     public void processarFluxoAudio(
-            File ogaFile, long chatId, BiConsumer<String, Boolean> callback) {
+            File ogaFile,
+            long chatId,
+            long userId,
+            String userName,
+            BiConsumer<String, Boolean> callback) {
         log.info("Iniciando fluxo de processamento para: {}", ogaFile.getName());
 
         try {
@@ -56,6 +54,9 @@ public class AudioPipelineService {
                                     callback.accept("🎙️ *Bruto:* \n_" + bruto + "_", false);
 
                                     String refinado = groqClient.refinarTexto(bruto);
+                                    // 👇 Salva a transcrição refinada no banco SQLite
+                                    transcriptStoreService.saveTranscript(
+                                            chatId, userId, userName, refinado);
                                     transcricaoCache.salvar(chatId, refinado);
                                     callback.accept("✨ *Refinado:* \n" + refinado, true);
 
@@ -94,11 +95,38 @@ public class AudioPipelineService {
         }
     }
 
+    public record ProcessedAudio(String bruto, String refinado) {}
+
     /**
-     * Exclui um arquivo temporário silenciosamente, sem interromper o fluxo em caso de falha.
+     * Processa um arquivo de áudio OGA, converte para WAV, transcreve (Whisper) e refina (Llama).
+     * Retorna um CompletableFuture com ambos os textos (bruto e refinado). Não envia mensagem alguma
+     * – apenas processa e armazena internamente.
      *
-     * @param file arquivo a ser excluído.
+     * @param ogaFile arquivo de áudio original (formato OGA)
+     * @param chatId identificador do chat onde o áudio foi enviado (para salvar no banco)
+     * @param userId ID do usuário que enviou o áudio
+     * @param userName nome do usuário (primeiro + último, se houver)
+     * @return futuro contendo {@link ProcessedAudio}
      */
+    public CompletableFuture<ProcessedAudio> processarEArmazenar(
+            File ogaFile, long chatId, long userId, String userName) {
+        return audioService
+                .converterParaWav(ogaFile)
+                .thenApplyAsync(
+                        wavFile -> {
+                            try {
+                                String bruto = groqClient.transcrever(wavFile);
+                                String refinado = groqClient.refinarTexto(bruto);
+                                return new ProcessedAudio(bruto, refinado);
+                            } catch (Exception e) {
+                                throw new CompletionException(e);
+                            } finally {
+                                deletarSilenciosamente(wavFile);
+                            }
+                        })
+                .whenComplete((result, ex) -> deletarSilenciosamente(ogaFile));
+    }
+
     private void deletarSilenciosamente(File file) {
         try {
             Files.delete(Path.of(file.getAbsolutePath()));

@@ -1,4 +1,4 @@
-/* (c) 2026 | 27/04/2026 */
+/* (c) 2026 | 07/05/2026 */
 package net.ddns.adambravo79.tmill.model;
 
 import java.util.List;
@@ -19,8 +19,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record MovieRecord(
-        @JsonProperty("id") Long id, // ID necessário para buscar detalhes extras
+        @JsonProperty("id") Long id,
         String title,
+        @JsonProperty("original_title") String originalTitle, // 🆕
         @JsonProperty("release_date") String releaseDate,
         String overview,
         Double popularity,

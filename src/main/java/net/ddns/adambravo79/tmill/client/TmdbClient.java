@@ -1,4 +1,4 @@
-/* (c) 2026 | 27/04/2026 */
+/* (c) 2026 | 06/05/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import java.util.List;
@@ -20,7 +20,7 @@ import net.ddns.adambravo79.tmill.model.*;
 @Component
 public class TmdbClient {
 
-    // Nosso Mapa de Atalhos (A "Gambi" de Ouro)
+    // Mapa de Atalhos (Gambi de Ouro)
     private static final Map<String, String> ATALHOS =
             Map.of(
                     "duna", "Dune 2021",
@@ -33,7 +33,6 @@ public class TmdbClient {
     @Autowired
     public TmdbClient(
             @Value("${tmdb.token}") String tmdbToken, @Value("${tmdb.api.url}") String apiUrl) {
-        // Inicializa o RestClient com autenticação via Bearer Token e headers padrão
         this.restClient =
                 RestClient.builder()
                         .baseUrl(apiUrl)
@@ -47,8 +46,8 @@ public class TmdbClient {
     }
 
     /**
-     * UNIFICADO: Agora este é o único método de busca. Ele aplica atalhos e retorna a resposta
-     * completa com a lista de filmes.
+     * Pesquisa filmes por nome. Em caso de resposta inválida, retorna uma busca vazia (não lança
+     * exceção).
      */
     public MovieSearchResponse pesquisarFilme(String query) {
         String queryNormalizada = query.trim().toLowerCase();
@@ -60,34 +59,42 @@ public class TmdbClient {
 
         log.info("🔎 TMDB: Pesquisando filme query='{}'", queryFinal);
 
-        MovieSearchResponse response =
-                restClient
-                        .get()
-                        .uri(
-                                uriBuilder ->
-                                        uriBuilder
-                                                .path("/search/movie")
-                                                .queryParam("query", queryFinal)
-                                                .queryParam("language", "pt-BR")
-                                                .queryParam("region", "BR")
-                                                .queryParam("include_adult", "false")
-                                                .build())
-                        .retrieve()
-                        .body(MovieSearchResponse.class);
+        try {
+            MovieSearchResponse response =
+                    restClient
+                            .get()
+                            .uri(
+                                    uriBuilder ->
+                                            uriBuilder
+                                                    .path("/search/movie")
+                                                    .queryParam("query", queryFinal)
+                                                    .queryParam("language", "pt-BR")
+                                                    .queryParam("region", "BR")
+                                                    .queryParam("include_adult", "false")
+                                                    .build())
+                            .retrieve()
+                            .body(MovieSearchResponse.class);
 
-        if (response == null || response.results().isEmpty()) {
-            log.error("❌ TMDB: resposta inválida na busca query='{}'", queryFinal);
-            throw new IllegalStateException("Falha na busca de filmes — resposta inválida");
+            if (response == null || response.results() == null) {
+                log.warn(
+                        "⚠️ TMDB: resposta inválida ou nula para query='{}'. Retornando lista"
+                                + " vazia.",
+                        queryFinal);
+                return new MovieSearchResponse(0, 0, 0, List.of());
+            }
+
+            log.info(
+                    "✅ TMDB: Busca concluída query='{}' resultados={}",
+                    queryFinal,
+                    response.results().size());
+            return response;
+        } catch (Exception e) {
+            log.error("❌ TMDB: erro na busca query='{}'", queryFinal, e);
+            return new MovieSearchResponse(0, 0, 0, List.of());
         }
-
-        log.info(
-                "✅ TMDB: Busca concluída query='{}' resultados={}",
-                queryFinal,
-                response.results().size());
-        return response;
     }
 
-    /** Obtém detalhes técnicos de um filme específico pelo ID. [cite: 34] */
+    /** Obtém detalhes técnicos de um filme específico pelo ID. */
     public MovieRecord buscarDetalhes(Long movieId) {
         log.debug("TMDB: Buscando detalhes movieId={}", movieId);
 
@@ -112,7 +119,27 @@ public class TmdbClient {
         return response;
     }
 
-    /** Busca a lista de elenco (Cast). [cite: 36] */
+    /** Busca o primeiro diretor (job = "Director") nos créditos do filme. */
+    public String buscarDiretor(Long movieId) {
+        log.debug("TMDB: Buscando diretor para movieId={}", movieId);
+        CreditsResponse response =
+                restClient
+                        .get()
+                        .uri("/movie/{id}/credits", movieId)
+                        .retrieve()
+                        .body(CreditsResponse.class);
+        if (response == null || response.crew() == null) {
+            log.warn("TMDB: Créditos não encontrados para movieId={}", movieId);
+            return null;
+        }
+        return response.crew().stream()
+                .filter(member -> "Director".equals(member.job()))
+                .map(CrewRecord::name)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** Busca a lista de elenco (cast). */
     public List<CastRecord> buscarElenco(Long movieId) {
         log.debug("TMDB: Buscando elenco movieId={}", movieId);
 
@@ -125,14 +152,14 @@ public class TmdbClient {
 
         if (response == null || response.cast() == null) {
             log.error("❌ TMDB: resposta inválida ao buscar elenco movieId={}", movieId);
-            throw new IllegalStateException("Falha ao buscar elenco");
+            return List.of(); // retorna lista vazia em vez de lançar exceção
         }
 
         log.info("✅ TMDB: Elenco obtido movieId={} castSize={}", movieId, response.cast().size());
         return response.cast();
     }
 
-    /** Identifica provedores de streaming (Flatrate) disponíveis no Brasil. [cite: 28] */
+    /** Identifica provedores de streaming (Flatrate) disponíveis no Brasil. */
     public String buscarOndeAssistir(Long movieId) {
         log.debug("TMDB: Verificando provedores movieId={}", movieId);
 
@@ -145,7 +172,7 @@ public class TmdbClient {
 
         if (response == null || response.results() == null) {
             log.error("❌ TMDB: resposta inválida ao buscar provedores movieId={}", movieId);
-            throw new IllegalStateException("Falha ao buscar provedores de streaming");
+            return "Indisponível no momento";
         }
 
         if (response.results().containsKey("BR")) {
@@ -165,6 +192,6 @@ public class TmdbClient {
         }
 
         log.warn("⚠️ TMDB: Nenhum provedor de streaming encontrado movieId={}", movieId);
-        return "Disponível apenas para Aluguel/Compra. (ou em um caminhão caído)";
+        return "Disponível apenas para Aluguel/Compra (ou em um caminhão caído)";
     }
 }

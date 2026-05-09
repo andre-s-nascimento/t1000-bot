@@ -27,7 +27,8 @@ class AudioPipelineServiceTest {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
         var cache = mock(TranscricaoCache.class);
-        var service = new AudioPipelineService(audio, groq, cache);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -42,6 +43,8 @@ class AudioPipelineServiceTest {
         service.processarFluxoAudio(
                 input,
                 1L,
+                1L,
+                "Usuário Teste",
                 (texto, isUltima) -> {
                     chamadas.add(texto);
                     finais.add(isUltima);
@@ -59,7 +62,8 @@ class AudioPipelineServiceTest {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
         var cache = mock(TranscricaoCache.class);
-        var service = new AudioPipelineService(audio, groq, cache);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
 
@@ -67,7 +71,10 @@ class AudioPipelineServiceTest {
                 .thenReturn(
                         CompletableFuture.failedFuture(new RuntimeException("Falha na conversão")));
 
-        assertThatThrownBy(() -> service.processarFluxoAudio(input, 1L, (t, b) -> {}))
+        assertThatThrownBy(
+                        () ->
+                                service.processarFluxoAudio(
+                                        input, 1L, 1L, "Usuário Teste", (t, b) -> {}))
                 .isInstanceOf(AudioProcessingException.class)
                 .hasMessageContaining("Erro inesperado no pipeline de áudio");
 
@@ -79,7 +86,8 @@ class AudioPipelineServiceTest {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
         var cache = mock(TranscricaoCache.class);
-        var service = new AudioPipelineService(audio, groq, cache);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -87,7 +95,10 @@ class AudioPipelineServiceTest {
         when(audio.converterParaWav(input)).thenReturn(CompletableFuture.completedFuture(wav));
         when(groq.transcrever(wav)).thenThrow(new RuntimeException("Falha na transcrição"));
 
-        assertThatThrownBy(() -> service.processarFluxoAudio(input, 1L, (t, b) -> {}))
+        assertThatThrownBy(
+                        () ->
+                                service.processarFluxoAudio(
+                                        input, 1L, 1L, "Usuário Teste", (t, b) -> {}))
                 .isInstanceOf(AudioProcessingException.class)
                 .hasMessageContaining("Erro inesperado no pipeline de áudio");
 
@@ -100,7 +111,8 @@ class AudioPipelineServiceTest {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
         var cache = mock(TranscricaoCache.class);
-        var service = new AudioPipelineService(audio, groq, cache);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -110,7 +122,10 @@ class AudioPipelineServiceTest {
         // Simula uma exceção real (não de tamanho) – por exemplo, erro de rede
         when(groq.refinarTexto("Bruto")).thenThrow(new RuntimeException("Falha no refino"));
 
-        assertThatThrownBy(() -> service.processarFluxoAudio(input, 1L, (t, b) -> {}))
+        assertThatThrownBy(
+                        () ->
+                                service.processarFluxoAudio(
+                                        input, 1L, 1L, "Usuário Teste", (t, b) -> {}))
                 .isInstanceOf(AudioProcessingException.class)
                 .hasMessageContaining("Erro inesperado no pipeline de áudio");
 

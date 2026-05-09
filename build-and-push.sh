@@ -15,6 +15,19 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_info "Fazendo login no Docker Hub (use suas credenciais)..."
 docker login || { log_info "Login manual necessário. Execute 'docker login' depois."; exit 1; }
 
+# Gerar arquivo de build info
+BUILD_DATE=$(date +"%Y-%m-%d %H:%M:%S")
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+GIT_COMMIT=$(git rev-parse --short HEAD)
+mkdir -p src/main/resources
+cat > src/main/resources/build-info.properties <<EOF
+build.branch=${GIT_BRANCH}
+build.commit=${GIT_COMMIT}
+build.time=${BUILD_DATE}
+EOF
+
+log_info "Build info gerado: branch=${GIT_BRANCH}, commit=${GIT_COMMIT}, data=${BUILD_DATE}"
+
 # 2. Build da imagem
 log_info "Construindo imagem: ${IMAGE_NAME}:${LATEST_TAG}"
 docker build -t "${IMAGE_NAME}:${LATEST_TAG}" -t "${IMAGE_NAME}:${VERSION_TAG}" .

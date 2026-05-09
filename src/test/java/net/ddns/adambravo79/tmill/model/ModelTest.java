@@ -1,4 +1,4 @@
-/* (c) 2026 | 27/04/2026 */
+/* (c) 2026 | 06/05/2026 */
 package net.ddns.adambravo79.tmill.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,7 +41,7 @@ class ModelTest {
     @Test
     void deveCriarCreditsResponse() {
         CastRecord cast = new CastRecord("Ator", "Personagem");
-        CreditsResponse resp = new CreditsResponse(List.of(cast));
+        CreditsResponse resp = new CreditsResponse(List.of(cast), List.of());
 
         assertThat(resp.cast()).hasSize(1);
         assertThat(resp.cast().get(0).character()).isEqualTo("Personagem");
@@ -58,7 +58,15 @@ class ModelTest {
     void deveCriarMovieResponse() {
         MovieRecord movieRecord =
                 new MovieRecord(
-                        1L, "Titulo", "2020", "overview", 10.0, 8.0, "/poster", List.of("US"));
+                        1L,
+                        "Titulo",
+                        "Title",
+                        "2020",
+                        "overview",
+                        10.0,
+                        8.0,
+                        "/poster",
+                        List.of("US"));
         MovieResponse resp = new MovieResponse(List.of(movieRecord));
 
         assertThat(resp.results()).hasSize(1);
