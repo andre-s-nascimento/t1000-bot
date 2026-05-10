@@ -53,6 +53,11 @@ public class DailyDigestService {
         }
     }
 
+    // DailyDigestService.java
+    public void generateDigestCustom(LocalDateTime from, LocalDateTime to) {
+        generateDigest(from, to, "PERÍODO PERSONALIZADO");
+    }
+
     // Resumo da manhã: cobre das 20:30 do dia anterior até 08:29 do dia atual
     @Scheduled(cron = "0 30 8 * * *", zone = "America/Sao_Paulo")
     public void generateMorningDigest() {

@@ -1,4 +1,4 @@
-/* (c) 2026 | 07/05/2026 */
+/* (c) 2026 | 09/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.io.File;
@@ -75,7 +75,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
     private final Set<Long> allowedGroups = new HashSet<>();
     private final Set<Long> warnedGroups = ConcurrentHashMap.newKeySet();
-    private final Set<Long> warnedUsersFor403 = ConcurrentHashMap.newKeySet();
+    private final Set<String> warnedUsersFor403 = ConcurrentHashMap.newKeySet();
 
     private final Map<String, AudioRequest> pendingGroupAudio = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor();
@@ -735,7 +735,8 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                         && errorMsg.contains("can't initiate conversation");
 
                         if (isForbidden && groupId != 0) {
-                            if (warnedUsersFor403.add(userId)) {
+                            String warnKey = groupId + "_" + userId;
+                            if (warnedUsersFor403.add(warnKey)) {
                                 try {
                                     String userMention =
                                             callback.getFrom().getUserName() != null
@@ -747,9 +748,10 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                                     + userMention
                                                     + ", você precisa iniciar uma conversa com o"
                                                     + " bot no privado antes de receber"
-                                                    + " transcrições. Envie /start para @"
+                                                    + " transcrições.\n"
+                                                    + "👉 Envie /start para @"
                                                     + botUsername
-                                                    + ".");
+                                                    + " no seu chat privado e tente novamente.");
                                 } catch (Exception ex) {
                                     log.error(
                                             "Falha ao enviar aviso de 403 para o grupo {}",
