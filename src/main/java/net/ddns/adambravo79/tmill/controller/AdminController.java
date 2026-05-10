@@ -1,12 +1,12 @@
 /* (c) 2026 | 09/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
-import java.util.Map;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
-import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 
@@ -52,6 +52,8 @@ public class AdminController {
     @GetMapping("/cache-stats")
     public ResponseEntity<Map<String, Long>> getCacheStats() {
         return ResponseEntity.ok(transcriptionCacheService.getStats());
+    }
+
     // AdminController.java
     @GetMapping("/custom-digest")
     public ResponseEntity<String> customDigest(
