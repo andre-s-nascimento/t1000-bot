@@ -1,4 +1,4 @@
-/* (c) 2026 | 07/05/2026 */
+/* (c) 2026 | 09/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.io.File;
@@ -18,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.*;
@@ -75,7 +76,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
     private final Set<Long> allowedGroups = new HashSet<>();
     private final Set<Long> warnedGroups = ConcurrentHashMap.newKeySet();
-    private final Set<Long> warnedUsersFor403 = ConcurrentHashMap.newKeySet();
+    private final Set<String> warnedUsersFor403 = ConcurrentHashMap.newKeySet();
 
     private final Map<String, AudioRequest> pendingGroupAudio = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor();
@@ -735,21 +736,29 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                         && errorMsg.contains("can't initiate conversation");
 
                         if (isForbidden && groupId != 0) {
-                            if (warnedUsersFor403.add(userId)) {
+                            String warnKey = groupId + "_" + userId;
+                            if (warnedUsersFor403.add(warnKey)) {
                                 try {
+                                    User from = callback.getFrom();
+                                    String userDisplayName = from.getFirstName();
+                                    if (from.getLastName() != null
+                                            && !from.getLastName().isBlank()) {
+                                        userDisplayName += " " + from.getLastName();
+                                    }
                                     String userMention =
-                                            callback.getFrom().getUserName() != null
-                                                    ? "@" + callback.getFrom().getUserName()
-                                                    : "Usuário";
+                                            from.getUserName() != null
+                                                    ? "@" + from.getUserName()
+                                                    : userDisplayName;
                                     telegramFacade.enviarMensagem(
                                             groupId,
                                             "⚠️ "
                                                     + userMention
                                                     + ", você precisa iniciar uma conversa com o"
                                                     + " bot no privado antes de receber"
-                                                    + " transcrições. Envie /start para @"
+                                                    + " transcrições.\n"
+                                                    + "👉 Envie /start para @"
                                                     + botUsername
-                                                    + ".");
+                                                    + " no seu chat privado e tente novamente.");
                                 } catch (Exception ex) {
                                     log.error(
                                             "Falha ao enviar aviso de 403 para o grupo {}",
