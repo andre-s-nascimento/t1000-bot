@@ -47,6 +47,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private static final String BLOGGER_PUBLICAR = "blogger:publicar";
     private static final String TRANS_BRUTO = "trans_bruto";
     private static final String TRANS_REFINADO_PREFIX = "trans_refinado|";
+    private static final String TRANS_REFINADO = "trans_refinado";
     private static final String TRANS_BRUTO_PREFIX = "trans_bruto|";
     private final MovieService movieService;
     private final AudioPipelineService audioService;
@@ -495,7 +496,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                                         chatId, parte));
                         return;
                     }
-                    if (isUltima && isOwner) {
+                    if (Boolean.TRUE.equals(isUltima) && isOwner) {
                         enviarRespostaComBotoesBloggerHtml(chatId, texto);
                     } else {
                         telegramFacade.enviarMensagemSemMarkdown(chatId, texto);
@@ -657,9 +658,12 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                 request.senderId(),
                                 request.senderName(),
                                 (texto, isUltima) -> {
-                                    if (TRANS_BRUTO.equals(tipo) && !isUltima) resultado[0] = texto;
-                                    else if ("trans_refinado".equals(tipo) && isUltima)
+                                    boolean isUltimaMsg = Boolean.TRUE.equals(isUltima);
+
+                                    if ((TRANS_BRUTO.equals(tipo) && !isUltimaMsg)
+                                            || (TRANS_REFINADO.equals(tipo) && isUltimaMsg)) {
                                         resultado[0] = texto;
+                                    }
                                 });
 
                         if (resultado[0] == null)
