@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS messages (
     chat_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
     user_name TEXT,
-    text TEXT,
+    text TEXT NOT NULL,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -13,5 +13,6 @@ CREATE TABLE IF NOT EXISTS transcripts (
     user_id INTEGER NOT NULL,
     user_name TEXT,
     text TEXT NOT NULL,
+    raw_text TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
