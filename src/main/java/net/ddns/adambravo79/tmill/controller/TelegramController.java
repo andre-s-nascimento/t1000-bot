@@ -43,6 +43,11 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramSafeExecutor;
 @RequiredArgsConstructor
 public class TelegramController implements LongPollingUpdateConsumer {
 
+    private static final String BLOGGER_CANCELAR = "blogger:cancelar";
+    private static final String BLOGGER_PUBLICAR = "blogger:publicar";
+    private static final String TRANS_BRUTO = "trans_bruto";
+    private static final String TRANS_REFINADO_PREFIX = "trans_refinado|";
+    private static final String TRANS_BRUTO_PREFIX = "trans_bruto|";
     private final MovieService movieService;
     private final AudioPipelineService audioService;
     private final BloggerClient bloggerClient;
@@ -439,7 +444,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                                                                             "🎙️ Transcrição"
                                                                                                 + " Bruta")
                                                                                     .callbackData(
-                                                                                            "trans_bruto|"
+                                                                                            TRANS_BRUTO_PREFIX
                                                                                                     + token)
                                                                                     .build(),
                                                                             InlineKeyboardButton
@@ -448,7 +453,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                                                                             "✨ Transcrição"
                                                                                                 + " Refinada")
                                                                                     .callbackData(
-                                                                                            "trans_refinado|"
+                                                                                            TRANS_REFINADO_PREFIX
                                                                                                     + token)
                                                                                     .build())))
                                                     .build();
@@ -512,11 +517,11 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                         new InlineKeyboardRow(
                                                 InlineKeyboardButton.builder()
                                                         .text("📝 Publicar")
-                                                        .callbackData("blogger:publicar")
+                                                        .callbackData(BLOGGER_PUBLICAR)
                                                         .build(),
                                                 InlineKeyboardButton.builder()
                                                         .text("❌ Cancelar")
-                                                        .callbackData("blogger:cancelar")
+                                                        .callbackData(BLOGGER_CANCELAR)
                                                         .build())))
                         .build();
         // 🔥 Usar HTML – o texto refinado pode conter pontuação especial, mas HTML não requer
@@ -533,7 +538,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
         long chatId = cb.getMessage().getChatId();
         log.debug("🔘 callback chatId={} data={}", chatId, data);
 
-        if (data.startsWith("trans_bruto|") || data.startsWith("trans_refinado|")) {
+        if (data.startsWith(TRANS_BRUTO_PREFIX) || data.startsWith(TRANS_REFINADO_PREFIX)) {
             tratarCallbackTranscricaoComToken(cb, data);
             return;
         }
@@ -557,13 +562,13 @@ public class TelegramController implements LongPollingUpdateConsumer {
             return;
         }
 
-        if ("blogger:cancelar".equals(data)) {
+        if (BLOGGER_CANCELAR.equals(data)) {
             cache.remover(chatId);
             telegramFacade.enviarMensagem(chatId, "❌ Publicação cancelada.");
             return;
         }
 
-        if ("blogger:publicar".equals(data)) {
+        if (BLOGGER_PUBLICAR.equals(data)) {
             String texto = cache.recuperar(chatId);
             if (texto == null) {
                 telegramFacade.enviarMensagem(chatId, "⚠️ Nenhuma transcrição disponível.");
@@ -612,9 +617,9 @@ public class TelegramController implements LongPollingUpdateConsumer {
         if (cached != null) {
             // Cache hit: envia o resultado imediatamente (sem chamar Groq)
             String textoEscolhido =
-                    "trans_bruto".equals(tipo) ? cached.getTextoBruto() : cached.getTextoRefinado();
+                    TRANS_BRUTO.equals(tipo) ? cached.getTextoBruto() : cached.getTextoRefinado();
             String prefixo =
-                    tipo.equals("trans_bruto")
+                    tipo.equals(TRANS_BRUTO)
                             ? "🎙️ Transcrição Bruta:\n"
                             : "✨ Transcrição Refinada:\n";
             String mensagem = prefixo + textoEscolhido;
@@ -652,8 +657,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                                 request.senderId(),
                                 request.senderName(),
                                 (texto, isUltima) -> {
-                                    if ("trans_bruto".equals(tipo) && !isUltima)
-                                        resultado[0] = texto;
+                                    if (TRANS_BRUTO.equals(tipo) && !isUltima) resultado[0] = texto;
                                     else if ("trans_refinado".equals(tipo) && isUltima)
                                         resultado[0] = texto;
                                 });
@@ -662,7 +666,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                             throw new IllegalStateException("Nenhum texto produzido");
 
                         String prefixo =
-                                tipo.equals("trans_bruto")
+                                tipo.equals(TRANS_BRUTO)
                                         ? "🎙️ Transcrição Bruta:\n"
                                         : "✨ Transcrição Refinada:\n";
                         String mensagem = prefixo + resultado[0];
