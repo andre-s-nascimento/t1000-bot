@@ -405,25 +405,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
         TranscriptionCacheEntry cached = transcriptionCacheService.get(fileId);
         if (cached != null) {
             // Cache hit: envia o resultado imediatamente (sem chamar Groq)
-<<<<<<< main
-            String textoEscolhido =
-                    "trans_bruto".equals(tipo) ? cached.getTextoBruto() : cached.getTextoRefinado();
-            String prefixo =
-                    tipo.equals("trans_bruto")
-                            ? "🎙️ Transcrição Bruta:\n"
-                            : "✨ Transcrição Refinada:\n";
-            String mensagem = prefixo + textoEscolhido;
-            // ... enviar mensagem (igual ao fluxo normal)
-            if (mensagem.length() > telegramMessageLimit) {
-                dividirMensagem(mensagem, telegramMessageLimit)
-                        .forEach(parte -> telegramFacade.enviarMensagemSemMarkdown(userId, parte));
-            } else {
-                telegramFacade.enviarMensagemSemMarkdown(userId, mensagem);
-            }
-            log.info("✅ Transcrição entregue via cache para userId={} tipo={}", userId, tipo);
-=======
             entregarTranscricaoCache(userId, tipo, cached);
->>>>>>> develop
             return;
         }
 
