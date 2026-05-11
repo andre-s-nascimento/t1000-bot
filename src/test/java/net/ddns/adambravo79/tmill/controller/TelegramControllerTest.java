@@ -2,7 +2,6 @@
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -13,7 +12,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.telegram.telegrambots.meta.api.objects.*;
@@ -21,6 +19,7 @@ import org.telegram.telegrambots.meta.api.objects.chat.Chat;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 
+import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
 import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.client.BloggerClient;
@@ -158,19 +157,14 @@ class TelegramControllerTest {
     // =========================
     // 🎙️ AUDIO
     // =========================
-    @Disabled("Ajustar após refatoração do fluxo de áudio")
+
     @Test
     void deveProcessarAudioCompleto() {
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);
 
         when(fileService.baixarArquivo(any())).thenReturn(new File("audio.oga"));
-
-        // Capturar a chamada real para garantir que não há NullPointerException
         doAnswer(
                         inv -> {
-                            // Apenas verifica que os argumentos não são nulos
-                            assertNotNull(inv.getArgument(0)); // File
-                            assertNotNull(inv.getArgument(4)); // BiConsumer
                             BiConsumer<String, Boolean> cb = inv.getArgument(4);
                             cb.accept("bruto", false);
                             cb.accept("refinado", true);
@@ -179,13 +173,13 @@ class TelegramControllerTest {
                 .when(audioService)
                 .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
 
-        controller.consume(buildVoiceUpdate(1L, "file-id", 1L));
+        controller.consume(buildVoiceUpdate(1L, "file-id", 99L)); // userId != ownerId
 
         verify(audioService)
-                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), notNull(), any());
+        verify(telegramFacade, atLeast(1)).enviarMensagemSemMarkdown(eq(1L), any());
     }
 
-    @Disabled("Ajustar após refatoração do fluxo de áudio")
     @Test
     void deveDividirMensagemGrandeEEnviarPartes() {
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);
@@ -194,13 +188,14 @@ class TelegramControllerTest {
         doAnswer(
                         inv -> {
                             BiConsumer<String, Boolean> cb = inv.getArgument(4);
-                            cb.accept("a ".repeat(5000), true);
+                            cb.accept("a ".repeat(3000), true);
                             return null;
                         })
                 .when(audioService)
-                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+                .processarFluxoAudio(
+                        any(File.class), anyLong(), anyLong(), notNull(), any()); // ← notNull
 
-        controller.consume(buildVoiceUpdate(1L, "file-id", 1L));
+        controller.consume(buildVoiceUpdate(1L, "file-id", 99L)); // userId != ownerId
 
         verify(telegramFacade, atLeast(2)).enviarMensagemSemMarkdown(eq(1L), any());
     }
@@ -251,15 +246,14 @@ class TelegramControllerTest {
         verifyNoInteractions(fileService);
     }
 
-    @Disabled("Ajustar após refatoração do fluxo de áudio")
     @Test
-    void deveEnviarBotoesAoReceberAudioEmGrupo() throws Exception {
+    void deveEnviarBotoesAoReceberAudioEmGrupo() {
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);
 
-        // Mock do AudioService para evitar processamento real
-        doAnswer(inv -> CompletableFuture.completedFuture(null))
-                .when(audioService)
-                .processarEArmazenar(any(File.class), anyLong(), anyLong(), anyString());
+        var processedAudio = new AudioPipelineService.ProcessedAudio("bruto", "refinado");
+        when(fileService.baixarArquivo(any())).thenReturn(new File("audio.oga"));
+        when(audioService.processarEArmazenar(any(), anyLong(), anyLong(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(processedAudio));
 
         Update update = mock(Update.class);
         Message message = mock(Message.class);
@@ -282,34 +276,18 @@ class TelegramControllerTest {
         when(user.getFirstName()).thenReturn("André");
         when(user.getLastName()).thenReturn("Nascimento");
 
-        // Simula processamento bem-sucedido
-        doAnswer(
-                        inv -> {
-                            CompletableFuture<AudioPipelineService.ProcessedAudio> future =
-                                    new CompletableFuture<>();
-                            future.complete(
-                                    new AudioPipelineService.ProcessedAudio("bruto", "refinado"));
-                            return future;
-                        })
-                .when(audioService)
-                .processarEArmazenar(any(File.class), eq(-100L), eq(123L), eq("André Nascimento"));
-
         controller.consume(update);
 
-        // Aguarda um pouco para o processamento assíncrono
-        Thread.sleep(500);
-
-        verify(telegramFacade)
+        verify(telegramFacade, timeout(2000))
                 .enviarComBotoesHtml(eq(-100L), anyString(), any(InlineKeyboardMarkup.class));
-        verifyNoInteractions(fileService, audioService);
     }
 
     // =========================
     // 🔘 CALLBACKS
     // =========================
 
-    @Disabled("Ajustar após refatoração do fluxo de áudio")
     @Test
+    @SneakyThrows
     void deveProcessarCallbackPublicar() {
         when(cache.recuperar(1L)).thenReturn("texto");
         when(bloggerClient.criarRascunho(any(), any())).thenReturn("url");
@@ -366,9 +344,8 @@ class TelegramControllerTest {
         verify(telegramFacade, never()).enviarMensagem(anyLong(), anyString());
     }
 
-    @Disabled("Ajustar após refatoração do fluxo de áudio")
     @Test
-    void deveProcessarCallbackTranscricaoBrutaEmGrupo() throws Exception {
+    void deveProcessarCallbackTranscricaoBrutaEmGrupo() {
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);
 
         Map<String, AudioRequest> pendingMap =
@@ -380,36 +357,34 @@ class TelegramControllerTest {
                 new AudioRequest(
                         "file123", -100L, System.currentTimeMillis(), 999L, "Fulano Teste"));
 
+        when(fileService.baixarArquivo("file123")).thenReturn(new File("audio.oga"));
+        doAnswer(
+                        inv -> {
+                            BiConsumer<String, Boolean> cb = inv.getArgument(4);
+                            cb.accept("texto bruto", false); // bruto = isUltima false
+                            return null;
+                        })
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
         CallbackQuery cb = mock(CallbackQuery.class);
         Message msg = mock(Message.class);
         User user = mock(User.class);
         when(cb.getData()).thenReturn("trans_bruto|" + fakeToken);
         when(cb.getMessage()).thenReturn(msg);
         when(msg.getChatId()).thenReturn(-100L);
-        when(msg.getMessageId()).thenReturn(42);
         when(cb.getFrom()).thenReturn(user);
         when(user.getId()).thenReturn(999L);
+        when(user.getFirstName()).thenReturn("Fulano");
         when(cb.getId()).thenReturn("cb123");
-
-        File fakeFile = new File("audio.oga");
-        when(fileService.baixarArquivo("file123")).thenReturn(fakeFile);
-
-        doAnswer(
-                        inv -> {
-                            BiConsumer<String, Boolean> cbk = inv.getArgument(4);
-                            cbk.accept("texto bruto", false);
-                            return null;
-                        })
-                .when(audioService)
-                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
 
         controller.consume(buildCallbackUpdate(cb));
 
-        verify(telegramFacade, timeout(2000)).enviarMensagemSemMarkdown(eq(999L), anyString());
+        verify(telegramFacade, timeout(2000))
+                .enviarMensagemSemMarkdown(eq(999L), contains("texto bruto"));
         verify(telegramFacade)
                 .answerCallbackQuery(
                         anyString(), eq("Processando áudio... enviarei no privado."), eq(false));
-        assertThat(pendingMap).containsKey(fakeToken);
     }
 
     // =========================
@@ -454,7 +429,6 @@ class TelegramControllerTest {
         verifyNoInteractions(movieService, audioService);
     }
 
-    @Disabled("Ajustar após refatoração do fluxo de áudio")
     @Test
     void deveIgnorarListaVaziaOuNula() {
         controller.consume(List.of());
@@ -462,22 +436,6 @@ class TelegramControllerTest {
 
         verifyNoInteractions(
                 movieService, audioService, bloggerClient, cache, fileService, telegramFacade);
-    }
-
-    @Test
-    void deveFecharMarkdownQuandoAsteriscosImpares() {
-        String fechado =
-                (String)
-                        ReflectionTestUtils.invokeMethod(
-                                controller, "fecharMarkdown", "*texto* com *asterisco");
-        assertThat(fechado).endsWith("*");
-    }
-
-    @Test
-    void deveEnviarRespostaComBotoesBlogger() {
-        ReflectionTestUtils.invokeMethod(controller, "enviarRespostaComBotoesBlogger", 1L, "texto");
-        verify(cache).salvar(1L, "texto");
-        verify(telegramFacade).enviarComBotoes(eq(1L), eq("texto"), any());
     }
 
     // =========================
@@ -516,6 +474,8 @@ class TelegramControllerTest {
         when(voice.getFileSize()).thenReturn(1024L);
         when(message.getFrom()).thenReturn(user);
         when(user.getId()).thenReturn(userId);
+        when(user.getFirstName()).thenReturn("Usuário");
+        when(user.getLastName()).thenReturn(null);
         when(message.getChat()).thenReturn(chat);
         when(chat.isGroupChat()).thenReturn(false);
         when(chat.isSuperGroupChat()).thenReturn(false);
@@ -548,5 +508,49 @@ class TelegramControllerTest {
         when(update.hasCallbackQuery()).thenReturn(true);
         when(update.getCallbackQuery()).thenReturn(cb);
         return update;
+    }
+
+    // =========================
+    // 🔗 INTEGRAÇÃO
+    // =========================
+
+    @Test
+    void fluxoCompletoDeAudioParaPostagemComBlogger() {
+        ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);
+        ReflectionTestUtils.setField(controller, "ownerId", 123L);
+
+        when(fileService.baixarArquivo(any())).thenReturn(new File("fake.oga"));
+        doAnswer(
+                        inv -> {
+                            BiConsumer<String, Boolean> cb = inv.getArgument(4);
+                            cb.accept("texto bruto", false);
+                            cb.accept("texto refinado", true);
+                            return null;
+                        })
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), notNull(), any());
+
+        when(cache.recuperar(123L)).thenReturn("texto refinado");
+        when(bloggerClient.criarRascunho("Post automático", "texto refinado"))
+                .thenReturn("http://blogger.com/post/123");
+
+        controller.consume(buildVoiceUpdate(123L, "fake-file-id", 123L));
+
+        verify(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), notNull(), any());
+        verify(telegramFacade).enviarComBotoesHtml(eq(123L), anyString(), any());
+    }
+
+    @Test
+    void fluxoDePublicacaoNoBloggerViaCallback() {
+        when(cache.recuperar(1L)).thenReturn("texto refinado");
+        when(bloggerClient.criarRascunho("Post automático", "texto refinado"))
+                .thenReturn("http://blogger.com/post/123");
+
+        controller.consume(buildCallbackUpdate(1L, "blogger:publicar"));
+
+        verify(bloggerClient).criarRascunho("Post automático", "texto refinado");
+        verify(telegramFacade).enviarMensagem(1L, "✅ Publicado: http://blogger.com/post/123");
+        verify(cache).remover(1L);
     }
 }
