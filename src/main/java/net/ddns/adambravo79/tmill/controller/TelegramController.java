@@ -664,7 +664,12 @@ public class TelegramController implements LongPollingUpdateConsumer {
                             : "✨ Transcrição Refinada:\n";
             String mensagem = prefixo + textoEscolhido;
             // ... enviar mensagem (igual ao fluxo normal)
-            telegramFacade.enviarMensagemSemMarkdown(userId, mensagem);
+            if (mensagem.length() > telegramMessageLimit) {
+                dividirMensagem(mensagem, telegramMessageLimit)
+                        .forEach(parte -> telegramFacade.enviarMensagemSemMarkdown(userId, parte));
+            } else {
+                telegramFacade.enviarMensagemSemMarkdown(userId, mensagem);
+            }
             log.info("✅ Transcrição entregue via cache para userId={} tipo={}", userId, tipo);
             return;
         }

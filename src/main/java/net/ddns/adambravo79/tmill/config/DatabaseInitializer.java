@@ -1,6 +1,9 @@
 /* (c) 2026 | 09/05/2026 */
 package net.ddns.adambravo79.tmill.config;
 
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -33,12 +36,20 @@ public class DatabaseInitializer {
             )
         """);
         // se a tabela já existir sem a coluna raw_text, adiciona
+        // No método init(), após criar a tabela, adicione:
         try {
-            jdbcTemplate.execute("ALTER TABLE transcripts ADD COLUMN raw_text TEXT");
-            log.info("Coluna raw_text adicionada à tabela transcripts");
+            List<Map<String, Object>> columns =
+                    jdbcTemplate.queryForList("PRAGMA table_info(transcripts)");
+            boolean hasRawText =
+                    columns.stream().anyMatch(row -> "raw_text".equals(row.get("name")));
+            if (!hasRawText) {
+                jdbcTemplate.execute("ALTER TABLE transcripts ADD COLUMN raw_text TEXT");
+                log.info("Coluna raw_text adicionada à tabela transcripts");
+            } else {
+                log.debug("Coluna raw_text já existe");
+            }
         } catch (Exception e) {
-            // coluna já existe (ignorar erro)
-            log.debug("Coluna raw_text já presente na tabela transcripts");
+            log.error("Erro ao verificar/adicionar coluna raw_text", e);
         }
     }
 }
