@@ -31,7 +31,22 @@ public class TelegramSafeExecutor {
             action.run();
 
         } catch (TelegramApiException e) {
-            log.error("telegram_error chatId={} msg={}", chatId, e.getMessage(), e);
+            String msg = e.getMessage();
+            boolean isTransient =
+                    msg != null
+                            && (msg.contains("timeout")
+                                    || msg.contains("429")
+                                    || msg.contains("Too Many Requests")
+                                    || msg.contains("SocketTimeoutException"));
+
+            if (isTransient) {
+                log.warn(
+                        "⚠️ Telegram erro transitório (timeout/rate‑limit) chatId={}: {}",
+                        chatId,
+                        msg);
+            } else {
+                log.error("❌ telegram_error chatId={} msg={}", chatId, msg, e);
+            }
 
             try {
                 fallback.enviar(chatId, "⚠️ Erro ao enviar mensagem. Tente novamente.");
@@ -40,8 +55,7 @@ public class TelegramSafeExecutor {
             }
 
         } catch (Exception e) {
-            log.error("unexpected_error chatId={}", chatId, e);
-
+            log.error("❌ unexpected_error chatId={}", chatId, e);
             try {
                 fallback.enviar(chatId, "⚠️ Erro inesperado.");
             } catch (Exception fallbackError) {

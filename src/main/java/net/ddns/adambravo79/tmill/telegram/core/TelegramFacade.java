@@ -1,4 +1,4 @@
-/* (c) 2026 | 07/05/2026 */
+/* (c) 2026 | 11/05/2026 */
 package net.ddns.adambravo79.tmill.telegram.core;
 
 import org.springframework.stereotype.Component;
@@ -160,18 +160,31 @@ public class TelegramFacade {
     // NOVO: responde a um callback query (para evitar timeout e dar feedback visual)
     public void answerCallbackQuery(String callbackQueryId, String mensagem, boolean showAlert) {
         safeExecutor.run(
-                0L, // chatId não usado no fallback, mas precisamos de um sender dummy. Melhor
-                // tratar
-                // exceção à parte.
-                (id, msg) -> log.warn("Fallback chamado para answerCallbackQuery, ignorando."),
+                0L,
+                (id, msg) ->
+                        log.debug(
+                                "Fallback silencioso para answerCallbackQuery (callback expirado):"
+                                        + " {}",
+                                msg),
                 () -> {
-                    var answer =
-                            AnswerCallbackQuery.builder()
-                                    .callbackQueryId(callbackQueryId)
-                                    .text(mensagem)
-                                    .showAlert(showAlert)
-                                    .build();
-                    telegramClient.execute(answer);
+                    try {
+                        var answer =
+                                AnswerCallbackQuery.builder()
+                                        .callbackQueryId(callbackQueryId)
+                                        .text(mensagem)
+                                        .showAlert(showAlert)
+                                        .build();
+                        telegramClient.execute(answer);
+                    } catch (TelegramApiException e) {
+                        String errMsg = e.getMessage();
+                        if (errMsg != null && errMsg.contains("query is too old")) {
+                            log.debug(
+                                    "Callback query expirado – nenhuma ação necessária. queryId={}",
+                                    callbackQueryId);
+                            return; // não repassa exceção
+                        }
+                        throw e; // outras exceções vão para o safeExecutor
+                    }
                 });
     }
 

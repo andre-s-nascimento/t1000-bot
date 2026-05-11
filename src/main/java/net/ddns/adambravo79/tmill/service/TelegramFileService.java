@@ -1,4 +1,4 @@
-/* (c) 2026 | 01/05/2026 */
+/* (c) 2026 | 11/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.File;
@@ -38,44 +38,81 @@ public class TelegramFileService {
      * @throws TelegramFileException em caso de falha no download ou se o arquivo não existir.
      */
     public File baixarArquivo(String fileId) {
-        try {
-            log.debug("Baixando arquivo do Telegram fileId={}", fileId);
+        int maxTentativas = 3;
+        int tentativa = 0;
+        long backoffMs = 1000; // 1 segundo
 
-            // 1. Obtém metadados do arquivo
-            org.telegram.telegrambots.meta.api.objects.File tgFile =
-                    telegramFacade.getFile(new GetFile(fileId));
+        while (tentativa < maxTentativas) {
+            try {
+                log.debug(
+                        "Baixando arquivo do Telegram fileId={}, tentativa {}/{}",
+                        fileId,
+                        tentativa + 1,
+                        maxTentativas);
 
-            // 2. Download para um arquivo temporário
-            File tempFile = telegramFacade.downloadFile(tgFile);
+                // 1. Obtém metadados do arquivo
+                org.telegram.telegrambots.meta.api.objects.File tgFile =
+                        telegramFacade.getFile(new GetFile(fileId));
 
-            if (tempFile == null || !tempFile.exists()) {
+                // 2. Download para um arquivo temporário
+                File tempFile = telegramFacade.downloadFile(tgFile);
+
+                if (tempFile == null || !tempFile.exists()) {
+                    throw new TelegramFileException(
+                            "Arquivo não encontrado após download: " + fileId, null);
+                }
+
+                // 3. Cria um arquivo definitivo com extensão .oga
+                String destFileName = tempFile.getAbsolutePath().replace(".tmp", ".oga");
+                File destFile = new File(destFileName);
+
+                // 4. Move o arquivo temporário para o destino final (com sobrescrita)
+                Path source = tempFile.toPath();
+                Path target = destFile.toPath();
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+
+                log.info(
+                        "Arquivo baixado com sucesso: {} -> {}",
+                        tempFile.getName(),
+                        destFile.getName());
+                return destFile;
+
+            } catch (TelegramApiException e) {
+                boolean isTimeout =
+                        e.getMessage() != null
+                                && (e.getMessage().contains("timeout")
+                                        || e.getMessage().contains("SocketTimeoutException"));
+
+                if (isTimeout && tentativa < maxTentativas - 1) {
+                    long espera = backoffMs * (tentativa + 1);
+                    log.warn(
+                            "⏱️ Timeout no download (tentativa {}/{}), aguardando {}ms antes de"
+                                    + " tentar novamente. fileId={}",
+                            tentativa + 1,
+                            maxTentativas,
+                            espera,
+                            fileId);
+                    try {
+                        Thread.sleep(espera);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new TelegramFileException("Download interrompido", ie);
+                    }
+                    tentativa++;
+                } else {
+                    log.error("❌ Erro na API do Telegram ao baixar arquivo fileId={}", fileId, e);
+                    throw new TelegramFileException(
+                            "Falha ao baixar arquivo do Telegram: " + e.getMessage(), e);
+                }
+
+            } catch (IOException e) {
+                log.error("❌ Erro de I/O ao mover arquivo fileId={}", fileId, e);
                 throw new TelegramFileException(
-                        "Arquivo não encontrado após download: " + fileId, null);
+                        "Erro ao salvar arquivo baixado: " + e.getMessage(), e);
             }
-
-            // 3. Cria um arquivo definitivo com extensão .oga (ou mantém a original)
-            String destFileName = tempFile.getAbsolutePath().replace(".tmp", ".oga");
-            File destFile = new File(destFileName);
-
-            // 4. Move o arquivo temporário para o destino final (com sobrescrita)
-            Path source = tempFile.toPath();
-            Path target = destFile.toPath();
-
-            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
-
-            log.info(
-                    "Arquivo baixado com sucesso: {} -> {}",
-                    tempFile.getName(),
-                    destFile.getName());
-            return destFile;
-
-        } catch (TelegramApiException e) {
-            log.error("Erro na API do Telegram ao baixar arquivo fileId={}", fileId, e);
-            throw new TelegramFileException(
-                    "Falha ao baixar arquivo do Telegram: " + e.getMessage(), e);
-        } catch (IOException e) {
-            log.error("Erro de I/O ao mover arquivo fileId={}", fileId, e);
-            throw new TelegramFileException("Erro ao salvar arquivo baixado: " + e.getMessage(), e);
         }
+
+        throw new TelegramFileException(
+                "Não foi possível baixar o arquivo após " + maxTentativas + " tentativas", null);
     }
 }
