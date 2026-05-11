@@ -96,21 +96,25 @@ public class DailyDigestService {
     private void generateDigest(LocalDateTime from, LocalDateTime to, String periodLabel) {
         log.info("Gerando {} período {} - {}", periodLabel, from, to);
 
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String fromStr = from.format(dtf);
+        String toStr = to.format(dtf);
+
         // Buscar mensagens de texto
         List<Map<String, Object>> messages =
                 jdbcTemplate.queryForList(
                         "SELECT user_name, text FROM messages WHERE datetime(timestamp,"
                                 + " 'localtime') BETWEEN ? AND ? ORDER BY timestamp ASC",
-                        from,
-                        to);
+                        fromStr,
+                        toStr);
 
         // Buscar transcrições de áudio
         List<Map<String, Object>> transcripts =
                 jdbcTemplate.queryForList(
                         "SELECT user_name, text FROM transcripts WHERE datetime(timestamp,"
                                 + " 'localtime') BETWEEN ? AND ? ORDER BY timestamp ASC",
-                        from,
-                        to);
+                        fromStr,
+                        toStr);
 
         if (messages.isEmpty() && transcripts.isEmpty()) {
             log.info("Nenhuma mensagem ou transcrição no período.");
