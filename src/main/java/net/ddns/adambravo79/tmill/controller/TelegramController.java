@@ -640,7 +640,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
         String fileId = request.fileId();
         TranscriptionCacheEntry cached = transcriptionCacheService.get(fileId);
         if (cached != null) {
-            // Cache hit — entrega imediata sem chamar Groq
+            // Cache hit: envia o resultado imediatamente (sem chamar Groq)
             entregarTranscricaoCache(userId, tipo, cached);
             return;
         }
