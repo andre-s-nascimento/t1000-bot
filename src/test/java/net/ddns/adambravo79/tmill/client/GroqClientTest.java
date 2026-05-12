@@ -18,6 +18,8 @@ import net.ddns.adambravo79.tmill.model.ChatCompletionResponse;
 import net.ddns.adambravo79.tmill.model.Choice;
 import net.ddns.adambravo79.tmill.model.Message;
 import net.ddns.adambravo79.tmill.model.TranscriptionResponse;
+import net.ddns.adambravo79.tmill.prompt.DigestPersona;
+import net.ddns.adambravo79.tmill.prompt.DigestPromptFactory;
 
 class GroqClientTest {
 
@@ -26,74 +28,118 @@ class GroqClientTest {
     private RestClient.RequestBodySpec bodySpec;
     private RestClient.ResponseSpec responseSpec;
 
+    private DigestPromptFactory promptFactory;
+
     @BeforeEach
     void setUp() {
+
         restClient = mock(RestClient.class);
+
         uriSpec = mock(RestClient.RequestBodyUriSpec.class);
+
         bodySpec = mock(RestClient.RequestBodySpec.class);
+
         responseSpec = mock(RestClient.ResponseSpec.class);
 
+        promptFactory = new DigestPromptFactory();
+
         when(restClient.post()).thenReturn(uriSpec);
+
         lenient().doReturn(bodySpec).when(bodySpec).body(any(MultiValueMap.class));
+
         lenient().doReturn(bodySpec).when(bodySpec).body(any(Object.class));
+
         lenient().doReturn(responseSpec).when(bodySpec).retrieve();
     }
 
+    private GroqClient buildClient() {
+
+        return new GroqClient(restClient, 5000, promptFactory);
+    }
+
     private void stubTranscricaoUri() {
+
         when(uriSpec.uri("/openai/v1/audio/transcriptions")).thenReturn(bodySpec);
+
         lenient().doReturn(bodySpec).when(bodySpec).contentType(MediaType.MULTIPART_FORM_DATA);
     }
 
-    @Test
-    void deveTranscreverComSucesso() {
-        stubTranscricaoUri();
-        var resp = mock(TranscriptionResponse.class);
-        when(resp.text()).thenReturn("Texto transcrito");
-        when(responseSpec.body(TranscriptionResponse.class)).thenReturn(resp);
-        assertThat(new GroqClient(restClient, 5000).transcrever(new File("teste.wav")))
-                .isEqualTo("Texto transcrito");
-    }
+    private void stubChatUri() {
 
-    @Test
-    void deveFalharQuandoTranscricaoInvalida() {
-        stubTranscricaoUri();
-        when(responseSpec.body(TranscriptionResponse.class)).thenReturn(null);
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(
-                        () -> new GroqClient(restClient, 5000).transcrever(new File("teste.wav")))
-                .withMessageContaining("Falha na transcrição");
-    }
-
-    private void stubRefinoUri() {
         when(uriSpec.uri("/openai/v1/chat/completions")).thenReturn(bodySpec);
+
         lenient().doReturn(bodySpec).when(bodySpec).contentType(MediaType.APPLICATION_JSON);
     }
 
     @Test
-    void deveRefinarTextoComSucesso() {
-        stubRefinoUri();
-        var resp =
+    void deveTranscreverComSucesso() {
+
+        stubTranscricaoUri();
+
+        var resp = mock(TranscriptionResponse.class);
+
+        when(resp.text()).thenReturn("Texto transcrito");
+
+        when(responseSpec.body(TranscriptionResponse.class)).thenReturn(resp);
+
+        String resultado = buildClient().transcrever(new File("teste.wav"));
+
+        assertThat(resultado).isEqualTo("Texto transcrito");
+    }
+
+    @Test
+    void deveFalharQuandoTranscricaoInvalida() {
+
+        stubTranscricaoUri();
+
+        when(responseSpec.body(TranscriptionResponse.class)).thenReturn(null);
+
+        assertThatExceptionOfType(IllegalStateException.class)
+                .isThrownBy(() -> buildClient().transcrever(new File("teste.wav")))
+                .withMessageContaining("Falha na transcrição");
+    }
+
+    @Test
+    void deveExecutarChatCompletionComSucesso() {
+
+        stubChatUri();
+
+        var response =
                 new ChatCompletionResponse(
-                        List.of(new Choice(new Message("assistant", "Texto refinado"))));
-        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(resp);
-        assertThat(new GroqClient(restClient, 5000).refinarTexto("Texto bruto"))
-                .isEqualTo("Texto refinado");
+                        List.of(new Choice(new Message("assistant", "Resposta gerada"))));
+
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String resultado = buildClient().chatCompletion("system", "user", "llama", 0.2, 100);
+
+        assertThat(resultado).isEqualTo("Resposta gerada");
     }
 
     @Test
-    void deveRetornarTextoBrutoQuandoRefinoInvalido() {
-        stubRefinoUri();
+    void deveFalharQuandoChatCompletionRetornaVazio() {
+
+        stubChatUri();
+
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(null);
-        String resultado = new GroqClient(restClient, 5000).refinarTexto("Texto bruto");
-        assertThat(resultado).isEqualTo("Texto bruto");
+
+        assertThatExceptionOfType(IllegalStateException.class)
+                .isThrownBy(() -> buildClient().chatCompletion("system", "user", "llama", 0.2, 100))
+                .withMessageContaining("Resposta inválida");
     }
 
     @Test
-    void deveRetornarTextoBrutoComAvisoQuandoMuitoLongo() {
-        String textoLongo = "x".repeat(6000);
-        GroqClient client = new GroqClient(restClient, 5000);
-        String resultado = client.refinarTexto(textoLongo);
-        assertThat(resultado).startsWith("⚠️ *Aviso:* O texto excede o limite");
-        assertThat(resultado).contains(textoLongo);
+    void deveGerarResumoDigestComPersona() {
+
+        stubChatUri();
+
+        var response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "Digest gerado"))));
+
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String resultado = buildClient().gerarResumoDigest("mensagens teste", DigestPersona.T1000);
+
+        assertThat(resultado).isEqualTo("Digest gerado");
     }
 }
