@@ -48,3 +48,4 @@ logs_backup/**
 logs_backup/**
 logs/**
 data
+data/t1000.db
