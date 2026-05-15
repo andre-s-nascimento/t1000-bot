@@ -45,7 +45,6 @@ public class GroqClient {
         this.promptFactory = promptFactory;
     }
 
-    // construtor para testes
     public GroqClient(
             RestClient restClient, int maxPromptLength, DigestPromptFactory promptFactory) {
 
@@ -130,14 +129,14 @@ public class GroqClient {
         return response.choices().get(0).message().content();
     }
 
-    public String gerarResumoDigest(String messages, DigestPersona persona) {
+    public String gerarResumoDigest(String messages, DigestPersona persona, String periodLabel) {
 
         return chatCompletion(
-                promptFactory.buildSystemPrompt(persona),
+                promptFactory.buildSystemPrompt(persona, periodLabel),
                 promptFactory.buildUserPrompt(messages),
                 "meta-llama/llama-4-scout-17b-16e-instruct",
-                0.45,
-                1000);
+                0.7,
+                2200);
     }
 
     public String refinarTexto(String textoBruto) {

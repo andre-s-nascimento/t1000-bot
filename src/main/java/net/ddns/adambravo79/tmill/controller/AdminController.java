@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
+import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 
 @RestController
 @RequestMapping("/admin")
@@ -30,6 +31,7 @@ public class AdminController {
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
     private final TranscriptionCacheService transcriptionCacheService;
+    private final WeeklyReminderService weeklyReminderService;
 
     @PostMapping("/reload-easter-eggs")
     public ResponseEntity<String> reloadEasterEggs() {
@@ -103,5 +105,11 @@ public class AdminController {
             log.error("Erro ao processar datas", e);
             return ResponseEntity.internalServerError().body("Erro interno: " + e.getMessage());
         }
+    }
+
+    @PostMapping("/test-weekly-reminder")
+    public ResponseEntity<String> testWeeklyReminder() {
+        weeklyReminderService.sendWednesdayReminder();
+        return ResponseEntity.ok("Lembrete semanal disparado manualmente.");
     }
 }
