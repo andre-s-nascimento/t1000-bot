@@ -31,7 +31,6 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
 import net.ddns.adambravo79.tmill.cache.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
-import net.ddns.adambravo79.tmill.client.BloggerClient;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
@@ -51,8 +50,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private static final String TRANSCRICAO_BRUTA = "🎙️ Transcrição Bruta:\n";
     private static final DateTimeFormatter FORMATTER_BR =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
-    private static final String BLOGGER_CANCELAR = "blogger:cancelar";
-    private static final String BLOGGER_PUBLICAR = "blogger:publicar";
     private static final String TRANS_BRUTO = "trans_bruto";
     private static final String TRANS_REFINADO_PREFIX = "trans_refinado|";
     private static final String TRANS_REFINADO = "trans_refinado";
@@ -60,7 +57,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
     private final MovieService movieService;
     private final AudioPipelineService audioService;
-    private final BloggerClient bloggerClient;
     private final TranscricaoCache cache;
     private final TelegramFileService fileService;
     private final TelegramFacade telegramFacade;
@@ -498,30 +494,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                     .forEach(parte -> telegramFacade.enviarMensagemSemMarkdown(chatId, parte));
             return;
         }
-        if (isUltima && userId == ownerId) {
-            enviarRespostaComBotoesBloggerHtml(chatId, texto);
-        } else {
-            telegramFacade.enviarMensagemSemMarkdown(chatId, texto);
-        }
-    }
-
-    private void enviarRespostaComBotoesBloggerHtml(long chatId, String texto) {
-        cache.salvar(chatId, texto);
-        InlineKeyboardMarkup markup =
-                InlineKeyboardMarkup.builder()
-                        .keyboard(
-                                List.of(
-                                        new InlineKeyboardRow(
-                                                InlineKeyboardButton.builder()
-                                                        .text("📝 Publicar")
-                                                        .callbackData(BLOGGER_PUBLICAR)
-                                                        .build(),
-                                                InlineKeyboardButton.builder()
-                                                        .text("❌ Cancelar")
-                                                        .callbackData(BLOGGER_CANCELAR)
-                                                        .build())))
-                        .build();
-        telegramFacade.enviarComBotoesHtml(chatId, texto, markup);
+        telegramFacade.enviarMensagemSemMarkdown(chatId, texto);
     }
 
     private String gerarToken(String fileId) {
@@ -580,32 +553,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
         if (data.startsWith("id:")) {
             long id = Long.parseLong(data.replace("id:", ""));
             enviarFilmeUnicoCallback(chatId, id, cb.getMessage().getMessageId());
-            return;
-        }
-
-        if (BLOGGER_CANCELAR.equals(data)) {
-            cache.remover(chatId);
-            telegramFacade.enviarMensagem(chatId, "❌ Publicação cancelada.");
-            return;
-        }
-
-        if (BLOGGER_PUBLICAR.equals(data)) {
-            tratarCallbackPublicar(chatId);
-        }
-    }
-
-    private void tratarCallbackPublicar(long chatId) {
-        String texto = cache.recuperar(chatId);
-        if (texto == null) {
-            telegramFacade.enviarMensagem(chatId, "⚠️ Nenhuma transcrição disponível.");
-            return;
-        }
-        String url = bloggerClient.criarRascunho("Post automático", texto);
-        if (url != null) {
-            telegramFacade.enviarMensagem(chatId, "✅ Publicado: " + url);
-            cache.remover(chatId);
-        } else {
-            telegramFacade.enviarMensagem(chatId, "❌ Falha ao publicar.");
         }
     }
 

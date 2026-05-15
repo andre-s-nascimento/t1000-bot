@@ -11,7 +11,6 @@ import org.springframework.http.ResponseEntity;
 
 import net.ddns.adambravo79.tmill.dto.ErrorResponse;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
-import net.ddns.adambravo79.tmill.exception.BloggerPublishException;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
 import net.ddns.adambravo79.tmill.exception.TelegramFileException;
 
@@ -55,19 +54,6 @@ class GlobalExceptionHandlerTest {
         assertThat(body).isNotNull();
         assertThat(body.erro()).isEqualTo("Filme não encontrado");
         assertThat(body.tipo()).isEqualTo("MovieNotFoundException");
-        assertThat(body.timestamp()).isBeforeOrEqualTo(Instant.now());
-    }
-
-    @Test
-    void deveTratarBloggerPublishException() {
-        ResponseEntity<ErrorResponse> response =
-                handler.handleBlogger(new BloggerPublishException("Erro no Blogger"));
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        ErrorResponse body = response.getBody();
-        assertThat(body).isNotNull();
-        assertThat(body.erro()).isEqualTo("Erro no Blogger");
-        assertThat(body.tipo()).isEqualTo("BloggerPublishException");
         assertThat(body.timestamp()).isBeforeOrEqualTo(Instant.now());
     }
 

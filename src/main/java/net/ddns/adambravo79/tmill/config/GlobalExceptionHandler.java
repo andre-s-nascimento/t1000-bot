@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.dto.ErrorResponse;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
-import net.ddns.adambravo79.tmill.exception.BloggerPublishException;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
 import net.ddns.adambravo79.tmill.exception.TelegramFileException;
 
@@ -52,17 +51,6 @@ public class GlobalExceptionHandler {
                 ex);
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(ex.getMessage(), "MovieNotFoundException", Instant.now()));
-    }
-
-    @ExceptionHandler(BloggerPublishException.class)
-    public ResponseEntity<ErrorResponse> handleBlogger(BloggerPublishException ex) {
-        log.error(
-                "❌ Erro ao publicar no Blogger tipo={} msg={}",
-                ex.getClass().getSimpleName(),
-                ex.getMessage(),
-                ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorResponse(ex.getMessage(), "BloggerPublishException", Instant.now()));
     }
 
     @ExceptionHandler(RuntimeException.class)
