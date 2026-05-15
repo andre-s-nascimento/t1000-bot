@@ -47,5 +47,5 @@ temp_audio/**
 logs_backup/**
 logs_backup/**
 logs/**
-data
+data/**
 data/t1000.db

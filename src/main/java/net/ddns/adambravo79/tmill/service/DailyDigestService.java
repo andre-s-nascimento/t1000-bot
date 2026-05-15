@@ -1,6 +1,7 @@
-/* (c) 2026 | 12/05/2026 */
+/* (c) 2026 | 13/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -22,7 +23,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
-import net.ddns.adambravo79.tmill.prompt.DigestPromptFactory;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramMessageSplitter;
 
@@ -36,7 +36,6 @@ public class DailyDigestService {
     private final JdbcTemplate jdbcTemplate;
     private final GroqClient groqClient;
     private final TelegramFacade telegramFacade;
-    private final DigestPromptFactory digestPromptFactory;
 
     @org.springframework.beans.factory.annotation.Value("${digest.enabled:false}")
     private boolean digestEnabled;
@@ -191,18 +190,29 @@ public class DailyDigestService {
                     finalMessages.length(),
                     allowedMessagesSize);
 
-            finalMessages =
+            int slice = allowedMessagesSize / 3;
+
+            String start = finalMessages.substring(0, Math.min(slice, finalMessages.length()));
+
+            String middle =
                     finalMessages.substring(
-                            Math.max(0, finalMessages.length() - allowedMessagesSize));
+                            Math.max(0, (finalMessages.length() / 2) - (slice / 2)),
+                            Math.min(
+                                    finalMessages.length(),
+                                    (finalMessages.length() / 2) + (slice / 2)));
+
+            String end = finalMessages.substring(Math.max(0, finalMessages.length() - slice));
+
+            finalMessages = start + "\n\n[...]\n\n" + middle + "\n\n[...]\n\n" + end;
         }
 
         log.info("📦 Mensagens finais size={}", finalMessages.length());
 
         try {
 
-            DigestPersona persona = DigestPersona.T1000;
+            DigestPersona persona = DigestPersona.T1000; // DigestPersona.T1000;
 
-            String summary = groqClient.gerarResumoDigest(finalMessages, persona);
+            String summary = groqClient.gerarResumoDigest(finalMessages, persona, periodLabel);
 
             if (summary == null || summary.isBlank()) {
 
@@ -246,18 +256,37 @@ public class DailyDigestService {
 
         DateTimeFormatter hourFormat = DateTimeFormatter.ofPattern("HH:mm");
 
+        LocalDateTime previous = null;
+
         for (ChatMessage msg : messages) {
+
+            LocalDateTime current = LocalDateTime.parse(msg.getTimestamp().replace(" ", "T"));
+
+            if (previous != null) {
+
+                long diff = Duration.between(previous, current).toMinutes();
+
+                if (diff >= 20) {
+
+                    sb.append("\n==============================\n");
+
+                    sb.append("NOVO BLOCO DE CONVERSA\n");
+
+                    sb.append("==============================\n\n");
+                }
+            }
 
             String line =
                     String.format(
                             "[%s] %s%s: %s%n",
-                            hourFormat.format(
-                                    LocalDateTime.parse(msg.getTimestamp().replace(" ", "T"))),
+                            hourFormat.format(current),
                             msg.getUser(),
                             msg.isAudio() ? " (áudio)" : "",
                             msg.getText());
 
             sb.append(line);
+
+            previous = current;
         }
 
         return sb.toString();

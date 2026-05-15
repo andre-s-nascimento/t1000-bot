@@ -138,7 +138,8 @@ class GroqClientTest {
 
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
-        String resultado = buildClient().gerarResumoDigest("mensagens teste", DigestPersona.T1000);
+        String resultado =
+                buildClient().gerarResumoDigest("mensagens teste", DigestPersona.T1000, "");
 
         assertThat(resultado).isEqualTo("Digest gerado");
     }
