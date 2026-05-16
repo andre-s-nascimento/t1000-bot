@@ -1,10 +1,9 @@
-/* (c) 2026 | 11/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
 import org.springframework.stereotype.Service;
@@ -40,79 +39,64 @@ public class TelegramFileService {
     public File baixarArquivo(String fileId) {
         int maxTentativas = 3;
         int tentativa = 0;
-        long backoffMs = 1000; // 1 segundo
+        long backoffMs = 1000;
 
         while (tentativa < maxTentativas) {
             try {
                 log.debug(
-                        "Baixando arquivo do Telegram fileId={}, tentativa {}/{}",
+                        "Baixando arquivo fileId={}, tentativa {}/{}",
                         fileId,
                         tentativa + 1,
                         maxTentativas);
-
-                // 1. Obtém metadados do arquivo
-                org.telegram.telegrambots.meta.api.objects.File tgFile =
-                        telegramFacade.getFile(new GetFile(fileId));
-
-                // 2. Download para um arquivo temporário
-                File tempFile = telegramFacade.downloadFile(tgFile);
-
-                if (tempFile == null || !tempFile.exists()) {
-                    throw new TelegramFileException(
-                            "Arquivo não encontrado após download: " + fileId, null);
-                }
-
-                // 3. Cria um arquivo definitivo com extensão .oga
-                String destFileName = tempFile.getAbsolutePath().replace(".tmp", ".oga");
-                File destFile = new File(destFileName);
-
-                // 4. Move o arquivo temporário para o destino final (com sobrescrita)
-                Path source = tempFile.toPath();
-                Path target = destFile.toPath();
-                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
-
-                log.info(
-                        "Arquivo baixado com sucesso: {} -> {}",
-                        tempFile.getName(),
-                        destFile.getName());
-                return destFile;
-
+                return baixarArquivoComUmaTentativa(fileId);
             } catch (TelegramApiException e) {
-                boolean isTimeout =
-                        e.getMessage() != null
-                                && (e.getMessage().contains("timeout")
-                                        || e.getMessage().contains("SocketTimeoutException"));
-
-                if (isTimeout && tentativa < maxTentativas - 1) {
-                    long espera = backoffMs * (tentativa + 1);
-                    log.warn(
-                            "⏱️ Timeout no download (tentativa {}/{}), aguardando {}ms antes de"
-                                    + " tentar novamente. fileId={}",
-                            tentativa + 1,
-                            maxTentativas,
-                            espera,
-                            fileId);
-                    try {
-                        Thread.sleep(espera);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new TelegramFileException("Download interrompido", ie);
-                    }
+                if (isTimeoutError(e) && tentativa < maxTentativas - 1) {
+                    aguardarBackoff(tentativa, backoffMs);
                     tentativa++;
                 } else {
-                    log.error("❌ Erro na API do Telegram ao baixar arquivo fileId={}", fileId, e);
+                    log.error("❌ Erro na API do Telegram fileId={}", fileId, e);
                     throw new TelegramFileException(
-                            "Falha ao baixar arquivo do Telegram: " + e.getMessage(), e);
+                            "Falha ao baixar arquivo: " + e.getMessage(), e);
                 }
-
             } catch (IOException e) {
                 log.error("❌ Erro de I/O ao mover arquivo fileId={}", fileId, e);
-                throw new TelegramFileException(
-                        "Erro ao salvar arquivo baixado: " + e.getMessage(), e);
+                throw new TelegramFileException("Erro ao salvar arquivo: " + e.getMessage(), e);
             }
         }
-
         throw new TelegramFileException(
-                "Não foi possível baixar o arquivo após " + maxTentativas + " tentativas", null);
+                "Não foi possível baixar após " + maxTentativas + " tentativas", null);
+    }
+
+    private boolean isTimeoutError(TelegramApiException e) {
+        String msg = e.getMessage();
+        return msg != null && (msg.contains("timeout") || msg.contains("SocketTimeoutException"));
+    }
+
+    private File baixarArquivoComUmaTentativa(String fileId)
+            throws TelegramApiException, IOException {
+        org.telegram.telegrambots.meta.api.objects.File tgFile =
+                telegramFacade.getFile(new GetFile(fileId));
+        File tempFile = telegramFacade.downloadFile(tgFile);
+        if (tempFile == null || !tempFile.exists()) {
+            throw new TelegramFileException(
+                    "Arquivo não encontrado após download: " + fileId, null);
+        }
+        // Renomeia para .oga
+        String destFileName = tempFile.getAbsolutePath().replace(".tmp", ".oga");
+        File destFile = new File(destFileName);
+        Files.move(tempFile.toPath(), destFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        log.info("Arquivo baixado com sucesso: {} -> {}", tempFile.getName(), destFile.getName());
+        return destFile;
+    }
+
+    private void aguardarBackoff(int tentativaAtual, long backoffMs) throws TelegramFileException {
+        long espera = backoffMs * (tentativaAtual + 1);
+        log.warn("⏱️ Timeout, aguardando {}ms antes de tentar novamente", espera);
+        try {
+            Thread.sleep(espera);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new TelegramFileException("Download interrompido", ie);
+        }
     }
 }

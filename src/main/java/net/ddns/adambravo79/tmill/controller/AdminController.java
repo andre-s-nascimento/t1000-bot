@@ -1,4 +1,4 @@
-/* (c) 2026 | 09/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.time.LocalDate;
@@ -63,22 +63,8 @@ public class AdminController {
             @RequestParam(value = "chatId", required = false) Long chatId) {
 
         try {
-            LocalDate startLocalDate = null;
-            LocalDate endLocalDate = null;
-
-            // Tenta formatos diferentes
-            for (String pattern : new String[] {"yyyy-MM-dd", "dd-MM-yyyy"}) {
-                try {
-                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
-                    startLocalDate = LocalDate.parse(startDate, formatter);
-                    endLocalDate = LocalDate.parse(endDate, formatter);
-                    break;
-                } catch (DateTimeParseException ignored) {
-                    /** */
-                }
-            }
-
-            if (startLocalDate == null || endLocalDate == null) {
+            LocalDate[] dates = parseDateRange(startDate, endDate);
+            if (dates.length == 0) {
                 return ResponseEntity.badRequest()
                         .body(
                                 "Formato inválido. Use 'yyyy-MM-dd' ou 'dd-MM-yyyy'. Ex: 2026-05-07"
@@ -86,10 +72,9 @@ public class AdminController {
             }
 
             ZoneId zone = ZoneId.of("America/Sao_Paulo");
-            LocalDateTime from = startLocalDate.atStartOfDay(zone).toLocalDateTime(); // 00:00
-            LocalDateTime to = endLocalDate.atTime(23, 59, 59); // 23:59:59
+            LocalDateTime from = dates[0].atStartOfDay(zone).toLocalDateTime();
+            LocalDateTime to = dates[1].atTime(23, 59, 59);
 
-            // Gera o resumo, enviando para o chat específico (ou para todos se chatId for null)
             dailyDigestService.generateDigestCustom(from, to, chatId);
 
             String message =
@@ -105,6 +90,20 @@ public class AdminController {
             log.error("Erro ao processar datas", e);
             return ResponseEntity.internalServerError().body("Erro interno: " + e.getMessage());
         }
+    }
+
+    private LocalDate[] parseDateRange(String startDate, String endDate) {
+        for (String pattern : new String[] {"yyyy-MM-dd", "dd-MM-yyyy"}) {
+            try {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
+                LocalDate start = LocalDate.parse(startDate, formatter);
+                LocalDate end = LocalDate.parse(endDate, formatter);
+                return new LocalDate[] {start, end};
+            } catch (DateTimeParseException ignored) {
+                // tenta próximo padrão
+            }
+        }
+        return new LocalDate[0];
     }
 
     @PostMapping("/test-weekly-reminder")

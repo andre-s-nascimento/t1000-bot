@@ -1,4 +1,4 @@
-/* (c) 2026 | 13/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.util.HashSet;
@@ -53,10 +53,11 @@ public class WeeklyReminderService {
         }
 
         String message =
-                "<i>\"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente"
-                        + " encerrada...</i>\""
-                        + "\n\n"
-                        + "<b>Muito Prazer (1979) - David Neves</b>\n";
+                """
+        <i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
+
+        <b>Muito Prazer (1979) - David Neves</b>
+        """;
 
         for (Long groupId : allowedGroups) {
             try {

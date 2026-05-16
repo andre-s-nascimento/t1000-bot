@@ -1,4 +1,4 @@
-/* (c) 2026 | 02/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,9 +38,10 @@ class UserInteractionLoggerTest {
         assertThat(Files.exists(logFile)).isTrue();
 
         String content = Files.readString(logFile);
-        assertThat(content).contains("userId=123");
-        assertThat(content).contains("name=Fulano Teste");
-        assertThat(content).contains("action=message:text");
+        assertThat(content)
+                .contains("userId=123")
+                .contains("name=Fulano Teste")
+                .contains("action=message:text");
     }
 
     @Test

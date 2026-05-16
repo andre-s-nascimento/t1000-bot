@@ -1,4 +1,4 @@
-/* (c) 2026 | 07/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.*;
@@ -60,7 +60,6 @@ class TelegramControllerTest {
                 new TelegramController(
                         movieService,
                         audioService,
-                        cache,
                         fileService,
                         telegramFacade,
                         safeExecutor,
@@ -314,6 +313,7 @@ class TelegramControllerTest {
     void deveProcessarCallbackTranscricaoBrutaEmGrupo() {
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);
 
+        @SuppressWarnings("unchecked")
         Map<String, AudioRequest> pendingMap =
                 (Map<String, AudioRequest>)
                         ReflectionTestUtils.getField(controller, "pendingGroupAudio");
@@ -361,9 +361,8 @@ class TelegramControllerTest {
     void deveDividirMensagemGrande() {
         String texto = "a ".repeat(5000);
         List<String> partes =
-                (List<String>)
-                        ReflectionTestUtils.invokeMethod(
-                                controller, "dividirMensagem", texto, 4000);
+                ReflectionTestUtils.<List<String>>invokeMethod(
+                        controller, "dividirMensagem", texto, 4000);
         assertThat(partes).isNotNull().hasSizeGreaterThan(1);
     }
 

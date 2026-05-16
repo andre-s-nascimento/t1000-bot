@@ -1,4 +1,4 @@
-/* (c) 2026 | 06/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import static org.assertj.core.api.Assertions.*;
@@ -95,8 +95,10 @@ class TmdbClientTest {
     void deveFalharQuandoDetalhesInvalidos() {
         when(responseSpec.body(MovieRecord.class)).thenReturn(null);
 
+        TmdbClient client = new TmdbClient(restClient); // ← criado fora do lambda
+
         assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> new TmdbClient(restClient).buscarDetalhes(99L))
+                .isThrownBy(() -> client.buscarDetalhes(99L))
                 .withMessageContaining("Falha ao buscar detalhes");
     }
 
