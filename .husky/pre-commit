@@ -14,8 +14,8 @@ if git diff --cached --name-only | grep -E 'obter-refresh-token\.sh'; then
   exit 1
 fi
 
-# Detectar secrets reais
-if git diff --cached | grep -E '(CLIENT_SECRET|API_KEY|PRIVATE_KEY|TOKEN)=.{10,}'; then
+# Detectar secrets reais (ignorando placeholders e exemplos com ...)
+if git diff --cached | grep -E '(CLIENT_SECRET|API_KEY|PRIVATE_KEY|TOKEN)=.{10,}' | grep -v -E '\$\{|\.\.\.'; then
   echo "❌ ERRO: Possível secret REAL detectado!"
   exit 1
 fi

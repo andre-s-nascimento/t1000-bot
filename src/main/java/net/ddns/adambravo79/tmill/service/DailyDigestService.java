@@ -1,4 +1,4 @@
-/* (c) 2026 | 13/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.Duration;
@@ -210,7 +210,7 @@ public class DailyDigestService {
 
         try {
 
-            DigestPersona persona = DigestPersona.T1000; // DigestPersona.T1000;
+            DigestPersona persona = DigestPersona.T1000;
 
             String summary = groqClient.gerarResumoDigest(finalMessages, persona, periodLabel);
 
@@ -226,22 +226,7 @@ public class DailyDigestService {
             Set<Long> targets = specificChatId != null ? Set.of(specificChatId) : digestChatIds;
 
             for (Long chatId : targets) {
-
-                try {
-
-                    List<String> chunks = TelegramMessageSplitter.split(finalMessage);
-
-                    for (String chunk : chunks) {
-
-                        telegramFacade.enviarMensagemHtml(chatId, chunk);
-                    }
-
-                    log.info("✅ Digest enviado chatId={}", chatId);
-
-                } catch (Exception e) {
-
-                    log.error("❌ Falha ao enviar digest chatId={}", chatId, e);
-                }
+                sendDigestToChat(chatId, finalMessage);
             }
 
         } catch (Exception e) {
@@ -253,25 +238,18 @@ public class DailyDigestService {
     private String buildMessagesBlock(List<ChatMessage> messages) {
 
         StringBuilder sb = new StringBuilder();
-
         DateTimeFormatter hourFormat = DateTimeFormatter.ofPattern("HH:mm");
-
         LocalDateTime previous = null;
 
         for (ChatMessage msg : messages) {
-
             LocalDateTime current = LocalDateTime.parse(msg.getTimestamp().replace(" ", "T"));
 
             if (previous != null) {
-
                 long diff = Duration.between(previous, current).toMinutes();
-
                 if (diff >= 20) {
 
                     sb.append("\n==============================\n");
-
                     sb.append("NOVO BLOCO DE CONVERSA\n");
-
                     sb.append("==============================\n\n");
                 }
             }
@@ -333,5 +311,17 @@ public class DailyDigestService {
         private String text;
         private String timestamp;
         private boolean audio;
+    }
+
+    private void sendDigestToChat(Long chatId, String finalMessage) {
+        try {
+            List<String> chunks = TelegramMessageSplitter.split(finalMessage);
+            for (String chunk : chunks) {
+                telegramFacade.enviarMensagemHtml(chatId, chunk);
+            }
+            log.info("✅ Digest enviado chatId={}", chatId);
+        } catch (Exception e) {
+            log.error("❌ Falha ao enviar digest chatId={}", chatId, e);
+        }
     }
 }

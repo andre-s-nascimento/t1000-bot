@@ -1,4 +1,4 @@
-/* (c) 2026 | 27/04/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.*;
@@ -52,9 +52,10 @@ class AudioServiceTest {
         File file = result.join();
 
         // Assert
-        assertThat(file).isNotNull();
-        assertThat(file.getName()).isEqualTo("audio.wav");
-        assertThat(file).exists(); // verifica que o ficheiro foi devolvido (existe)
+        assertThat(file)
+                .isNotNull()
+                .hasName("audio.wav")
+                .exists(); // verifica que o ficheiro foi devolvido (existe)
 
         // Verifica que o método startProcess foi chamado exactamente uma vez
         verify(service, times(1)).startProcess(any(ProcessBuilder.class));

@@ -1,4 +1,4 @@
-/* (c) 2026 | 06/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.IOException;
@@ -54,12 +54,7 @@ public class EasterEggService {
                         objectMapper.readValue(is, new TypeReference<Map<String, String>>() {});
                 easterEggs.clear();
                 for (Map.Entry<String, String> entry : rawMap.entrySet()) {
-                    try {
-                        Long movieId = Long.parseLong(entry.getKey());
-                        easterEggs.put(movieId, entry.getValue());
-                    } catch (NumberFormatException e) {
-                        log.warn("Chave inválida no easter-eggs.json: {}", entry.getKey());
-                    }
+                    addEasterEggEntry(entry);
                 }
                 log.info(
                         "✅ Carregados {} easter eggs do arquivo {}",
@@ -78,5 +73,14 @@ public class EasterEggService {
 
     public void reload() {
         loadEasterEggs();
+    }
+
+    private void addEasterEggEntry(Map.Entry<String, String> entry) {
+        try {
+            Long movieId = Long.parseLong(entry.getKey());
+            easterEggs.put(movieId, entry.getValue());
+        } catch (NumberFormatException e) {
+            log.warn("Chave inválida no easter-eggs.json: {}", entry.getKey());
+        }
     }
 }

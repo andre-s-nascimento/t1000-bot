@@ -1,4 +1,4 @@
-/* (c) 2026 | 09/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.cache;
 
 import java.util.Map;
@@ -58,13 +58,12 @@ public class TranscriptionCacheService {
 
             // Stats logger (a cada hora)
             cleaner.scheduleAtFixedRate(
-                    () -> {
-                        log.info(
-                                "Cache stats: hits={}, misses={}, size={}",
-                                hits.get(),
-                                misses.get(),
-                                cache.size());
-                    },
+                    () ->
+                            log.info(
+                                    "Cache stats: hits={}, misses={}, size={}",
+                                    hits.get(),
+                                    misses.get(),
+                                    cache.size()),
                     1,
                     1,
                     TimeUnit.HOURS);
