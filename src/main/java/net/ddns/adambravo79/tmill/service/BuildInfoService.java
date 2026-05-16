@@ -1,3 +1,4 @@
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.InputStream;

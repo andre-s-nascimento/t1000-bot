@@ -1,4 +1,4 @@
-/* (c) 2026 | 02/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import static org.assertj.core.api.Assertions.*;
@@ -94,8 +94,11 @@ class GroqClientTest {
 
         when(responseSpec.body(TranscriptionResponse.class)).thenReturn(null);
 
+        GroqClient client = buildClient();
+        File testFile = new File("teste.wav"); // ← criado fora do lambda
+
         assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> buildClient().transcrever(new File("teste.wav")))
+                .isThrownBy(() -> client.transcrever(testFile))
                 .withMessageContaining("Falha na transcrição");
     }
 
@@ -122,8 +125,9 @@ class GroqClientTest {
 
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(null);
 
+        GroqClient client = buildClient();
         assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> buildClient().chatCompletion("system", "user", "llama", 0.2, 100))
+                .isThrownBy(() -> client.chatCompletion("system", "user", "llama", 0.2, 100))
                 .withMessageContaining("Resposta inválida");
     }
 

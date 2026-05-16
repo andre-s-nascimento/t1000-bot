@@ -1,4 +1,4 @@
-/* (c) 2026 | 09/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.io.File;
@@ -28,7 +28,6 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.*;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
 import net.ddns.adambravo79.tmill.cache.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
@@ -57,7 +56,6 @@ public class TelegramController implements LongPollingUpdateConsumer {
 
     private final MovieService movieService;
     private final AudioPipelineService audioService;
-    private final TranscricaoCache cache;
     private final TelegramFileService fileService;
     private final TelegramFacade telegramFacade;
     private final TelegramSafeExecutor safeExecutor;
@@ -458,7 +456,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 chatId,
                 userId,
                 userName,
-                (texto, isUltima) -> handleRespostaPrivado(chatId, userId, texto, isUltima));
+                (texto, isUltima) -> handleRespostaPrivado(chatId, texto));
     }
 
     private void handleResultadoGrupo(
@@ -488,7 +486,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
         enviarBotoesGrupo(chatId, senderName, duration, token);
     }
 
-    private void handleRespostaPrivado(long chatId, long userId, String texto, boolean isUltima) {
+    private void handleRespostaPrivado(long chatId, String texto) {
         if (texto.length() > telegramMessageLimit) {
             dividirMensagem(texto, telegramMessageLimit)
                     .forEach(parte -> telegramFacade.enviarMensagemSemMarkdown(chatId, parte));

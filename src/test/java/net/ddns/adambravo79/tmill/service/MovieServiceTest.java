@@ -1,4 +1,4 @@
-/* (c) 2026 | 06/05/2026 */
+/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -198,12 +198,13 @@ class MovieServiceTest {
                 .hasMessageContaining("Filme não encontrado");
     }
 
-    //   @Test
-    //   void deveLancarExcecaoQuandoDetalhesForemNull() {
-    //     stubEmptyEasterEgg();
-    //     when(tmdbClient.buscarDetalhes(1L)).thenReturn(null);
-    //     assertThatThrownBy(() -> movieService.buscarPorId(1L))
-    //         .isInstanceOf(MovieNotFoundException.class)
-    //         .hasMessageContaining("Detalhes do filme não encontrados");
-    //   }
+    @Test
+    void deveLancarExcecaoQuandoDetalhesForemNull() {
+
+        when(tmdbClient.buscarDetalhes(1L)).thenReturn(null);
+
+        assertThatThrownBy(() -> movieService.buscarPorId(1L))
+                .isInstanceOf(MovieNotFoundException.class)
+                .hasMessageContaining("Detalhes do filme não encontrados");
+    }
 }
