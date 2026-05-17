@@ -1,26 +1,24 @@
-/* (c) 2026 | 15/05/2026 */
+/* (c) 2026 | 17/05/2026 */
 package net.ddns.adambravo79.tmill.client;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.model.*;
 
-/**
- * Cliente de baixo nível para integração com a API v3 do TMDB. Isolado para facilitar a manutenção
- * de URLs e Headers.
- */
 @Slf4j
 @Component
 public class TmdbClient {
 
-    // Mapa de Atalhos (Gambi de Ouro)
     private static final Map<String, String> ATALHOS =
             Map.of(
                     "duna", "Dune 2021",
@@ -32,12 +30,21 @@ public class TmdbClient {
 
     @Autowired
     public TmdbClient(
-            @Value("${tmdb.token}") String tmdbToken, @Value("${tmdb.api.url}") String apiUrl) {
+            @Value("${tmdb.token}") String tmdbToken,
+            @Value("${tmdb.api.url}") String apiUrl,
+            @Value("${tmdb.connect-timeout:5}") int connectTimeoutSeconds,
+            @Value("${tmdb.read-timeout:10}") int readTimeoutSeconds) {
+
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
+        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+
         this.restClient =
                 RestClient.builder()
                         .baseUrl(apiUrl)
                         .defaultHeader("Authorization", "Bearer " + tmdbToken)
                         .defaultHeader("accept", "application/json")
+                        .requestFactory(factory)
                         .build();
     }
 
@@ -45,10 +52,16 @@ public class TmdbClient {
         this.restClient = restClient;
     }
 
-    /**
-     * Pesquisa filmes por nome. Em caso de resposta inválida, retorna uma busca vazia (não lança
-     * exceção).
-     */
+    // ------------------------------------------------------------------------
+    // Métodos de busca com retry
+    // ------------------------------------------------------------------------
+
+    @Retryable(
+            includes = Exception.class,
+            maxRetries = 2,
+            delay = 1000,
+            multiplier = 2,
+            maxDelay = 5000)
     public MovieSearchResponse pesquisarFilme(String query) {
         String queryNormalizada = query.trim().toLowerCase();
         String queryFinal = ATALHOS.getOrDefault(queryNormalizada, query);
@@ -77,8 +90,7 @@ public class TmdbClient {
 
             if (response == null || response.results() == null) {
                 log.warn(
-                        "⚠️ TMDB: resposta inválida ou nula para query='{}'. Retornando lista"
-                                + " vazia.",
+                        "⚠️ TMDB: resposta inválida para query='{}'. Retornando lista vazia.",
                         queryFinal);
                 return new MovieSearchResponse(0, 0, 0, List.of());
             }
@@ -90,11 +102,16 @@ public class TmdbClient {
             return response;
         } catch (Exception e) {
             log.error("❌ TMDB: erro na busca query='{}'", queryFinal, e);
-            return new MovieSearchResponse(0, 0, 0, List.of());
+            throw e;
         }
     }
 
-    /** Obtém detalhes técnicos de um filme específico pelo ID. */
+    @Retryable(
+            includes = Exception.class,
+            maxRetries = 2,
+            delay = 1000,
+            multiplier = 2,
+            maxDelay = 5000)
     public MovieRecord buscarDetalhes(Long movieId) {
         log.debug("TMDB: Buscando detalhes movieId={}", movieId);
 
@@ -119,27 +136,7 @@ public class TmdbClient {
         return response;
     }
 
-    /** Busca o primeiro diretor (job = "Director") nos créditos do filme. */
-    public String buscarDiretor(Long movieId) {
-        log.debug("TMDB: Buscando diretor para movieId={}", movieId);
-        CreditsResponse response =
-                restClient
-                        .get()
-                        .uri("/movie/{id}/credits", movieId)
-                        .retrieve()
-                        .body(CreditsResponse.class);
-        if (response == null || response.crew() == null) {
-            log.warn("TMDB: Créditos não encontrados para movieId={}", movieId);
-            return null;
-        }
-        return response.crew().stream()
-                .filter(member -> "Director".equals(member.job()))
-                .map(CrewRecord::name)
-                .findFirst()
-                .orElse(null);
-    }
-
-    /** Busca a lista de elenco (cast). */
+    @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
     public List<CastRecord> buscarElenco(Long movieId) {
         log.debug("TMDB: Buscando elenco movieId={}", movieId);
 
@@ -151,15 +148,38 @@ public class TmdbClient {
                         .body(CreditsResponse.class);
 
         if (response == null || response.cast() == null) {
-            log.error("❌ TMDB: resposta inválida ao buscar elenco movieId={}", movieId);
-            return List.of(); // retorna lista vazia em vez de lançar exceção
+            log.warn("TMDB: Elenco não encontrado para movieId={}", movieId);
+            return List.of();
         }
 
         log.info("✅ TMDB: Elenco obtido movieId={} castSize={}", movieId, response.cast().size());
         return response.cast();
     }
 
-    /** Identifica provedores de streaming (Flatrate) disponíveis no Brasil. */
+    @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
+    public String buscarDiretor(Long movieId) {
+        log.debug("TMDB: Buscando diretor para movieId={}", movieId);
+
+        CreditsResponse response =
+                restClient
+                        .get()
+                        .uri("/movie/{id}/credits", movieId)
+                        .retrieve()
+                        .body(CreditsResponse.class);
+
+        if (response == null || response.crew() == null) {
+            log.warn("TMDB: Créditos não encontrados para movieId={}", movieId);
+            return null;
+        }
+
+        return response.crew().stream()
+                .filter(member -> "Director".equals(member.job()))
+                .map(CrewRecord::name)
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
     public String buscarOndeAssistir(Long movieId) {
         log.debug("TMDB: Verificando provedores movieId={}", movieId);
 
@@ -171,7 +191,7 @@ public class TmdbClient {
                         .body(WatchProviderResponse.class);
 
         if (response == null || response.results() == null) {
-            log.error("❌ TMDB: resposta inválida ao buscar provedores movieId={}", movieId);
+            log.warn("TMDB: Resposta inválida para provedores movieId={}", movieId);
             return "Indisponível no momento";
         }
 
@@ -193,5 +213,15 @@ public class TmdbClient {
 
         log.warn("⚠️ TMDB: Nenhum provedor de streaming encontrado movieId={}", movieId);
         return "Disponível apenas para Aluguel/Compra (ou em um caminhão caído)";
+    }
+
+    // Fallbacks opcionais (se necessário)
+    public MovieSearchResponse pesquisarFilmeComFallback(String query) {
+        try {
+            return pesquisarFilme(query);
+        } catch (Exception e) {
+            log.error("Falha definitiva ao buscar filmes para query='{}'", query, e);
+            return new MovieSearchResponse(0, 0, 0, List.of());
+        }
     }
 }
