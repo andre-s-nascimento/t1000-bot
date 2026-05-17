@@ -14,12 +14,19 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Extract version from merge commit message
         id: vars
         run: |
           PR_TITLE=$(git log -1 --pretty=%s)
-          VERSION=$(echo "$PR_TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/v//')
+          VERSION=$(echo "$PR_TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/v//' || echo "")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Create tag
         if: steps.vars.outputs.version != ''
         run: |
