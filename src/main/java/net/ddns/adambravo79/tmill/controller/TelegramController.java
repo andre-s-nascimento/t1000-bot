@@ -110,10 +110,18 @@ public class TelegramController implements LongPollingUpdateConsumer {
         cleaner.scheduleAtFixedRate(
                 () -> {
                     long now = System.currentTimeMillis();
+                    int before = pendingGroupAudio.size();
+                    // Remove apenas tokens com mais de 7 dias (604800000 ms)
                     pendingGroupAudio
                             .entrySet()
-                            .removeIf(entry -> now - entry.getValue().timestamp() > 3600000);
-                    log.debug("🧹 Cache de tokens limpo. Tamanho: {}", pendingGroupAudio.size());
+                            .removeIf(entry -> now - entry.getValue().timestamp() > 604800000);
+                    int after = pendingGroupAudio.size();
+                    if (before != after) {
+                        log.info(
+                                "🧹 Cache de tokens limpo: {} entradas removidas, {} restantes",
+                                before - after,
+                                after);
+                    }
                 },
                 1,
                 1,
@@ -479,6 +487,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 chatId, senderId, senderName, result.bruto(), result.refinado());
 
         String token = gerarToken(fileId);
+        log.info("🔑 Token {} gerado para fileId={} (expira em 7 dias)", token, fileId);
         pendingGroupAudio.put(
                 token,
                 new AudioRequest(fileId, chatId, System.currentTimeMillis(), senderId, senderName));
