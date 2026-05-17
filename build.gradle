@@ -20,6 +20,9 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.2.3'
+
     // SQLite
     implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
     // Para facilitar JDBC (opcional, mas útil)

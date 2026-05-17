@@ -163,14 +163,4 @@ public class GroqClient {
 
         return response.choices().get(0).message().content();
     }
-
-    // Fallback opcional
-    public String transcreverComFallback(File wavFile) {
-        try {
-            return transcrever(wavFile);
-        } catch (Exception e) {
-            log.error("Falha definitiva ao transcrever arquivo {}", wavFile.getName(), e);
-            return "";
-        }
-    }
 }

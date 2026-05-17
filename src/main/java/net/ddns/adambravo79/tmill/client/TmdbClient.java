@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Component;
@@ -62,6 +63,10 @@ public class TmdbClient {
             delay = 1000,
             multiplier = 2,
             maxDelay = 5000)
+    @Cacheable(
+            value = "tmdb-search",
+            key = "#query",
+            unless = "#result == null or #result.results().isEmpty()")
     public MovieSearchResponse pesquisarFilme(String query) {
         String queryNormalizada = query.trim().toLowerCase();
         String queryFinal = ATALHOS.getOrDefault(queryNormalizada, query);
@@ -112,6 +117,7 @@ public class TmdbClient {
             delay = 1000,
             multiplier = 2,
             maxDelay = 5000)
+    @Cacheable(value = "tmdb-details", key = "#movieId", unless = "#result == null")
     public MovieRecord buscarDetalhes(Long movieId) {
         log.debug("TMDB: Buscando detalhes movieId={}", movieId);
 
@@ -136,6 +142,7 @@ public class TmdbClient {
         return response;
     }
 
+    @Cacheable(value = "tmdb-credits", key = "#movieId", unless = "#result == null")
     @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
     public List<CastRecord> buscarElenco(Long movieId) {
         log.debug("TMDB: Buscando elenco movieId={}", movieId);
@@ -157,6 +164,7 @@ public class TmdbClient {
     }
 
     @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
+    @Cacheable(value = "tmdb-credits", key = "#movieId")
     public String buscarDiretor(Long movieId) {
         log.debug("TMDB: Buscando diretor para movieId={}", movieId);
 
@@ -180,6 +188,10 @@ public class TmdbClient {
     }
 
     @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
+    @Cacheable(
+            value = "tmdb-providers",
+            key = "#movieId",
+            unless = "#result == null or #result == 'Indisponível no momento'")
     public String buscarOndeAssistir(Long movieId) {
         log.debug("TMDB: Verificando provedores movieId={}", movieId);
 
@@ -213,15 +225,5 @@ public class TmdbClient {
 
         log.warn("⚠️ TMDB: Nenhum provedor de streaming encontrado movieId={}", movieId);
         return "Disponível apenas para Aluguel/Compra (ou em um caminhão caído)";
-    }
-
-    // Fallbacks opcionais (se necessário)
-    public MovieSearchResponse pesquisarFilmeComFallback(String query) {
-        try {
-            return pesquisarFilme(query);
-        } catch (Exception e) {
-            log.error("Falha definitiva ao buscar filmes para query='{}'", query, e);
-            return new MovieSearchResponse(0, 0, 0, List.of());
-        }
     }
 }
