@@ -51,3 +51,5 @@ data/**
 data/t1000.db
 src/main/resources/build-info.properties
 build-info.properties
+bump-version.sh
+release.sh
