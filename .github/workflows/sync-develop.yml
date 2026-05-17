@@ -1,0 +1,19 @@
+name: Sync develop after release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-develop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+      - name: Create PR to sync develop
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh pr create --base develop --head main --title "chore: sync main into develop after release" --body "Sincronização automática" --label "sync" || echo "PR already exists"

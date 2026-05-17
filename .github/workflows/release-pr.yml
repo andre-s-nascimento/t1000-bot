@@ -1,0 +1,21 @@
+name: Create Release PR
+
+on:
+  push:
+    branches:
+      - "release/**"
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Pull Request to main
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          VERSION=$(echo "$BRANCH_NAME" | sed -E 's/^release\/v?//')
+          PR_TITLE="chore: release v$VERSION"
+          PR_BODY="## 🧾 Descrição\n\nRelease da versão $VERSION\n\n## ✅ Checklist\n- [ ] Revisão aprovada"
+          gh pr create --base main --head "$BRANCH_NAME" --title "$PR_TITLE" --body "$PR_BODY" --label "release" || echo "PR may already exist"
