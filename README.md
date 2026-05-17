@@ -7,7 +7,7 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento Llama
 ![Build](https://img.shields.io/badge/build-passing-success)
 ![Tests](https://img.shields.io/badge/tests-coming_soon-yellow)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v1.1.9-blueviolet)
+![Status](https://img.shields.io/badge/status-v1.2.0-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
