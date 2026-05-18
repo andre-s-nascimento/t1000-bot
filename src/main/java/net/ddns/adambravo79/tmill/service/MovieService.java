@@ -4,7 +4,9 @@ package net.ddns.adambravo79.tmill.service;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
@@ -58,11 +60,13 @@ public class MovieService {
     }
 
     /**
-     * Executa a busca formatada aplicando lógica de desambiguação automática.
+     * Busca detalhes completos de um filme diretamente pelo ID no TMDB.
      *
-     * @param nome título do filme.
+     * @param id identificador único do filme no TMDB.
      * @return {@link MovieOrchestrationResponse} com texto formatado e URL do poster.
+     * @throws MovieNotFoundException se os detalhes não forem encontrados.
      */
+    @Cacheable(value = "movieDetails", key = "#id", unless = "#result == null")
     public MovieOrchestrationResponse buscarPorId(long id) {
         // Busca detalhes, elenco, diretor e provedores em paralelo
         CompletableFuture<MovieRecord> detalhesFuture =
@@ -74,7 +78,6 @@ public class MovieService {
         CompletableFuture<String> streamingsFuture =
                 CompletableFuture.supplyAsync(() -> tmdbClient.buscarOndeAssistir(id));
 
-        // Aguarda todos
         CompletableFuture.allOf(detalhesFuture, elencoFuture, diretorFuture, streamingsFuture)
                 .join();
 
@@ -83,7 +86,18 @@ public class MovieService {
             throw new MovieNotFoundException("Detalhes do filme não encontrados para ID: " + id);
         }
 
-        List<CastRecord> elenco = elencoFuture.join();
+        // 🔥 Limitar elenco aos 5 primeiros nomes e exibir total restante
+        List<CastRecord> elencoCompleto = elencoFuture.join();
+        int totalCast = elencoCompleto.size();
+        String elenco =
+                elencoCompleto.stream()
+                        .limit(5)
+                        .map(CastRecord::name)
+                        .collect(Collectors.joining(", "));
+        if (totalCast > 5) {
+            elenco += " e mais " + (totalCast - 5) + " atores";
+        }
+
         String diretor = diretorFuture.join();
         String streamings = streamingsFuture.join();
 
