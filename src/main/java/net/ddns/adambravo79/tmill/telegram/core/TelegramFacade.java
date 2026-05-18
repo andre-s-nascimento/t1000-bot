@@ -61,7 +61,7 @@ public class TelegramFacade {
                             SendMessage.builder()
                                     .chatId(String.valueOf(chatId))
                                     .text(texto)
-                                    .parseMode(MARKDOWN)
+                                    .parseMode(HTML)
                                     .build();
 
                     telegramClient.execute(msg);
@@ -110,7 +110,7 @@ public class TelegramFacade {
                                     .chatId(String.valueOf(chatId))
                                     .text(texto)
                                     .replyMarkup(markup)
-                                    .parseMode(MARKDOWN)
+                                    .parseMode(HTML)
                                     .build();
 
                     telegramClient.execute(msg);

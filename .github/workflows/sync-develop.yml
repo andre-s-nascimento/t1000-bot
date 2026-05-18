@@ -8,6 +8,7 @@ on:
 jobs:
   sync-develop:
     runs-on: ubuntu-latest
+    if: startsWith(github.event.head_commit.message, 'Merge pull request') && contains(github.event.head_commit.message, 'release/')
     steps:
       - uses: actions/checkout@v4
         with:
