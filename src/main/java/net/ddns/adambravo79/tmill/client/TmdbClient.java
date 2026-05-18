@@ -7,7 +7,6 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Component;
@@ -33,12 +32,12 @@ public class TmdbClient {
     public TmdbClient(
             @Value("${tmdb.token}") String tmdbToken,
             @Value("${tmdb.api.url}") String apiUrl,
-            @Value("${tmdb.connect-timeout:5}") int connectTimeoutSeconds,
-            @Value("${tmdb.read-timeout:10}") int readTimeoutSeconds) {
+            @Value("${groq.connect-timeout:5s}") Duration connectTimeout,
+            @Value("${groq.read-timeout:30s}") Duration readTimeout) {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
-        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+        factory.setConnectTimeout(connectTimeout);
+        factory.setReadTimeout(readTimeout);
 
         this.restClient =
                 RestClient.builder()
@@ -63,10 +62,6 @@ public class TmdbClient {
             delay = 1000,
             multiplier = 2,
             maxDelay = 5000)
-    @Cacheable(
-            value = "tmdb-search",
-            key = "#query",
-            unless = "#result == null or #result.results().isEmpty()")
     public MovieSearchResponse pesquisarFilme(String query) {
         String queryNormalizada = query.trim().toLowerCase();
         String queryFinal = ATALHOS.getOrDefault(queryNormalizada, query);
@@ -117,7 +112,6 @@ public class TmdbClient {
             delay = 1000,
             multiplier = 2,
             maxDelay = 5000)
-    @Cacheable(value = "tmdb-details", key = "#movieId", unless = "#result == null")
     public MovieRecord buscarDetalhes(Long movieId) {
         log.debug("TMDB: Buscando detalhes movieId={}", movieId);
 
@@ -142,7 +136,6 @@ public class TmdbClient {
         return response;
     }
 
-    @Cacheable(value = "tmdb-credits", key = "#movieId", unless = "#result == null")
     @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
     public List<CastRecord> buscarElenco(Long movieId) {
         log.debug("TMDB: Buscando elenco movieId={}", movieId);
@@ -164,22 +157,18 @@ public class TmdbClient {
     }
 
     @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
-    @Cacheable(value = "tmdb-credits", key = "#movieId")
     public String buscarDiretor(Long movieId) {
         log.debug("TMDB: Buscando diretor para movieId={}", movieId);
-
         CreditsResponse response =
                 restClient
                         .get()
                         .uri("/movie/{id}/credits", movieId)
                         .retrieve()
                         .body(CreditsResponse.class);
-
         if (response == null || response.crew() == null) {
             log.warn("TMDB: Créditos não encontrados para movieId={}", movieId);
             return null;
         }
-
         return response.crew().stream()
                 .filter(member -> "Director".equals(member.job()))
                 .map(CrewRecord::name)
@@ -188,10 +177,6 @@ public class TmdbClient {
     }
 
     @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
-    @Cacheable(
-            value = "tmdb-providers",
-            key = "#movieId",
-            unless = "#result == null or #result == 'Indisponível no momento'")
     public String buscarOndeAssistir(Long movieId) {
         log.debug("TMDB: Verificando provedores movieId={}", movieId);
 

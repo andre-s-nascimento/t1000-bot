@@ -38,13 +38,13 @@ public class GroqClient {
     public GroqClient(
             @Value("${groq.api.key}") String apiKey,
             @Value("${groq.max-prompt-length:32000}") int maxPromptLength,
-            @Value("${groq.connect-timeout:5}") int connectTimeoutSeconds,
-            @Value("${groq.read-timeout:30}") int readTimeoutSeconds,
+            @Value("${groq.connect-timeout:5s}") Duration connectTimeout,
+            @Value("${groq.read-timeout:30s}") Duration readTimeout,
             DigestPromptFactory promptFactory) {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
-        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+        factory.setConnectTimeout(connectTimeout);
+        factory.setReadTimeout(readTimeout);
 
         this.restClient =
                 RestClient.builder()
