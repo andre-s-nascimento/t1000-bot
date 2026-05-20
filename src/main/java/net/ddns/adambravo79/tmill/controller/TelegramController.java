@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,6 +46,7 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramSafeExecutor;
 @RequiredArgsConstructor
 public class TelegramController implements LongPollingUpdateConsumer {
 
+    private static final String START = "/start";
     private static final String TRANSCRICAO_REFINADA = "✨ Transcrição Refinada:\n";
     private static final String TRANSCRICAO_BRUTA = "🎙️ Transcrição Bruta:\n";
     private static final DateTimeFormatter FORMATTER_BR =
@@ -64,6 +66,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private final MessageStoreService messageStoreService;
     private final TranscriptStoreService transcriptStoreService;
     private final TranscriptionCacheService transcriptionCacheService;
+    private final AutoResponseService autoResponseService;
 
     @Value("${t1000.features.transcription-enabled:false}")
     private boolean transcriptionEnabled;
@@ -205,14 +208,28 @@ public class TelegramController implements LongPollingUpdateConsumer {
         String texto = message.getText().toLowerCase().trim();
         log.debug("🔎 Processando texto chatId={} texto='{}'", chatId, texto);
 
-        if (texto.equals("/start")) {
+        if (texto.equals(START)) {
             enviarBoasVindas(chatId, message.getFrom().getFirstName());
             return;
         }
 
-        if (!texto.startsWith("t1000") && !texto.startsWith("/start")) {
+        if (!texto.startsWith("t1000") && !texto.startsWith(START)) {
             messageStoreService.saveMessage(
                     chatId, message.getFrom().getId(), buildFullName(message.getFrom()), texto);
+        }
+
+        if (!texto.startsWith("t1000") && !texto.startsWith(START)) {
+            Optional<AutoResponseRule> autoResponse = autoResponseService.getResponseRule(texto);
+            if (autoResponse.isPresent()) {
+                AutoResponseRule rule = autoResponse.get();
+                if (rule.getAnimation() != null && !rule.getAnimation().isEmpty()) {
+                    // Envia o GIF usando o TelegramFacade
+                    telegramFacade.enviarAnimacao(chatId, rule.getAnimation(), rule.getResponse());
+                } else {
+                    telegramFacade.enviarMensagem(chatId, rule.getResponse());
+                }
+                return;
+            }
         }
 
         if (texto.startsWith("t1000 anotar ideia")) {

@@ -41,6 +41,7 @@ class TelegramControllerTest {
     private MessageStoreService messageStoreService;
     private TranscriptionCacheService transcriptionCacheService;
     private TranscriptStoreService transcriptStoreService;
+    private AutoResponseService autoResponseService;
 
     @BeforeEach
     void setup() {
@@ -55,6 +56,7 @@ class TelegramControllerTest {
         messageStoreService = mock(MessageStoreService.class);
         transcriptionCacheService = mock(TranscriptionCacheService.class);
         transcriptStoreService = mock(TranscriptStoreService.class);
+        autoResponseService = mock(AutoResponseService.class);
 
         controller =
                 new TelegramController(
@@ -67,7 +69,8 @@ class TelegramControllerTest {
                         ideasLogger,
                         messageStoreService,
                         transcriptStoreService,
-                        transcriptionCacheService);
+                        transcriptionCacheService,
+                        autoResponseService);
 
         // Configurar campos injetáveis
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);

@@ -1,4 +1,4 @@
-/* (c) 2026 | 15/05/2026 */
+/* (c) 2026 | 19/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.time.LocalDate;
@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.AutoResponseService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
@@ -32,6 +33,7 @@ public class AdminController {
     private final DailyDigestService dailyDigestService;
     private final TranscriptionCacheService transcriptionCacheService;
     private final WeeklyReminderService weeklyReminderService;
+    private final AutoResponseService autoResponseService;
 
     @PostMapping("/reload-easter-eggs")
     public ResponseEntity<String> reloadEasterEggs() {
@@ -110,5 +112,11 @@ public class AdminController {
     public ResponseEntity<String> testWeeklyReminder() {
         weeklyReminderService.sendWednesdayReminder();
         return ResponseEntity.ok("Lembrete semanal disparado manualmente.");
+    }
+
+    @PostMapping("/reload-auto-responses")
+    public ResponseEntity<String> reloadAutoResponses() {
+        autoResponseService.reload();
+        return ResponseEntity.ok("Respostas automáticas recarregadas");
     }
 }

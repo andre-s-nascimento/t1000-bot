@@ -1,9 +1,10 @@
-/* (c) 2026 | 15/05/2026 */
+/* (c) 2026 | 19/05/2026 */
 package net.ddns.adambravo79.tmill.telegram.core;
 
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
+import org.telegram.telegrambots.meta.api.methods.send.SendAnimation;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
@@ -280,6 +281,24 @@ public class TelegramFacade {
                                     .parseMode(HTML)
                                     .build();
                     telegramClient.execute(editMsg);
+                });
+    }
+
+    // net.ddns.adambravo79.tmill.telegram.core.TelegramFacade.java
+    public void enviarAnimacao(long chatId, String animationUrl, String caption) {
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    // Cria o objeto de animação
+                    SendAnimation animation =
+                            SendAnimation.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .animation(new InputFile(animationUrl))
+                                    .caption(caption)
+                                    .parseMode("HTML") // ou "MarkdownV2", conforme sua preferência
+                                    .build();
+                    telegramClient.execute(animation);
                 });
     }
 }

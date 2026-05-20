@@ -97,6 +97,7 @@ run_container() {
         -v "$(pwd)/data:/app/data" \
         -v "$(pwd)/logs:/app/logs" \
         -v "$(pwd)/config/easter-eggs.json:/app/config/easter-eggs.json" \
+        -v "$(pwd)/config/auto-responses.json:/app/config/auto-responses.json" \
         --memory="700m" \
         --memory-reservation="512m" \
         --cpus="0.8" \
