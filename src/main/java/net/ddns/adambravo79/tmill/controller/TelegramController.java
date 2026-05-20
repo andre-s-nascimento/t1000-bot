@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -45,6 +46,7 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramSafeExecutor;
 @RequiredArgsConstructor
 public class TelegramController implements LongPollingUpdateConsumer {
 
+    private static final String START = "/start";
     private static final String TRANSCRICAO_REFINADA = "✨ Transcrição Refinada:\n";
     private static final String TRANSCRICAO_BRUTA = "🎙️ Transcrição Bruta:\n";
     private static final DateTimeFormatter FORMATTER_BR =
@@ -64,6 +66,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private final MessageStoreService messageStoreService;
     private final TranscriptStoreService transcriptStoreService;
     private final TranscriptionCacheService transcriptionCacheService;
+    private final AutoResponseService autoResponseService;
 
     @Value("${t1000.features.transcription-enabled:false}")
     private boolean transcriptionEnabled;
@@ -205,15 +208,45 @@ public class TelegramController implements LongPollingUpdateConsumer {
         String texto = message.getText().toLowerCase().trim();
         log.debug("🔎 Processando texto chatId={} texto='{}'", chatId, texto);
 
-        if (texto.equals("/start")) {
+        if (texto.equals(START)) {
             enviarBoasVindas(chatId, message.getFrom().getFirstName());
             return;
         }
 
-        if (!texto.startsWith("t1000") && !texto.startsWith("/start")) {
+        if (!texto.startsWith("t1000") && !texto.startsWith(START)) {
             messageStoreService.saveMessage(
                     chatId, message.getFrom().getId(), buildFullName(message.getFrom()), texto);
         }
+
+        // ========== RESPOSTAS AUTOMÁTICAS ==========
+        if (!texto.startsWith("t1000") && !texto.startsWith(START)) {
+            Optional<AutoResponseRule> autoResponse = autoResponseService.getResponseRule(texto);
+            if (autoResponse.isPresent()) {
+                AutoResponseRule rule = autoResponse.get();
+                String userMention = buildUserMention(message.getFrom());
+                String responseText =
+                        userMention + ", " + (rule.getResponse() != null ? rule.getResponse() : "");
+
+                // Opção: enviar diretamente no privado do usuário (descomente e comente as linhas
+                // abaixo)
+                // long privateChatId = message.getFrom().getId();
+                // if (rule.getAnimation() != null && !rule.getAnimation().isBlank()) {
+                //     telegramFacade.enviarAnimacao(privateChatId, rule.getAnimation(),
+                // responseText);
+                // } else {
+                //     telegramFacade.enviarMensagemHtml(privateChatId, responseText);
+                // }
+                // return;
+
+                if (rule.getAnimation() != null && !rule.getAnimation().isBlank()) {
+                    telegramFacade.enviarAnimacao(chatId, rule.getAnimation(), responseText);
+                } else {
+                    telegramFacade.enviarMensagemHtml(chatId, responseText);
+                }
+                return;
+            }
+        }
+        // ==========================================
 
         if (texto.startsWith("t1000 anotar ideia")) {
             tratarAnotarIdeia(message, chatId, texto);
@@ -763,5 +796,16 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;")
                 .replace("'", "&#39;");
+    }
+
+    private String buildUserMention(User user) {
+        if (user == null) return "Usuário";
+        String name = user.getFirstName();
+        if (user.getLastName() != null && !user.getLastName().isBlank()) {
+            name += " " + user.getLastName();
+        }
+        // Escapa aspas e caracteres especiais para HTML
+        String escapedName = name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return String.format("<a href=\"tg://user?id=%d\">@%s</a>", user.getId(), escapedName);
     }
 }

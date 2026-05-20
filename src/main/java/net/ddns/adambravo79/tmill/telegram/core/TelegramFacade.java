@@ -1,9 +1,10 @@
-/* (c) 2026 | 15/05/2026 */
+/* (c) 2026 | 19/05/2026 */
 package net.ddns.adambravo79.tmill.telegram.core;
 
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
+import org.telegram.telegrambots.meta.api.methods.send.SendAnimation;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
@@ -28,7 +29,6 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 public class TelegramFacade {
 
-    private static final String MARKDOWN = "MarkdownV2";
     private static final String HTML = "HTML";
 
     private final TelegramClient telegramClient;
@@ -245,7 +245,7 @@ public class TelegramFacade {
                                     .chatId(String.valueOf(chatId))
                                     .photo(new InputFile(url))
                                     .caption(legenda)
-                                    .parseMode(HTML) // ← ESSENCIAL
+                                    .parseMode(HTML)
                                     .build();
                     telegramClient.execute(photo);
                 });
@@ -281,6 +281,22 @@ public class TelegramFacade {
                                     .parseMode(HTML)
                                     .build();
                     telegramClient.execute(editMsg);
+                });
+    }
+
+    public void enviarAnimacao(long chatId, String animationUrl, String caption) {
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    var animation =
+                            SendAnimation.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .animation(new InputFile(animationUrl))
+                                    .caption(caption)
+                                    .parseMode(HTML)
+                                    .build();
+                    telegramClient.execute(animation);
                 });
     }
 }

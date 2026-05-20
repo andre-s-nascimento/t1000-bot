@@ -254,23 +254,30 @@ public class DailyDigestService {
         try {
             List<String> chunks = TelegramMessageSplitter.split(finalMessage);
             for (String chunk : chunks) {
-                try {
-                    telegramFacade.enviarMensagemHtml(chatId, chunk);
-                } catch (Exception e) {
-                    // Se falhar por parse de entidades, reenvia o mesmo chunk sem parse_mode
-                    if (e.getMessage() != null && e.getMessage().contains("can't parse entities")) {
-                        log.warn(
-                                "⚠️ Erro de parse HTML, reenviando como texto puro para chatId={}",
-                                chatId);
-                        telegramFacade.enviarMensagem(chatId, chunk);
-                    } else {
-                        throw e;
-                    }
-                }
+                sendChunk(chatId, chunk);
             }
             log.info("✅ Digest enviado chatId={}", chatId);
         } catch (Exception e) {
             log.error("❌ Falha ao enviar digest chatId={}", chatId, e);
+        }
+    }
+
+    /**
+     * Envia um chunk de mensagem, tentando com HTML primeiro. Se houver erro de parse, reenvia em
+     * texto puro.
+     */
+    private void sendChunk(Long chatId, String chunk) throws Exception {
+        try {
+            telegramFacade.enviarMensagemHtml(chatId, chunk);
+        } catch (Exception e) {
+            // Se falhar por parse de entidades, reenvia o mesmo chunk sem parse_mode
+            if (e.getMessage() != null && e.getMessage().contains("can't parse entities")) {
+                log.warn(
+                        "⚠️ Erro de parse HTML, reenviando como texto puro para chatId={}", chatId);
+                telegramFacade.enviarMensagem(chatId, chunk);
+            } else {
+                throw e;
+            }
         }
     }
 }

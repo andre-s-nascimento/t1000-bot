@@ -1,0 +1,26 @@
+{
+  "frase-especial": {
+    "triggers": [
+      "cada dia terminado é a esperança renovada do mundo ser mudado"
+    ],
+    "response": "Tá bom, Tá bom... Aham GUS... Senta lá... 🙄",
+    "animation": "https://imgs.search.brave.com/F1mVInFfgD84_WJarkrRL5WKBTKELXSGBAmyYryox5s/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9tZWRp/YTEudGVub3IuY29t/L20vTHA5eVFRbnJn/dDRBQUFBZC94dXhh/LWFoYW0uZ2lm.gif"
+  },
+  "saudacao": {
+    "triggers": ["bom dia"],
+    "response": "BOOOOOM DIAAAAAA... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
+    "animation": "https://imgs.search.brave.com/CEBO11D-MxQFBobMssBkfGCSgJCOy5es8ANN63D-AfQ/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9tZWRp/YTAuZ2lwaHkuY29t/L21lZGlhL3YxLlky/bGtQVGM1TUdJM05q/RXhhRFkxYkd4MVp6/bDRZbUY1Y1hCd1lY/SnhaVFJrTlRjd2Vt/MXJaWHB2WjNKNWRE/YzVORE54Y3labGNE/MTJNVjluYVdaelgz/TmxZWEpqYUNaamRE/MW4vWEV3eDdOcGdi/RjU3aS8yMDAuZ2lm.gif",
+    "timeRange": {
+      "start": "06:00",
+      "end": "12:00"
+    }
+  },
+  "tchau": {
+    "triggers": ["tchau", "ate logo", "flw", "falou"],
+    "response": "Hasta la vista, baby! 👋😎"
+  },
+  "obrigado": {
+    "triggers": ["obrigado", "valeu", "obg", "obrigada"],
+    "response": "Por nada! Isto fica feliz em ser útil. 🤖"
+  }
+}
