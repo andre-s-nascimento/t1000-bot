@@ -248,12 +248,13 @@ public class TelegramController implements LongPollingUpdateConsumer {
         }
         // ==========================================
 
-        if (texto.startsWith("t1000 anotar ideia")) {
+        if (texto.startsWith("t1000 anotar ideia") || texto.startsWith("t-1000 anotar ideia")) {
+            log.info("✅ Comando 't1000 anotar ideia' detectado");
             tratarAnotarIdeia(message, chatId, texto);
             return;
         }
 
-        if (!texto.startsWith("t1000 buscar")) return;
+        if (texto.startsWith("t1000 buscar") || texto.startsWith("t-1000 buscar")) return;
         tratarBuscarFilme(chatId, texto);
     }
 
@@ -279,6 +280,7 @@ public class TelegramController implements LongPollingUpdateConsumer {
     }
 
     private void tratarAnotarIdeia(Message message, long chatId, String texto) {
+        log.info("📝 Comando 'anotar ideia' recebido: {}", texto);
         String idea = texto.replace("t1000 anotar ideia", "").trim();
         if (idea.isEmpty()) {
             telegramFacade.enviarMensagem(

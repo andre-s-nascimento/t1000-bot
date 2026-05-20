@@ -1,4 +1,4 @@
-/* (c) 2026 | 15/05/2026 */
+/* (c) 2026 | 20/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.util.HashSet;
@@ -23,15 +23,18 @@ public class WeeklyReminderService {
     @Value("${bot.allowed-chats:}")
     private String allowedChatsStr;
 
+    @Value("${weekly.reminder.media-file:}")
+    private String mediaFilePath;
+
     private final Set<Long> allowedGroups = new HashSet<>();
 
     @PostConstruct
     public void init() {
+        log.info("📹 mediaFilePath = '{}'", mediaFilePath);
         if (allowedChatsStr != null && !allowedChatsStr.isBlank()) {
             for (String s : allowedChatsStr.split(",")) {
                 try {
                     long id = Long.parseLong(s.trim());
-                    // Aceita apenas IDs negativos (grupos/canais)
                     if (id < 0) {
                         allowedGroups.add(id);
                     }
@@ -61,7 +64,12 @@ public class WeeklyReminderService {
 
         for (Long groupId : allowedGroups) {
             try {
-                telegramFacade.enviarMensagemHtml(groupId, message);
+                // dentro do loop de grupos:
+                if (mediaFilePath != null && !mediaFilePath.isBlank()) {
+                    telegramFacade.enviarMidia(groupId, mediaFilePath, message);
+                } else {
+                    telegramFacade.enviarMensagemHtml(groupId, message);
+                }
                 log.info("Lembrete semanal enviado para grupo {}", groupId);
             } catch (Exception e) {
                 log.error("Erro ao enviar lembrete para grupo {}: {}", groupId, e.getMessage());
