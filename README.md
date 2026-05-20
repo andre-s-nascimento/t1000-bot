@@ -53,11 +53,33 @@ O **T1000-Bot** é um bot para Telegram que combina:
 
 - Toda quarta-feira às 16h (horário SP) envia uma mensagem nos grupos autorizados.
 
+### 🤖 Respostas automáticas (Auto‑Response)
+
+O bot pode responder automaticamente a palavras‑chave ou frases específicas, com suporte a:
+
+- **Gatilhos configuráveis** via arquivo `auto-responses.json` (montado como volume).
+- **Restrição de horário** (ex.: “bom dia” só entre 06h e 12h).
+- **Menção ao usuário** que acionou a resposta.
+- **Animações (GIFs)** com legenda.
+
+**Exemplo de resposta:**
+
+> `<a href="tg://user?id=123456">André Nascimento</a>, Olá! Como posso ajudar? 😊`
+
+Para adicionar novos gatilhos, edite o arquivo `auto-responses.json` (veja o [exemplo no repositório](./src/main/resources/auto-responses.json)) e recarregue as regras com:
+
+```bash
+curl -X POST http://localhost:8082/admin/reload-auto-responses
+```
+
+A funcionalidade pode ser desligada/ligada via propriedade `auto.response.enabled`.
+
 ### 🔧 Administração (endpoints HTTP)
 
 - `/admin/reload-easter-eggs` – recarrega frases especiais.
 - `/admin/cache-stats` – estatísticas do cache de transcrições.
 - `/admin/custom-digest?start=yyyy-MM-dd&end=yyyy-MM-dd&chatId=xxx` – gera resumo sob demanda.
+- `/admin/reload-auto-responses` – recarrega a lista de auto respostas.
 
 ---
 
@@ -198,6 +220,10 @@ src/main/java
 - **O que faz**: consulta o SQLite, monta um prompt, chama `GroqClient.gerarResumoDigest` e envia via `TelegramFacade`.
 - **Por que é modular**: a lógica de coleta de mensagens está desacoplada da geração do resumo. Você poderia criar um `DigestDataSource` (interface) que busca mensagens de diferentes origens (API externa, arquivos, etc.) e a mesma `DailyDigestService` funcionaria.
 - **Extensão**: já suporta múltiplas personas (T-1000, Bicentenário, Arquiteto) através do enum `DigestPersona` e da `DigestPromptFactory`. Basta adicionar um novo enum e o respectivo prompt.
+
+### 🧩 `AutoResponseService`
+
+- **O que faz**: consulta um JSON preparado, verifica se preenche os requisitos temporais e retorna uma resposta ao usuário baseado em uma palavra chave ou frases.
 
 ### 🧩 `TelegramFacade`
 
