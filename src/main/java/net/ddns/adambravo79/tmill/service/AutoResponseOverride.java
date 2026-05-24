@@ -1,18 +1,12 @@
 /* (c) 2026 | 21/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
-import java.time.LocalTime;
-import java.util.Map;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
 @Data
 @AllArgsConstructor
-public class AutoResponseRule {
+public class AutoResponseOverride {
     private String response;
     private String animation;
-    private LocalTime startTime;
-    private LocalTime endTime;
-    private Map<String, AutoResponseOverride> userOverrides;
 }

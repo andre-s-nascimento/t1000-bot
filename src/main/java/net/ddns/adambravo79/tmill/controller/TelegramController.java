@@ -46,6 +46,7 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramSafeExecutor;
 @RequiredArgsConstructor
 public class TelegramController implements LongPollingUpdateConsumer {
 
+    private static final String T1000 = "t1000";
     private static final String START = "/start";
     private static final String TRANSCRICAO_REFINADA = "✨ Transcrição Refinada:\n";
     private static final String TRANSCRICAO_BRUTA = "🎙️ Transcrição Bruta:\n";
@@ -213,49 +214,62 @@ public class TelegramController implements LongPollingUpdateConsumer {
             return;
         }
 
-        if (!texto.startsWith("t1000") && !texto.startsWith(START)) {
+        // Salva mensagem apenas se NÃO for comando
+        if (!texto.startsWith(T1000) && !texto.startsWith(START)) {
             messageStoreService.saveMessage(
                     chatId, message.getFrom().getId(), buildFullName(message.getFrom()), texto);
         }
 
         // ========== RESPOSTAS AUTOMÁTICAS ==========
-        if (!texto.startsWith("t1000") && !texto.startsWith(START)) {
-            Optional<AutoResponseRule> autoResponse = autoResponseService.getResponseRule(texto);
+        if (!texto.startsWith("T1000") && !texto.startsWith(START)) {
+            Optional<AutoResponseOverride> autoResponse =
+                    autoResponseService.getResponseRule(message.getFrom().getId(), texto);
             if (autoResponse.isPresent()) {
-                AutoResponseRule rule = autoResponse.get();
+                AutoResponseOverride response = autoResponse.get();
                 String userMention = buildUserMention(message.getFrom());
-                String responseText =
-                        userMention + ", " + (rule.getResponse() != null ? rule.getResponse() : "");
-
-                // Opção: enviar diretamente no privado do usuário (descomente e comente as linhas
-                // abaixo)
-                // long privateChatId = message.getFrom().getId();
-                // if (rule.getAnimation() != null && !rule.getAnimation().isBlank()) {
-                //     telegramFacade.enviarAnimacao(privateChatId, rule.getAnimation(),
-                // responseText);
-                // } else {
-                //     telegramFacade.enviarMensagemHtml(privateChatId, responseText);
-                // }
-                // return;
-
-                if (rule.getAnimation() != null && !rule.getAnimation().isBlank()) {
-                    telegramFacade.enviarAnimacao(chatId, rule.getAnimation(), responseText);
+                String finalMsg = userMention + ", " + response.getResponse();
+                if (response.getAnimation() != null && !response.getAnimation().isBlank()) {
+                    telegramFacade.enviarMidia(chatId, response.getAnimation(), finalMsg);
                 } else {
-                    telegramFacade.enviarMensagemHtml(chatId, responseText);
+                    telegramFacade.enviarMensagemHtml(chatId, finalMsg);
                 }
                 return;
             }
         }
         // ==========================================
+        // Opção: enviar diretamente no privado do usuário (descomente e comente as linhas
+        // abaixo)
+        // long privateChatId = message.getFrom().getId();
+        // if (rule.getAnimation() != null && !rule.getAnimation().isBlank()) {
+        //     telegramFacade.enviarAnimacao(privateChatId, rule.getAnimation(),
+        // responseText);
+        // } else {
+        //     telegramFacade.enviarMensagemHtml(privateChatId, responseText);
+        // }
+        // return;
 
-        if (texto.startsWith("t1000 anotar ideia") || texto.startsWith("t-1000 anotar ideia")) {
+        // 🔥 Normalização para comandos com hífen
+        String normalized = texto.replace("t-1000", T1000);
+
+        // Comando "anotar ideia"
+        if (normalized.startsWith("t1000 anotar ideia")) {
             log.info("✅ Comando 't1000 anotar ideia' detectado");
             tratarAnotarIdeia(message, chatId, texto);
             return;
         }
 
-        if (texto.startsWith("t1000 buscar") || texto.startsWith("t-1000 buscar")) return;
-        tratarBuscarFilme(chatId, texto);
+        // 🔥 Comando "buscar" – extrai o termo após "t1000 buscar"
+        if (normalized.startsWith("t1000 buscar")) {
+            // Remove o prefixo "t1000 buscar" (case‑insensitive) e espaços
+            String termo = texto.replaceFirst("(?i)^t-?1000 buscar\\s*", "").trim();
+            if (termo.isEmpty()) {
+                telegramFacade.enviarMensagem(
+                        chatId, "❓ Digite um filme para buscar após o comando.");
+                return;
+            }
+            log.info("✅ Comando 't1000 buscar' detectado");
+            tratarBuscarFilme(chatId, termo);
+        }
     }
 
     private void enviarBoasVindas(long chatId, String firstName) {

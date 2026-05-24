@@ -1,4 +1,4 @@
-/* (c) 2026 | 20/05/2026 */
+/* (c) 2026 | 21/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.LocalTime;
@@ -64,9 +64,8 @@ public class AutoResponseService {
                 String response = (String) entry.getValue().get("response");
                 String animation = (String) entry.getValue().get("animation");
 
-                // Extrai timeRange, se presente
-                LocalTime startTime = null;
-                LocalTime endTime = null;
+                // Extrai timeRange
+                LocalTime startTime = null, endTime = null;
                 Map<String, String> timeRange =
                         (Map<String, String>) entry.getValue().get("timeRange");
                 if (timeRange != null) {
@@ -74,12 +73,53 @@ public class AutoResponseService {
                     endTime = LocalTime.parse(timeRange.get("end"), TIME_FORMATTER);
                 }
 
+                // Extrai userOverrides (formato unificado ou separado)
+                Map<String, AutoResponseOverride> userOverrides = new HashMap<>();
+
+                // 1) Tenta o formato "userOverrides" (recomendado)
+                Map<String, Map<String, Object>> overridesRaw =
+                        (Map<String, Map<String, Object>>) entry.getValue().get("userOverrides");
+                if (overridesRaw != null) {
+                    for (Map.Entry<String, Map<String, Object>> ov : overridesRaw.entrySet()) {
+                        String userId = ov.getKey();
+                        String ovResponse = (String) ov.getValue().get("response");
+                        String ovAnimation = (String) ov.getValue().get("animation");
+                        if (ovResponse != null) {
+                            userOverrides.put(
+                                    userId, new AutoResponseOverride(ovResponse, ovAnimation));
+                        }
+                    }
+                } else {
+                    // 2) Fallback: formato separado "userResponse" e "userAnimation"
+                    Map<String, String> userResponseRaw =
+                            (Map<String, String>) entry.getValue().get("userResponse");
+                    Map<String, String> userAnimationRaw =
+                            (Map<String, String>) entry.getValue().get("userAnimation");
+                    if (userResponseRaw != null) {
+                        for (Map.Entry<String, String> uv : userResponseRaw.entrySet()) {
+                            String userId = uv.getKey();
+                            String ovResponse = uv.getValue();
+                            String ovAnimation =
+                                    (userAnimationRaw != null)
+                                            ? userAnimationRaw.get(userId)
+                                            : null;
+                            userOverrides.put(
+                                    userId, new AutoResponseOverride(ovResponse, ovAnimation));
+                        }
+                    }
+                }
+
                 if (triggers != null && response != null) {
                     for (String trigger : triggers) {
                         if (trigger != null && !trigger.isBlank()) {
                             triggerToRule.put(
                                     trigger.toLowerCase(),
-                                    new AutoResponseRule(response, animation, startTime, endTime));
+                                    new AutoResponseRule(
+                                            response,
+                                            animation,
+                                            startTime,
+                                            endTime,
+                                            userOverrides));
                         }
                     }
                 }
@@ -100,25 +140,19 @@ public class AutoResponseService {
 
     private boolean isTimeInRange(LocalTime now, LocalTime start, LocalTime end) {
         if (start == null || end == null) return true;
-        // Trata se a faixa cruza a meia-noite (ex.: 22:00 - 06:00) – não é o caso, mas
-        // implementamos
-        // genericamente
         if (start.isBefore(end) || start.equals(end)) {
             return !now.isBefore(start) && !now.isAfter(end);
         } else {
-            // Cruza a meia-noite (ex.: 22:00 - 06:00)
             return now.isAfter(start) || now.isBefore(end);
         }
     }
 
-    public Optional<AutoResponseRule> getResponseRule(String message) {
+    public Optional<AutoResponseOverride> getResponseRule(Long userId, String message) {
         if (!enabled || message == null || message.isBlank()) {
             return Optional.empty();
         }
 
         String lowerMsg = message.toLowerCase();
-        log.debug("Verificando mensagem: '{}'", lowerMsg);
-
         // Ordena triggers por tamanho (mais específicos primeiro)
         List<Map.Entry<String, AutoResponseRule>> sorted =
                 new ArrayList<>(triggerToRule.entrySet());
@@ -130,29 +164,24 @@ public class AutoResponseService {
             String trigger = entry.getKey();
             AutoResponseRule rule = entry.getValue();
 
-            // Ignora triggers muito curtos (opcional)
-            if (trigger.length() < 3) {
-                continue;
+            if (trigger.length() < 3) continue; // ignora triggers muito curtos
+            if (!containsExactWord(lowerMsg, trigger)) continue;
+            if (!isTimeInRange(now, rule.getStartTime(), rule.getEndTime())) continue;
+
+            log.info("✅ Trigger '{}' ativado pela mensagem: '{}'", trigger, lowerMsg);
+
+            // Verifica se há override para este userId
+            String userIdKey = userId != null ? String.valueOf(userId) : null;
+            if (userIdKey != null
+                    && rule.getUserOverrides() != null
+                    && rule.getUserOverrides().containsKey(userIdKey)) {
+                AutoResponseOverride ov = rule.getUserOverrides().get(userIdKey);
+                log.info("🎯 Usando resposta personalizada para userId={}", userId);
+                return Optional.of(ov);
             }
 
-            // Verifica se a mensagem contém a palavra exata
-            if (containsExactWord(lowerMsg, trigger)) {
-                // Verifica a restrição de horário
-                if (!isTimeInRange(now, rule.getStartTime(), rule.getEndTime())) {
-                    log.debug(
-                            "Trigger '{}' ativado, mas fora do horário permitido ({} - {})",
-                            trigger,
-                            rule.getStartTime(),
-                            rule.getEndTime());
-                    continue;
-                }
-                log.info(
-                        "✅ Trigger '{}' ativado pela mensagem: '{}' (horário {})",
-                        trigger,
-                        lowerMsg,
-                        now);
-                return Optional.of(rule);
-            }
+            // Usa a resposta padrão da regra
+            return Optional.of(new AutoResponseOverride(rule.getResponse(), rule.getAnimation()));
         }
         return Optional.empty();
     }
