@@ -290,17 +290,30 @@ public class TelegramFacade {
                 });
     }
 
-    public void enviarAnimacao(long chatId, String animationUrl, String caption) {
+    public void enviarAnimacao(long chatId, String animationUrlOrPath, String caption) {
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
                 () -> {
+                    InputFile inputFile;
+                    if (animationUrlOrPath.startsWith("http://")
+                            || animationUrlOrPath.startsWith("https://")) {
+                        inputFile = new InputFile(animationUrlOrPath);
+                    } else {
+                        File file = new File(animationUrlOrPath);
+                        if (!file.exists()) {
+                            log.error("Arquivo de animação não encontrado: {}", animationUrlOrPath);
+                            enviarMensagem(chatId, "⚠️ Arquivo de animação não encontrado.");
+                            return;
+                        }
+                        inputFile = new InputFile(file);
+                    }
                     var animation =
                             SendAnimation.builder()
                                     .chatId(String.valueOf(chatId))
-                                    .animation(new InputFile(animationUrl))
+                                    .animation(inputFile)
                                     .caption(caption)
-                                    .parseMode(HTML)
+                                    .parseMode("HTML")
                                     .build();
                     telegramClient.execute(animation);
                 });
