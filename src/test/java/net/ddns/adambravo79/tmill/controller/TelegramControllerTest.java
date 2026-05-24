@@ -61,7 +61,8 @@ class TelegramControllerTest {
         autoResponseService = mock(AutoResponseService.class);
 
         // Configurar o comportamento padrão do autoResponseService para retornar vazio
-        when(autoResponseService.getResponseRule(anyString())).thenReturn(Optional.empty());
+        when(autoResponseService.getResponseRule(isNull(), anyString()))
+                .thenReturn(Optional.empty());
 
         controller =
                 new TelegramController(
