@@ -1,12 +1,18 @@
 /* (c) 2026 | 19/05/2026 */
 package net.ddns.adambravo79.tmill.telegram.core;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendAnimation;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
+import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
@@ -284,19 +290,151 @@ public class TelegramFacade {
                 });
     }
 
-    public void enviarAnimacao(long chatId, String animationUrl, String caption) {
+    public void enviarAnimacao(long chatId, String animationUrlOrPath, String caption) {
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
                 () -> {
+                    InputFile inputFile;
+                    if (animationUrlOrPath.startsWith("http://")
+                            || animationUrlOrPath.startsWith("https://")) {
+                        inputFile = new InputFile(animationUrlOrPath);
+                    } else {
+                        File file = new File(animationUrlOrPath);
+                        if (!file.exists()) {
+                            log.error("Arquivo de animação não encontrado: {}", animationUrlOrPath);
+                            enviarMensagem(chatId, "⚠️ Arquivo de animação não encontrado.");
+                            return;
+                        }
+                        inputFile = new InputFile(file);
+                    }
                     var animation =
                             SendAnimation.builder()
                                     .chatId(String.valueOf(chatId))
-                                    .animation(new InputFile(animationUrl))
+                                    .animation(inputFile)
                                     .caption(caption)
-                                    .parseMode(HTML)
+                                    .parseMode("HTML")
                                     .build();
                     telegramClient.execute(animation);
+                });
+    }
+
+    public void enviarVideo(long chatId, String filePath, String caption) {
+        log.info("🎥 Tentando enviar vídeo para chat {}: {}", chatId, filePath);
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    File videoFile = new File(filePath);
+                    if (!videoFile.exists()) {
+                        log.error("Arquivo de vídeo não encontrado: {}", filePath);
+                        enviarMensagem(chatId, "⚠️ Arquivo de vídeo do lembrete não encontrado.");
+                        return;
+                    }
+                    log.info(
+                            "📤 Enviando vídeo: {} ({} bytes)",
+                            videoFile.getAbsolutePath(),
+                            videoFile.length());
+                    var video =
+                            SendVideo.builder()
+                                    .chatId(String.valueOf(chatId))
+                                    .video(new InputFile(videoFile))
+                                    .caption(caption)
+                                    .parseMode("HTML")
+                                    .build();
+                    telegramClient.execute(video);
+                    log.info("✅ Vídeo enviado com sucesso para chat {}", chatId);
+                });
+    }
+
+    public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
+        safeExecutor.run(
+                chatId,
+                this::enviarFallback,
+                () -> {
+                    boolean isRemote =
+                            filePathOrUrl.startsWith("http://")
+                                    || filePathOrUrl.startsWith("https://");
+
+                    // Para arquivos locais, verifica existência
+                    if (!isRemote) {
+                        File file = new File(filePathOrUrl);
+                        if (!file.exists()) {
+                            log.error("Arquivo de mídia não encontrado: {}", filePathOrUrl);
+                            enviarMensagem(chatId, "⚠️ Erro: Arquivo de mídia não encontrado.");
+                            return;
+                        }
+                    }
+
+                    // Obtém nome do arquivo (útil para extensão)
+                    String fileName =
+                            isRemote
+                                    ? filePathOrUrl
+                                    : new File(filePathOrUrl).getName().toLowerCase();
+
+                    // Detecta MIME type apenas para arquivos locais
+                    String mimeType = null;
+                    if (!isRemote) {
+                        try {
+                            mimeType = Files.probeContentType(Paths.get(filePathOrUrl));
+                        } catch (IOException e) {
+                            log.warn("Não foi possível detectar MIME type, usando extensão.");
+                        }
+                    }
+
+                    boolean isVideo =
+                            fileName.endsWith(".mp4")
+                                    || fileName.endsWith(".mov")
+                                    || fileName.endsWith(".avi")
+                                    || (mimeType != null && mimeType.startsWith("video/"));
+                    boolean isGif =
+                            fileName.endsWith(".gif")
+                                    || (mimeType != null && mimeType.equals("image/gif"));
+                    boolean isImage =
+                            fileName.endsWith(".jpg")
+                                    || fileName.endsWith(".jpeg")
+                                    || fileName.endsWith(".png")
+                                    || (mimeType != null && mimeType.startsWith("image/"));
+
+                    InputFile inputFile =
+                            isRemote
+                                    ? new InputFile(filePathOrUrl)
+                                    : new InputFile(new File(filePathOrUrl));
+
+                    if (isVideo) {
+                        SendVideo video =
+                                SendVideo.builder()
+                                        .chatId(String.valueOf(chatId))
+                                        .video(inputFile)
+                                        .caption(caption)
+                                        .parseMode("HTML")
+                                        .build();
+                        telegramClient.execute(video);
+                        log.info("✅ Vídeo enviado para chat {}", chatId);
+                    } else if (isGif) {
+                        SendAnimation animation =
+                                SendAnimation.builder()
+                                        .chatId(String.valueOf(chatId))
+                                        .animation(inputFile)
+                                        .caption(caption)
+                                        .parseMode("HTML")
+                                        .build();
+                        telegramClient.execute(animation);
+                        log.info("✅ GIF enviado para chat {}", chatId);
+                    } else if (isImage) {
+                        SendPhoto photo =
+                                SendPhoto.builder()
+                                        .chatId(String.valueOf(chatId))
+                                        .photo(inputFile)
+                                        .caption(caption)
+                                        .parseMode("HTML")
+                                        .build();
+                        telegramClient.execute(photo);
+                        log.info("✅ Imagem enviada para chat {}", chatId);
+                    } else {
+                        log.warn("Tipo de mídia não suportado: {}", fileName);
+                        enviarMensagem(chatId, caption);
+                    }
                 });
     }
 }
