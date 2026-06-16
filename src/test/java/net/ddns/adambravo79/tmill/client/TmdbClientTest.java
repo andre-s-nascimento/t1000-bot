@@ -147,6 +147,6 @@ class TmdbClientTest {
                 .thenReturn(new WatchProviderResponse(Map.of()));
 
         assertThat(new TmdbClient(restClient).buscarOndeAssistir(1L))
-                .contains("Disponível apenas para Aluguel/Compra");
+                .contains("Indisponível no momento");
     }
 }
