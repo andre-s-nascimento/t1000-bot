@@ -2,7 +2,9 @@
 package net.ddns.adambravo79.tmill.controller;
 
 import java.io.File;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -68,6 +70,8 @@ public class TelegramController implements LongPollingUpdateConsumer {
     private final TranscriptStoreService transcriptStoreService;
     private final TranscriptionCacheService transcriptionCacheService;
     private final AutoResponseService autoResponseService;
+    private final WeeklyReleasesService weeklyReleasesService;
+    private final WorldCupSchedulerService worldCupSchedulerService;
 
     @Value("${t1000.features.transcription-enabled:false}")
     private boolean transcriptionEnabled;
@@ -206,22 +210,34 @@ public class TelegramController implements LongPollingUpdateConsumer {
     // =========================
 
     private void tratarTexto(Message message, long chatId) {
-        String texto = message.getText().toLowerCase().trim();
-        log.debug("🔎 Processando texto chatId={} texto='{}'", chatId, texto);
+        String rawText = message.getText();
+        log.debug("📨 Mensagem bruta: '{}'", rawText);
 
+        // Remove barra inicial se existir e normaliza
+        String texto = rawText.toLowerCase().trim();
+        if (texto.startsWith("/")) {
+            texto = texto.substring(1);
+        }
+
+        log.debug("🔎 Texto processado: '{}'", texto);
+
+        // Comandos principais
         if (texto.equals(START)) {
             enviarBoasVindas(chatId, message.getFrom().getFirstName());
             return;
         }
 
-        // Salva mensagem apenas se NÃO for comando
-        if (!texto.startsWith(T1000) && !texto.startsWith(START)) {
+        // Salva mensagem apenas se NÃO for comando (qualquer coisa que comece com t1000 ou /t1000)
+        boolean isCommand =
+                texto.startsWith(T1000) || texto.startsWith("t-1000") || texto.startsWith(START);
+        if (!isCommand) {
             messageStoreService.saveMessage(
                     chatId, message.getFrom().getId(), buildFullName(message.getFrom()), texto);
         }
 
         // ========== RESPOSTAS AUTOMÁTICAS ==========
-        if (!texto.startsWith("T1000") && !texto.startsWith(START)) {
+        // Só aplica se NÃO for comando
+        if (!isCommand) {
             Optional<AutoResponseOverride> autoResponse =
                     autoResponseService.getResponseRule(message.getFrom().getId(), texto);
             if (autoResponse.isPresent()) {
@@ -236,39 +252,52 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 return;
             }
         }
-        // ==========================================
-        // Opção: enviar diretamente no privado do usuário (descomente e comente as linhas
-        // abaixo)
-        // long privateChatId = message.getFrom().getId();
-        // if (rule.getAnimation() != null && !rule.getAnimation().isBlank()) {
-        //     telegramFacade.enviarAnimacao(privateChatId, rule.getAnimation(),
-        // responseText);
-        // } else {
-        //     telegramFacade.enviarMensagemHtml(privateChatId, responseText);
-        // }
-        // return;
 
         // 🔥 Normalização para comandos com hífen
         String normalized = texto.replace("t-1000", T1000);
 
         // Comando "anotar ideia"
         if (normalized.startsWith("t1000 anotar ideia")) {
-            log.info("✅ Comando 't1000 anotar ideia' detectado");
-            tratarAnotarIdeia(message, chatId, texto);
+            log.info("✅ Comando 'anotar ideia'");
+            tratarAnotarIdeia(
+                    message, chatId, rawText); // use rawText para preservar o texto original
             return;
         }
 
-        // 🔥 Comando "buscar" – extrai o termo após "t1000 buscar"
+        // Comando "buscar"
         if (normalized.startsWith("t1000 buscar")) {
-            // Remove o prefixo "t1000 buscar" (case‑insensitive) e espaços
-            String termo = texto.replaceFirst("(?i)^t-?1000 buscar\\s*", "").trim();
+            String termo = rawText.replaceFirst("(?i)^/?(t-?1000 buscar\\s*)", "").trim();
             if (termo.isEmpty()) {
                 telegramFacade.enviarMensagem(
                         chatId, "❓ Digite um filme para buscar após o comando.");
                 return;
             }
-            log.info("✅ Comando 't1000 buscar' detectado");
+            log.info("✅ Comando 'buscar' para '{}'", termo);
             tratarBuscarFilme(chatId, termo);
+            return;
+        }
+
+        // NOVO: Comando "estreias da semana"
+        if (normalized.startsWith("t1000 estreias da semana")
+                || normalized.startsWith("t1000 lancamentos")) {
+            log.info("✅ Comando 'estreias da semana'");
+            String response = weeklyReleasesService.getWeeklyReleasesMessage();
+            telegramFacade.enviarMensagemHtml(chatId, response);
+            return;
+        }
+
+        // Verifica se é comando de jogos de hoje da copa
+        if (normalized.contains("t1000 jogos de hoje")
+                || normalized.contains("t1000 jogos hoje")
+                || normalized.equals("t1000 copa")) {
+            LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+            worldCupSchedulerService.sendMatchesToChat(chatId, today);
+            return;
+        }
+
+        // Se chegou aqui e é um comando não reconhecido, avisa
+        if (isCommand) {
+            telegramFacade.enviarMensagem(chatId, "❓ Comando não reconhecido. Use /t1000 ajuda");
         }
     }
 
