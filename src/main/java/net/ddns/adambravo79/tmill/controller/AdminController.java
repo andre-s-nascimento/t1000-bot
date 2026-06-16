@@ -8,6 +8,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +24,7 @@ import net.ddns.adambravo79.tmill.service.AutoResponseService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
+import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 
 @RestController
 @RequestMapping("/admin")
@@ -34,6 +37,10 @@ public class AdminController {
     private final TranscriptionCacheService transcriptionCacheService;
     private final WeeklyReminderService weeklyReminderService;
     private final AutoResponseService autoResponseService;
+    private final WorldCupSchedulerService worldCupSchedulerService;
+
+    @Value("${worldcup.enabled:false}")
+    private boolean worldcupEnabled;
 
     @PostMapping("/reload-auto-responses")
     public ResponseEntity<String> reloadAutoResponses() {
@@ -104,6 +111,47 @@ public class AdminController {
             log.error("Erro ao processar datas", e);
             return ResponseEntity.internalServerError().body("Erro interno: " + e.getMessage());
         }
+    }
+
+    // src/main/java/net/ddns/adambravo79/tmill/controller/AdminController.java
+
+    @PostMapping("/test-worldcup-noon")
+    public ResponseEntity<String> testWorldCupNoon() {
+        if (worldCupSchedulerService != null) {
+            worldCupSchedulerService.sendNoonMatches();
+            return ResponseEntity.ok("Envio de jogos do meio-dia executado (simulado)");
+        }
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body("Serviço de Copa não disponível");
+    }
+
+    @PostMapping("/test-worldcup-evening")
+    public ResponseEntity<String> testWorldCupEvening() {
+        if (worldCupSchedulerService != null) {
+            worldCupSchedulerService.sendEveningMatches();
+            return ResponseEntity.ok("Envio de jogos da noite executado (simulado)");
+        }
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body("Serviço de Copa não disponível");
+    }
+
+    @PostMapping("/test-worldcup-30min")
+    public ResponseEntity<String> testWorldCup30Min() {
+        if (worldCupSchedulerService != null) {
+            worldCupSchedulerService.checkThirtyMinutesBefore();
+            return ResponseEntity.ok("Verificação de 30 min executada (simulado)");
+        }
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body("Serviço de Copa não disponível");
+    }
+
+    @PostMapping("/test-worldcup")
+    public ResponseEntity<String> testWorldCup() {
+        if (!worldcupEnabled) {
+            return ResponseEntity.ok("⛔ Serviço da Copa desativado (worldcup.enabled=false)");
+        }
+        worldCupSchedulerService.sendManualTest();
+        return ResponseEntity.ok("✅ Envio manual disparado! Verifique os logs.");
     }
 
     private LocalDate[] parseDateRange(String startDate, String endDate) {

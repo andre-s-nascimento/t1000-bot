@@ -15,14 +15,29 @@
       "end": "12:00"
     },
     "userResponse": {
-      "1400513378": "FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
+      "1241644136": " AQUI É FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
     },
     "userAnimation": {
-      "1400513378": "media/bom-dia-familia.gif"
+      "1241644136": "/app/media/bom-dia-familia.gif"
+    }
+  },
+  "saudacion": {
+    "triggers": ["buenos dias", "buen dia", "buenos días"],
+    "response": "BUUEEENOS DIAAAAAAS... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
+    "animation": "https://imgs.search.brave.com/CEBO11D-MxQFBobMssBkfGCSgJCOy5es8ANN63D-AfQ/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9tZWRp/YTAuZ2lwaHkuY29t/L21lZGlhL3YxLlky/bGtQVGM1TUdJM05q/RXhhRFkxYkd4MVp6/bDRZbUY1Y1hCd1lY/SnhaVFJrTlRjd2Vt/MXJaWHB2WjNKNWRE/YzVORE54Y3labGNE/MTJNVjluYVdaelgz/TmxZWEpqYUNaamRE/MW4vWEV3eDdOcGdi/RjU3aS8yMDAuZ2lm.gif",
+    "timeRange": {
+      "start": "06:00",
+      "end": "12:00"
+    },
+    "userResponse": {
+      "1241644136": " PERO ACA ÉS FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
+    },
+    "userAnimation": {
+      "1241644136": "/app/media/bom-dia-familia.gif"
     }
   },
   "tchau": {
-    "triggers": ["tchau", "ate logo", "flw", "falou"],
+    "triggers": ["tchau", "ate logo", "flw"],
     "response": "Hasta la vista, baby! 👋😎"
   },
   "obrigado": {

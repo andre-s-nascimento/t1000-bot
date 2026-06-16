@@ -90,7 +90,8 @@ class ModelTest {
     @Test
     void deveCriarWatchProviderResponse() {
         Provider provider = new Provider("Disney+", 3, "/logo3.png");
-        CountryProviders cp = new CountryProviders(List.of(provider));
+        WatchProviderResponse.CountryProviders cp =
+                new WatchProviderResponse.CountryProviders(List.of(provider));
         WatchProviderResponse resp = new WatchProviderResponse(Map.of("BR", cp));
 
         assertThat(resp.results()).containsKey("BR");
