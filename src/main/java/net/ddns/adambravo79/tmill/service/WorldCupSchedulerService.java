@@ -162,9 +162,12 @@ public class WorldCupSchedulerService {
         ZonedDateTime localTime = match.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
         String message =
                 String.format(
-                        "<b>⏰ Faltam 30 minutos para o início do jogo!</b>\n\n" + "⚽ %s vs %s - %s",
+                        "<b>⏰ Faltam 30 minutos para o início do jogo!</b>\n\n"
+                                + "⚽ %s(%s) vs %s(%s) - %s",
+                        translateTeam(match.homeTeam()),
                         flagEmoji(match.homeTeam()),
                         flagEmoji(match.awayTeam()),
+                        translateTeam(match.awayTeam()),
                         localTime.format(DateTimeFormatter.ofPattern("HH:mm")));
         for (Long groupId : allowedGroups) {
             telegramFacade.enviarMensagemHtml(groupId, message);
