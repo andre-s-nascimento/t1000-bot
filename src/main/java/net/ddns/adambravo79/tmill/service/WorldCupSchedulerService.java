@@ -163,7 +163,7 @@ public class WorldCupSchedulerService {
         String message =
                 String.format(
                         "<b>⏰ Faltam 30 minutos para o início do jogo!</b>\n\n"
-                                + "⚽ %s(%s) vs %s(%s) - %s",
+                                + "⚽ %s (%s) x (%s) %s - %s",
                         translateTeam(match.homeTeam()),
                         flagEmoji(match.homeTeam()),
                         flagEmoji(match.awayTeam()),
