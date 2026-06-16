@@ -241,7 +241,6 @@ public class WorldCupSchedulerService {
                     Map.entry("chile", "Chile"),
                     Map.entry("bolivia", "Bolívia"),
                     Map.entry("venezuela", "Venezuela"),
-
                     // UEFA
                     Map.entry("germany", "Alemanha"),
                     Map.entry("france", "França"),
@@ -260,10 +259,10 @@ public class WorldCupSchedulerService {
                     Map.entry("turkey", "Turquia"),
                     Map.entry("ukraine", "Ucrânia"),
                     Map.entry("austria", "Áustria"),
-                    Map.entry("czech republic", "Chéquia"),
+                    Map.entry("czech republic", "República Tcheca"),
                     Map.entry("bosnia & herzegovina", "Bósnia"),
                     Map.entry("norway", "Noruega"),
-
+                    Map.entry("scotland", "Escócia"),
                     // CONCACAF
                     Map.entry("mexico", "México"),
                     Map.entry("united states", "Estados Unidos"),
@@ -275,7 +274,7 @@ public class WorldCupSchedulerService {
                     Map.entry("jamaica", "Jamaica"),
                     Map.entry("el salvador", "El Salvador"),
                     Map.entry("haiti", "Haiti"),
-
+                    Map.entry("curaçao", "Curaçao"),
                     // CAF
                     Map.entry("morocco", "Marrocos"),
                     Map.entry("senegal", "Senegal"),
@@ -291,7 +290,6 @@ public class WorldCupSchedulerService {
                     Map.entry("dr congo", "República Democrática do Congo"),
                     Map.entry("south africa", "África do Sul"),
                     Map.entry("cape verde", "Cabo Verde"),
-
                     // AFC
                     Map.entry("japan", "Japão"),
                     Map.entry("south korea", "Coreia do Sul"),
@@ -307,7 +305,6 @@ public class WorldCupSchedulerService {
                     Map.entry("vietnam", "Vietnã"),
                     Map.entry("oman", "Omã"),
                     Map.entry("jordan", "Jordânia"),
-
                     // OFC
                     Map.entry("new zealand", "Nova Zelândia"),
                     Map.entry("tahiti", "Taiti"));
@@ -361,6 +358,9 @@ public class WorldCupSchedulerService {
                     Map.entry("ukraine", "🇺🇦"),
                     Map.entry("austria", "🇦🇹"),
                     Map.entry("czech republic", "🇨🇿"),
+                    Map.entry("bosnia & herzegovina", "🇧🇦"),
+                    Map.entry("norway", "🇳🇴"),
+                    Map.entry("scotland", "🏴󠁧󠁢󠁳󠁣󠁴󠁿"),
                     // CONCACAF
                     Map.entry("mexico", "🇲🇽"),
                     Map.entry("united states", "🇺🇸"),
@@ -371,6 +371,8 @@ public class WorldCupSchedulerService {
                     Map.entry("honduras", "🇭🇳"),
                     Map.entry("jamaica", "🇯🇲"),
                     Map.entry("el salvador", "🇸🇻"),
+                    Map.entry("haiti", "🇭🇹"),
+                    Map.entry("curaçao", "🇨🇼"),
                     // CAF
                     Map.entry("morocco", "🇲🇦"),
                     Map.entry("senegal", "🇸🇳"),
@@ -385,6 +387,7 @@ public class WorldCupSchedulerService {
                     Map.entry("burkina faso", "🇧🇫"),
                     Map.entry("dr congo", "🇨🇩"),
                     Map.entry("south africa", "🇿🇦"),
+                    Map.entry("cape verde", "🇨🇻"),
                     // AFC
                     Map.entry("japan", "🇯🇵"),
                     Map.entry("south korea", "🇰🇷"),
@@ -399,6 +402,7 @@ public class WorldCupSchedulerService {
                     Map.entry("syria", "🇸🇾"),
                     Map.entry("vietnam", "🇻🇳"),
                     Map.entry("oman", "🇴🇲"),
+                    Map.entry("jordan", "🇯🇴"),
                     // OFC
                     Map.entry("new zealand", "🇳🇿"),
                     Map.entry("tahiti", "🇵🇫"));
