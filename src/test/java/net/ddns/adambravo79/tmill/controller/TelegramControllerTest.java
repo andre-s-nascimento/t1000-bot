@@ -44,6 +44,8 @@ class TelegramControllerTest {
     private TranscriptionCacheService transcriptionCacheService;
     private TranscriptStoreService transcriptStoreService;
     private AutoResponseService autoResponseService;
+    private WeeklyReleasesService weeklyReleasesService;
+    private WorldCupSchedulerService worldCupSchedulerService;
 
     @BeforeEach
     void setup() {
@@ -59,6 +61,8 @@ class TelegramControllerTest {
         transcriptionCacheService = mock(TranscriptionCacheService.class);
         transcriptStoreService = mock(TranscriptStoreService.class);
         autoResponseService = mock(AutoResponseService.class);
+        weeklyReleasesService = mock(WeeklyReleasesService.class);
+        worldCupSchedulerService = mock(WorldCupSchedulerService.class);
 
         // Configurar o comportamento padrão do autoResponseService para retornar vazio
         when(autoResponseService.getResponseRule(isNull(), anyString()))
@@ -76,7 +80,9 @@ class TelegramControllerTest {
                         messageStoreService,
                         transcriptStoreService,
                         transcriptionCacheService,
-                        autoResponseService);
+                        autoResponseService,
+                        weeklyReleasesService,
+                        worldCupSchedulerService);
 
         // Configurar campos injetáveis
         ReflectionTestUtils.setField(controller, "transcriptionEnabled", true);

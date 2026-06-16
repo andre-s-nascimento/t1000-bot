@@ -134,7 +134,7 @@ class TmdbClientTest {
                 new WatchProviderResponse(
                         Map.of(
                                 "BR",
-                                new CountryProviders(
+                                new WatchProviderResponse.CountryProviders(
                                         List.of(new Provider("Netflix", 1, "/logo.png")))));
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
