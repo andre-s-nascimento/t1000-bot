@@ -289,6 +289,8 @@ public class TelegramController implements LongPollingUpdateConsumer {
         // Verifica se é comando de jogos de hoje da copa
         if (normalized.contains("t1000 jogos de hoje")
                 || normalized.contains("t1000 jogos hoje")
+                || normalized.contains("t1000 jogos copa")
+                || normalized.contains("t1000 copa hoje")
                 || normalized.equals("t1000 copa")) {
             LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
             worldCupSchedulerService.sendMatchesToChat(chatId, today);
