@@ -134,7 +134,7 @@ class TmdbClientTest {
                 new WatchProviderResponse(
                         Map.of(
                                 "BR",
-                                new CountryProviders(
+                                new WatchProviderResponse.CountryProviders(
                                         List.of(new Provider("Netflix", 1, "/logo.png")))));
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
@@ -147,6 +147,6 @@ class TmdbClientTest {
                 .thenReturn(new WatchProviderResponse(Map.of()));
 
         assertThat(new TmdbClient(restClient).buscarOndeAssistir(1L))
-                .contains("Disponível apenas para Aluguel/Compra");
+                .contains("Indisponível no momento");
     }
 }
