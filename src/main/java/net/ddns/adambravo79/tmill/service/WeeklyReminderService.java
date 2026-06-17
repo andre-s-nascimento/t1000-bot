@@ -76,4 +76,26 @@ public class WeeklyReminderService {
             }
         }
     }
+
+    public void sendReminderToChat(Long chatId) {
+        if (chatId == null) {
+            log.warn("chatId nulo, ignorando envio de lembrete");
+            return;
+        }
+        String message =
+                "<i>\"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente"
+                        + " encerrada...</i>\"\n\n"
+                        + "<b>Muito Prazer (1979) - David Neves</b>";
+
+        try {
+            if (mediaFilePath != null && !mediaFilePath.isBlank()) {
+                telegramFacade.enviarMidia(chatId, mediaFilePath, message);
+            } else {
+                telegramFacade.enviarMensagemHtml(chatId, message);
+            }
+            log.info("Lembrete semanal enviado para chat {}", chatId);
+        } catch (Exception e) {
+            log.error("Erro ao enviar lembrete para chat {}: {}", chatId, e.getMessage());
+        }
+    }
 }

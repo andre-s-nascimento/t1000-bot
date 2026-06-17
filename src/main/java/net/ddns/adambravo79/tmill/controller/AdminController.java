@@ -54,6 +54,14 @@ public class AdminController {
         return ResponseEntity.ok("Lembrete semanal disparado manualmente.");
     }
 
+    @PostMapping("/test-weekly-reminder-showcase")
+    public ResponseEntity<String> testWeeklyReminderShowcase() {
+        long showcaseChatId = -5283244164L;
+        weeklyReminderService.sendReminderToChat(showcaseChatId);
+        return ResponseEntity.ok(
+                "Lembrete semanal enviado para o grupo showcase (" + showcaseChatId + ")");
+    }
+
     @PostMapping("/reload-easter-eggs")
     public ResponseEntity<String> reloadEasterEggs() {
         easterEggService.reload();
