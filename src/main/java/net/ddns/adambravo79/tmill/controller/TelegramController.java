@@ -6,6 +6,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -298,6 +300,32 @@ public class TelegramController implements LongPollingUpdateConsumer {
                 || normalized.equals("t1000 copa")) {
             LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
             worldCupSchedulerService.sendMatchesToChat(chatId, today);
+            return;
+        }
+
+        // Comando "resultados" - exibe resultados de uma data
+        if (normalized.startsWith("t1000 resultados")) {
+            // Remove o prefixo "t1000 resultados" e limpa palavras comuns
+            String param = rawText.replaceFirst("(?i)^t1000\\s+resultados\\s+", "").trim();
+            // Remove palavras como "do", "dia", "de", "da", "as", "os", "dias"
+            String cleanedParam =
+                    param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
+
+            LocalDate date;
+            if (cleanedParam.isEmpty()) {
+                date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+                log.info("📅 Comando 'resultados' sem data, usando hoje: {}", date);
+            } else {
+                date = parseDateParam(cleanedParam);
+                log.info("📅 Comando 'resultados' com data: {} -> {}", cleanedParam, date);
+            }
+
+            if (date != null) {
+                worldCupSchedulerService.sendResultsToChat(chatId, date);
+            } else {
+                telegramFacade.enviarMensagem(
+                        chatId, "❓ Formato de data inválido. Use 'hoje', 'ontem', DD/MM.");
+            }
             return;
         }
 
@@ -858,5 +886,71 @@ public class TelegramController implements LongPollingUpdateConsumer {
         // Escapa aspas e caracteres especiais para HTML
         String escapedName = name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
         return String.format("<a href=\"tg://user?id=%d\">@%s</a>", user.getId(), escapedName);
+    }
+
+    private LocalDate parseDateParam(String param) {
+        if (param == null || param.isBlank()) return null;
+
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+
+        // Palavras-chave
+        String lower = param.toLowerCase().trim();
+        if (lower.equals("hoje") || lower.equals("de hoje")) return today;
+        if (lower.equals("ontem") || lower.equals("de ontem")) return today.minusDays(1);
+
+        // Limpa palavras comuns
+        String cleaned = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
+
+        // Tenta extrair data com regex
+        java.util.regex.Pattern pattern =
+                java.util.regex.Pattern.compile(
+                        "\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
+        java.util.regex.Matcher matcher = pattern.matcher(cleaned);
+        if (matcher.find()) {
+            String dateStr = matcher.group(1).trim();
+            try {
+                // yyyy-MM-dd
+                if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                    return LocalDate.parse(dateStr);
+                }
+                // dd/MM ou dd-MM (sem ano) -> assumir 2026
+                if (dateStr.matches("\\d{1,2}[/-]\\d{2}")) {
+                    // Cria formatter com ano padrão 2026
+                    DateTimeFormatter fmt =
+                            new DateTimeFormatterBuilder()
+                                    .appendPattern(dateStr.contains("/") ? "dd/MM" : "dd-MM")
+                                    .parseDefaulting(java.time.temporal.ChronoField.YEAR, 2026)
+                                    .toFormatter();
+                    return LocalDate.parse(dateStr, fmt);
+                }
+            } catch (DateTimeParseException ignored) {
+            }
+        }
+
+        // Fallback: tenta parsear diretamente
+        try {
+            return LocalDate.parse(param);
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            DateTimeFormatter fmt =
+                    new DateTimeFormatterBuilder()
+                            .appendPattern("dd/MM")
+                            .parseDefaulting(java.time.temporal.ChronoField.YEAR, 2026)
+                            .toFormatter();
+            return LocalDate.parse(param, fmt);
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            DateTimeFormatter fmt =
+                    new DateTimeFormatterBuilder()
+                            .appendPattern("dd-MM")
+                            .parseDefaulting(java.time.temporal.ChronoField.YEAR, 2026)
+                            .toFormatter();
+            return LocalDate.parse(param, fmt);
+        } catch (DateTimeParseException ignored) {
+        }
+
+        return null;
     }
 }
