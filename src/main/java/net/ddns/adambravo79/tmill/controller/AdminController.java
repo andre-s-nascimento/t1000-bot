@@ -23,8 +23,10 @@ import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.AutoResponseService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
+import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
+import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @RestController
 @RequestMapping("/admin")
@@ -32,15 +34,20 @@ import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 @Slf4j
 public class AdminController {
 
+    private static final String SERVICO_DA_COPA_DESATIVADO = "⛔ Serviço da Copa desativado.";
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
     private final TranscriptionCacheService transcriptionCacheService;
     private final WeeklyReminderService weeklyReminderService;
     private final AutoResponseService autoResponseService;
     private final WorldCupSchedulerService worldCupSchedulerService;
+    private final StaticWorldCupService staticWorldCupService;
+    private final TelegramFacade telegramFacade;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
+
+    private static final long SHOWCASE_CHAT_ID = -5283244164L; // -1003265590455L;
 
     @PostMapping("/reload-auto-responses")
     public ResponseEntity<String> reloadAutoResponses() {
@@ -56,10 +63,9 @@ public class AdminController {
 
     @PostMapping("/test-weekly-reminder-showcase")
     public ResponseEntity<String> testWeeklyReminderShowcase() {
-        long showcaseChatId = -5283244164L;
-        weeklyReminderService.sendReminderToChat(showcaseChatId);
+        weeklyReminderService.sendReminderToChat(SHOWCASE_CHAT_ID);
         return ResponseEntity.ok(
-                "Lembrete semanal enviado para o grupo showcase (" + showcaseChatId + ")");
+                "Lembrete semanal enviado para o grupo showcase (" + SHOWCASE_CHAT_ID + ")");
     }
 
     @PostMapping("/reload-easter-eggs")
@@ -121,8 +127,6 @@ public class AdminController {
         }
     }
 
-    // src/main/java/net/ddns/adambravo79/tmill/controller/AdminController.java
-
     @PostMapping("/test-worldcup-noon")
     public ResponseEntity<String> testWorldCupNoon() {
         if (worldCupSchedulerService != null) {
@@ -143,23 +147,85 @@ public class AdminController {
                 .body("Serviço de Copa não disponível");
     }
 
-    @PostMapping("/test-worldcup-30min")
-    public ResponseEntity<String> testWorldCup30Min() {
-        if (worldCupSchedulerService != null) {
-            worldCupSchedulerService.checkThirtyMinutesBefore();
-            return ResponseEntity.ok("Verificação de 30 min executada (simulado)");
-        }
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body("Serviço de Copa não disponível");
-    }
-
     @PostMapping("/test-worldcup")
     public ResponseEntity<String> testWorldCup() {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok("⛔ Serviço da Copa desativado (worldcup.enabled=false)");
+            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
         }
         worldCupSchedulerService.sendManualTest();
         return ResponseEntity.ok("✅ Envio manual disparado! Verifique os logs.");
+    }
+
+    // Teste da Copa – lista de jogos do dia (showcase)
+    @PostMapping("/test-worldcup-showcase")
+    public ResponseEntity<String> testWorldCupShowcase() {
+        if (!worldcupEnabled) {
+            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+        }
+        worldCupSchedulerService.sendManualTestToChat(SHOWCASE_CHAT_ID);
+        return ResponseEntity.ok("✅ Teste manual da Copa enviado para o showcase.");
+    }
+
+    // Teste da Copa – meio-dia (showcase)
+    @PostMapping("/test-worldcup-noon-showcase")
+    public ResponseEntity<String> testWorldCupNoonShowcase() {
+        if (!worldcupEnabled) {
+            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+        }
+        worldCupSchedulerService.sendNoonMatchesToChat(SHOWCASE_CHAT_ID);
+        return ResponseEntity.ok("✅ Envio do meio-dia da Copa enviado para o showcase.");
+    }
+
+    // Teste da Copa – noite (showcase)
+    @PostMapping("/test-worldcup-evening-showcase")
+    public ResponseEntity<String> testWorldCupEveningShowcase() {
+        if (!worldcupEnabled) {
+            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+        }
+        worldCupSchedulerService.sendEveningMatchesToChat(SHOWCASE_CHAT_ID);
+        return ResponseEntity.ok("✅ Envio da noite da Copa enviado para o showcase.");
+    }
+
+    // Recarregar dados da Copa e enviar confirmação para o showcase
+    @PostMapping("/reload-worldcup-showcase")
+    public ResponseEntity<String> reloadWorldCupShowcase() {
+        staticWorldCupService.reload();
+        String msg =
+                "✅ Dados da Copa recarregados do arquivo JSON às "
+                        + LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        telegramFacade.enviarMensagemHtml(SHOWCASE_CHAT_ID, msg);
+        return ResponseEntity.ok(msg + " (enviado para o showcase)");
+    }
+
+    @PostMapping("/test-worldcup-results-showcase")
+    public ResponseEntity<String> testWorldCupResultsShowcase(
+            @RequestParam(defaultValue = "ontem") String dateParam) {
+        if (!worldcupEnabled) {
+            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+        }
+        LocalDate date = parseDateParam(dateParam);
+        if (date == null) {
+            return ResponseEntity.badRequest()
+                    .body("❓ Data inválida. Use 'ontem', 'hoje' ou AAAA-MM-DD.");
+        }
+        worldCupSchedulerService.sendResultsToChat(SHOWCASE_CHAT_ID, date);
+        return ResponseEntity.ok("✅ Resultados enviados para o showcase (data: " + date + ")");
+    }
+
+    private LocalDate parseDateParam(String param) {
+        if (param == null || param.isBlank()) return null;
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        if (param.equalsIgnoreCase("ontem")) {
+            return today.minusDays(1);
+        } else if (param.equalsIgnoreCase("hoje")) {
+            return today;
+        } else {
+            try {
+                return LocalDate.parse(param);
+            } catch (DateTimeParseException e) {
+                return null;
+            }
+        }
     }
 
     private LocalDate[] parseDateRange(String startDate, String endDate) {
@@ -174,5 +240,11 @@ public class AdminController {
             }
         }
         return new LocalDate[0];
+    }
+
+    @PostMapping("/reload-worldcup")
+    public ResponseEntity<String> reloadWorldCup() {
+        staticWorldCupService.reload();
+        return ResponseEntity.ok("Dados da Copa recarregados do arquivo JSON");
     }
 }
