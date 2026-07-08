@@ -1,5 +1,4 @@
-/* (c) 2026 | 11/06/2026 */
-
+// src/main/java/net/ddns/adambravo79/tmill/model/WorldCupMatch.java
 package net.ddns.adambravo79.tmill.model;
 
 import java.time.LocalDate;
@@ -9,6 +8,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -21,7 +21,10 @@ public record WorldCupMatch(
         @JsonProperty("team1") String homeTeam,
         @JsonProperty("team2") String awayTeam,
         @JsonProperty("group") String group,
-        @JsonProperty("ground") String stadium) {
+        @JsonProperty("ground") String stadium,
+        @JsonProperty("score") Score score,
+        @JsonProperty("goals1") List<Goal> goals1,
+        @JsonProperty("goals2") List<Goal> goals2) {
     private static final DateTimeFormatter DATE_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -30,7 +33,6 @@ public record WorldCupMatch(
     }
 
     public ZonedDateTime getMatchDateTime(ZoneId targetZone) {
-        // "13:00 UTC-6" -> parse
         String[] parts = time.split(" ");
         String timePart = parts[0];
         String offsetPart = parts[1];
@@ -39,5 +41,9 @@ public record WorldCupMatch(
         LocalDateTime ldt = LocalDateTime.of(getLocalDate(), LocalTime.parse(timePart));
         ZonedDateTime zdt = ldt.atZone(offsetZone);
         return zdt.withZoneSameInstant(targetZone);
+    }
+
+    public boolean hasScore() {
+        return score != null && score.ft() != null && !score.ft().isEmpty();
     }
 }

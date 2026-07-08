@@ -11,11 +11,15 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.PostMapping;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.model.Goal;
+import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
@@ -27,6 +31,7 @@ public class WorldCupSchedulerService {
     private final TelegramFacade telegramFacade;
     private final Set<Long> allowedGroups = new HashSet<>();
     private final Set<String> remindersSent = ConcurrentHashMap.newKeySet();
+    private final WorldCupUpdaterService worldCupUpdaterService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -35,9 +40,12 @@ public class WorldCupSchedulerService {
     private String allowedChatsStr;
 
     public WorldCupSchedulerService(
-            StaticWorldCupService worldCupService, TelegramFacade telegramFacade) {
+            StaticWorldCupService worldCupService,
+            TelegramFacade telegramFacade,
+            WorldCupUpdaterService worldCupUpdaterService) {
         this.worldCupService = worldCupService;
         this.telegramFacade = telegramFacade;
+        this.worldCupUpdaterService = worldCupUpdaterService;
     }
 
     @PostConstruct
@@ -68,31 +76,6 @@ public class WorldCupSchedulerService {
         if (!worldcupEnabled || allowedGroups.isEmpty()) return;
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         sendMatchesMessage(today, "🏆 RESUMO DOS JOGOS DE HOJE");
-    }
-
-    @Scheduled(cron = "0 * * * * *", zone = "America/Sao_Paulo")
-    public void checkThirtyMinutesBefore() {
-        if (!worldcupEnabled || allowedGroups.isEmpty()) return;
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
-
-        worldCupService
-                .getFirstMatchOfDay(today)
-                .ifPresent(
-                        firstMatch -> {
-                            ZonedDateTime matchZdt =
-                                    firstMatch.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
-                            LocalDateTime matchTime = matchZdt.toLocalDateTime();
-                            LocalDateTime reminderTime = matchTime.minusMinutes(30);
-                            String reminderKey = today.toString() + "_30min";
-
-                            if (now.isAfter(reminderTime)
-                                    && now.isBefore(matchTime)
-                                    && !remindersSent.contains(reminderKey)) {
-                                sendThirtyMinuteReminder(firstMatch);
-                                remindersSent.add(reminderKey);
-                            }
-                        });
     }
 
     @Scheduled(cron = "0 * * * * *", zone = "America/Sao_Paulo")
@@ -172,6 +155,211 @@ public class WorldCupSchedulerService {
         for (Long groupId : allowedGroups) {
             telegramFacade.enviarMensagemHtml(groupId, message);
         }
+    }
+
+    // Dentro de WorldCupSchedulerService.java
+
+    public void sendResultsToChat(long chatId, LocalDate date) {
+        if (!worldcupEnabled) {
+            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            return;
+        }
+
+        List<WorldCupMatch> matches = worldCupService.getMatchesForDay(date);
+        if (matches.isEmpty()) {
+            telegramFacade.enviarMensagemHtml(
+                    chatId,
+                    "📭 Nenhum jogo encontrado para "
+                            + date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                            + ".");
+            return;
+        }
+
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        StringBuilder sb = new StringBuilder();
+        sb.append("<b>📊 RESULTADOS - ").append(date.format(dateFormatter)).append("</b>\n\n");
+
+        for (WorldCupMatch m : matches) {
+            // Verifica se tem placar (ft)
+            if (!m.hasScore()) {
+                sb.append("⏳ ")
+                        .append(translateTeam(m.homeTeam()))
+                        .append(" (")
+                        .append(flagEmoji(m.homeTeam()))
+                        .append(") x (")
+                        .append(flagEmoji(m.awayTeam()))
+                        .append(") ")
+                        .append(translateTeam(m.awayTeam()))
+                        .append(" - Aguardando resultado\n\n");
+                continue;
+            }
+
+            Score score = m.score();
+            List<Integer> ft = score.ft();
+            int homeGoals = ft.get(0);
+            int awayGoals = ft.get(1);
+
+            // Monta o cabeçalho do jogo com detalhes de prorrogação/pênaltis
+            StringBuilder header = new StringBuilder();
+            header.append(flagEmoji(m.homeTeam()))
+                    .append(" ")
+                    .append(translateTeam(m.homeTeam()))
+                    .append(" ")
+                    .append(homeGoals)
+                    .append(" x ")
+                    .append(awayGoals)
+                    .append(" ")
+                    .append(translateTeam(m.awayTeam()))
+                    .append(" ")
+                    .append(flagEmoji(m.awayTeam()));
+
+            // Se houver prorrogação, mostra o placar da prorrogação
+            if (score.et() != null && score.et().size() == 2) {
+                int etHome = score.et().get(0);
+                int etAway = score.et().get(1);
+                header.append(" (pro) ").append(etHome).append("-").append(etAway);
+            }
+
+            // Se houver pênaltis, mostra o resultado
+            if (score.p() != null && score.p().size() == 2) {
+                int pHome = score.p().get(0);
+                int pAway = score.p().get(1);
+                header.append(" (pen) ").append(pHome).append("-").append(pAway);
+            }
+
+            sb.append(header.toString()).append("\n");
+
+            // Coleta e ordena gols (já implementado)
+            List<Gol> todosGols = new ArrayList<>();
+            if (m.goals1() != null) {
+                for (Goal g : m.goals1()) {
+                    todosGols.add(new Gol(g, m.homeTeam()));
+                }
+            }
+            if (m.goals2() != null) {
+                for (Goal g : m.goals2()) {
+                    todosGols.add(new Gol(g, m.awayTeam()));
+                }
+            }
+
+            todosGols.sort(Comparator.comparingInt(g -> parseMinuteToInt(g.getMinute())));
+
+            for (Gol gol : todosGols) {
+                sb.append("  ⚽ ")
+                        .append(flagEmoji(gol.team))
+                        .append(" ")
+                        .append(gol.goal.name())
+                        .append(" ")
+                        .append(gol.goal.minute());
+                if (Boolean.TRUE.equals(gol.goal.penalty())) sb.append(" (P)");
+                if (Boolean.TRUE.equals(gol.goal.owngoal())) sb.append(" (GC)");
+                sb.append("\n");
+            }
+            sb.append("\n");
+        }
+
+        telegramFacade.enviarMensagemHtml(chatId, sb.toString());
+    } // Classe auxiliar interna para associar o gol ao time
+
+    private static class Gol {
+        final Goal goal;
+        final String team;
+
+        Gol(Goal goal, String team) {
+            this.goal = goal;
+            this.team = team;
+        }
+
+        String getMinute() {
+            return goal.minute();
+        }
+    }
+
+    // Converte minuto como "45+3" para 48, "90+7" para 97, "6" para 6
+    private int parseMinuteToInt(String minute) {
+        if (minute == null || minute.isBlank()) return 0;
+        minute = minute.trim();
+        if (minute.contains("+")) {
+            String[] parts = minute.split("\\+");
+            try {
+                int base = Integer.parseInt(parts[0]);
+                int extra = Integer.parseInt(parts[1]);
+                return base + extra;
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        } else {
+            try {
+                return Integer.parseInt(minute);
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
+    }
+
+    @PostMapping("/reload-worldcup")
+    public ResponseEntity<String> reloadWorldCup() {
+        worldCupUpdaterService.forceUpdate();
+        return ResponseEntity.ok("Dados da Copa recarregados com sucesso!");
+    }
+
+    // Envia a lista de jogos do meio-dia para um chat específico
+    public void sendNoonMatchesToChat(long chatId) {
+        if (!worldcupEnabled) {
+            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            return;
+        }
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        sendMatchesMessageToChat(chatId, today, "🏆 JOGOS DE HOJE (meio-dia)");
+    }
+
+    // Envia a lista de jogos da noite para um chat específico
+    public void sendEveningMatchesToChat(long chatId) {
+        if (!worldcupEnabled) {
+            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            return;
+        }
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        sendMatchesMessageToChat(chatId, today, "🏆 RESUMO DOS JOGOS DE HOJE");
+    }
+
+    // Envia o teste manual para um chat específico
+    public void sendManualTestToChat(long chatId) {
+        if (!worldcupEnabled) {
+            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            return;
+        }
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        sendMatchesMessageToChat(chatId, today, "🧪 TESTE MANUAL - Copa 2026");
+    }
+
+    // Método auxiliar que envia a mensagem para um chat específico
+    private void sendMatchesMessageToChat(long chatId, LocalDate date, String title) {
+        List<WorldCupMatch> matches = worldCupService.getMatchesForDay(date);
+        if (matches.isEmpty()) {
+            telegramFacade.enviarMensagemHtml(
+                    chatId, "📭 Nenhum jogo programado para " + date + ".");
+            return;
+        }
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+        StringBuilder sb = new StringBuilder();
+        sb.append("<b>").append(title).append("</b>\n\n");
+        for (WorldCupMatch m : matches) {
+            ZonedDateTime localTime = m.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
+            sb.append(
+                    String.format(
+                            "%s (%s) x (%s) %s - %s",
+                            translateTeam(m.homeTeam()),
+                            flagEmoji(m.homeTeam()),
+                            flagEmoji(m.awayTeam()),
+                            translateTeam(m.awayTeam()),
+                            localTime.format(timeFormatter)));
+            if (m.stadium() != null && !m.stadium().isBlank()) {
+                sb.append(" - ").append(m.stadium());
+            }
+            sb.append("\n");
+        }
+        telegramFacade.enviarMensagemHtml(chatId, sb.toString());
     }
 
     public void sendManualTest() {

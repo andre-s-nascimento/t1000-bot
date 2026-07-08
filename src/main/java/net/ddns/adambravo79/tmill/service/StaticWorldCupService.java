@@ -61,6 +61,24 @@ public class StaticWorldCupService {
                             .computeIfAbsent(match.getLocalDate(), k -> new ArrayList<>())
                             .add(match);
                 }
+
+                if (allMatches != null && !allMatches.isEmpty()) {
+                    WorldCupMatch sample =
+                            allMatches.stream()
+                                    .filter(m -> m.score() != null)
+                                    .findFirst()
+                                    .orElse(null);
+                    if (sample != null) {
+                        log.info(
+                                "✅ Exemplo com placar: {} x {} = {}x{}",
+                                sample.homeTeam(),
+                                sample.awayTeam(),
+                                sample.score().ft().get(0),
+                                sample.score().ft().get(1));
+                    } else {
+                        log.warn("⚠️ Nenhum jogo com placar encontrado no JSON!");
+                    }
+                }
                 log.info(
                         "✅ Carregados {} jogos da Copa 2026 ({} datas diferentes)",
                         allMatches.size(),
@@ -69,6 +87,10 @@ public class StaticWorldCupService {
         } catch (Exception e) {
             log.error("Falha ao carregar dados da Copa: {}", e.getMessage(), e);
         }
+    }
+
+    public void reload() {
+        loadMatches();
     }
 
     public List<WorldCupMatch> getMatchesForDay(LocalDate date) {
