@@ -13,11 +13,10 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 @Slf4j
@@ -65,7 +64,8 @@ public class AutoResponseService {
                 String animation = (String) entry.getValue().get("animation");
 
                 // Extrai timeRange
-                LocalTime startTime = null, endTime = null;
+                LocalTime startTime = null;
+                LocalTime endTime = null;
                 Map<String, String> timeRange =
                         (Map<String, String>) entry.getValue().get("timeRange");
                 if (timeRange != null) {

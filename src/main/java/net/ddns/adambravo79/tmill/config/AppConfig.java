@@ -15,7 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration
 public class AppConfig {
 
-    @Value("${bot.token}")
+    @Value("${telegram.bot.token}")
     private String botToken;
 
     @Bean

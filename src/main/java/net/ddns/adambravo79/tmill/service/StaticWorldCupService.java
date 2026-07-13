@@ -14,12 +14,11 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Service
