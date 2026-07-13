@@ -170,7 +170,7 @@ public class DailyDigestService {
                 return;
             }
 
-            String finalMessage = buildHeader(periodLabel, from, to) + sanitizeHtml(summary);
+            String finalMessage = buildHeader(periodLabel, from, to) + sanitizeDigestText(summary);
             Set<Long> targets = specificChatId != null ? Set.of(specificChatId) : digestChatIds;
             for (Long chatId : targets) {
                 sendDigestToChat(chatId, finalMessage);
@@ -218,23 +218,74 @@ public class DailyDigestService {
                 periodLabel, from.format(fmt), to.format(fmt));
     }
 
-    private String sanitizeHtml(String text) {
+    private String sanitizeDigestText(String text) {
         if (text == null) return "";
-        // Remove tags HTML que estão abertas e não fechadas? Não vamos tentar consertar.
-        // Apenas escapamos &, <, > (exceto <b>, <i>, </b>, </i> que precisamos preservar).
-        // Usamos placeholders para proteger as tags permitidas.
-        String temp =
-                text.replace("<b>", "##B_OPEN##")
+
+        // 1. Converte quebras de linha
+        String sanitized =
+                text.replaceAll("(?i)<br\\s*/?>", "\n")
+                        .replaceAll("(?i)</?ul\\s*>", "")
+                        .replaceAll("(?i)<li\\s*>", "• ")
+                        .replaceAll("(?i)</li\\s*>", "\n");
+
+        // 2. Remove todas as tags HTML, exceto as permitidas
+        // Lista de tags permitidas (abertura e fechamento)
+        String allowedTags = "(/?(?:b|i|u|s|code|pre|a)(?:\\s+[^>]*)?)";
+        // Substitui qualquer tag que não seja permitida por vazio
+        // Usamos um loop para lidar com tags aninhadas (simplificado)
+        // Primeiro, escapamos todas as tags que não são permitidas
+        // Vamos usar uma abordagem com regex para remover tags não permitidas
+        // Mas cuidado: não podemos simplesmente remover tudo, pois pode quebrar o texto.
+        // Vamos usar uma abordagem mais segura: substituir < por &lt; e > por &gt; fora das tags
+        // permitidas.
+        // Por simplicidade, faremos uma limpeza passo a passo:
+
+        // Protege as tags permitidas temporariamente
+        String protectedText =
+                sanitized
+                        .replace("<b>", "##B_OPEN##")
                         .replace("</b>", "##B_CLOSE##")
                         .replace("<i>", "##I_OPEN##")
-                        .replace("</i>", "##I_CLOSE##");
-        temp = temp.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        temp =
-                temp.replace("##B_OPEN##", "<b>")
+                        .replace("</i>", "##I_CLOSE##")
+                        .replace("<u>", "##U_OPEN##")
+                        .replace("</u>", "##U_CLOSE##")
+                        .replace("<s>", "##S_OPEN##")
+                        .replace("</s>", "##S_CLOSE##")
+                        .replace("<code>", "##C_OPEN##")
+                        .replace("</code>", "##C_CLOSE##")
+                        .replace("<pre>", "##P_OPEN##")
+                        .replace("</pre>", "##P_CLOSE##")
+                        // Protege tags <a> com seus atributos (simplificado)
+                        .replaceAll("<a\\s+[^>]*>", "##A_OPEN##")
+                        .replace("</a>", "##A_CLOSE##");
+
+        // Agora escapa todos os caracteres < e > que sobraram (não protegidos)
+        // Substitui < por &lt; e > por &gt;
+        String escaped = protectedText.replace("<", "&lt;").replace(">", "&gt;");
+
+        // Restaura as tags permitidas
+        String restored =
+                escaped.replace("##B_OPEN##", "<b>")
                         .replace("##B_CLOSE##", "</b>")
                         .replace("##I_OPEN##", "<i>")
-                        .replace("##I_CLOSE##", "</i>");
-        return temp;
+                        .replace("##I_CLOSE##", "</i>")
+                        .replace("##U_OPEN##", "<u>")
+                        .replace("##U_CLOSE##", "</u>")
+                        .replace("##S_OPEN##", "<s>")
+                        .replace("##S_CLOSE##", "</s>")
+                        .replace("##C_OPEN##", "<code>")
+                        .replace("##C_CLOSE##", "</code>")
+                        .replace("##P_OPEN##", "<pre>")
+                        .replace("##P_CLOSE##", "</pre>")
+                        .replace(
+                                "##A_OPEN##",
+                                "<a>") // Simplificado: perde atributos, mas evita erro
+                        .replace("##A_CLOSE##", "</a>");
+
+        // Remove tags <a> vazias (sem href) - opcional
+        restored = restored.replaceAll("<a>\\s*</a>", "");
+
+        return restored;
     }
 
     @Data

@@ -34,6 +34,15 @@ public class GroqClient {
     private final DigestPromptFactory promptFactory;
     private final int maxPromptLength;
 
+    @Value("${groq.model.transcription:whisper-large-v3}")
+    private String transcriptionModel;
+
+    @Value("${groq.model.refinement:llama-3.1-8b-instant}")
+    private String refinementModel;
+
+    @Value("${groq.model.digest:meta-llama/llama-4-scout-17b-16e-instruct}")
+    private String digestModel;
+
     @Autowired
     public GroqClient(
             @Value("${groq.api.key}") String apiKey,
@@ -76,7 +85,7 @@ public class GroqClient {
 
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("file", new org.springframework.core.io.FileSystemResource(wavFile));
-        builder.part(MODEL, "whisper-large-v3");
+        builder.part(MODEL, transcriptionModel);
 
         TranscriptionResponse response =
                 restClient
@@ -100,16 +109,14 @@ public class GroqClient {
         if (textoBruto == null || textoBruto.isBlank()) {
             return "";
         }
-        return chatCompletion(
-                SYSTEM_PROMPT_REFINAMENTO, textoBruto, "llama-3.1-8b-instant", 0.2, 1200);
+        return chatCompletion(SYSTEM_PROMPT_REFINAMENTO, textoBruto, refinementModel, 0.18, 1200);
     }
 
     // Método para gerar resumo do digest
     public String gerarResumoDigest(String messages, DigestPersona persona, String periodLabel) {
         String systemPrompt = promptFactory.buildSystemPrompt(persona, periodLabel);
         String userPrompt = promptFactory.buildUserPrompt(messages);
-        return chatCompletion(
-                systemPrompt, userPrompt, "meta-llama/llama-4-scout-17b-16e-instruct", 0.7, 2200);
+        return chatCompletion(systemPrompt, userPrompt, digestModel, 0.5, 2200);
     }
 
     @Retryable(
