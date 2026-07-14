@@ -244,29 +244,28 @@ public class AudioHandler {
         }
 
         String fileId = request.fileId();
+        long groupId = request.groupId();
         TranscriptionCacheEntry cached = cacheService.get(fileId);
         if (cached != null) {
-            entregarTranscricaoCache(userId, tipo, cached);
-            pendingRequests.remove(token);
+            entregarTranscricaoCache(userId, tipo, cached, groupId); // <-- passa groupId
+            // pendingRequests.remove(token);
             return;
         }
 
         log.info("Cache miss para fileId={}, processando novamente.", fileId);
         telegramFacade.answerCallbackQuery(
                 callback.id(), "Processando áudio... enviarei no privado.", false);
-
-        long groupId = request.groupId();
         CompletableFuture.runAsync(
                 () -> processarAudioCallback(userId, tipo, fileId, request, groupId));
     }
 
     private void entregarTranscricaoCache(
-            long userId, String tipo, TranscriptionCacheEntry cached) {
+            long userId, String tipo, TranscriptionCacheEntry cached, long groupId) {
         String texto =
                 tipo.equals(TRANS_BRUTO) ? cached.getTextoBruto() : cached.getTextoRefinado();
         String prefixo =
                 tipo.equals(TRANS_BRUTO) ? "🎙️ Transcrição Bruta:\n" : "✨ Transcrição Refinada:\n";
-        enviarTranscricao(userId, prefixo + texto);
+        enviarTranscricao(userId, prefixo + texto, groupId); // <-- passa groupId
         log.info("✅ Transcrição entregue via cache para userId={} tipo={}", userId, tipo);
     }
 
@@ -274,7 +273,7 @@ public class AudioHandler {
             long userId, String tipo, String fileId, AudioRequest request, long groupId) {
         try {
             String mensagem = transcreverAudio(fileId, tipo, request);
-            enviarTranscricao(userId, mensagem);
+            enviarTranscricao(userId, mensagem, groupId); // <-- passa groupId
             log.info("✅ Transcrição enviada para userId={} tipo={}", userId, tipo);
         } catch (Exception e) {
             log.error("Erro ao processar áudio para userId={} fileId={}", userId, fileId, e);
@@ -310,12 +309,18 @@ public class AudioHandler {
         return prefixo + resultado[0];
     }
 
-    private void enviarTranscricao(long userId, String mensagem) {
-        if (mensagem.length() > telegramMessageLimit) {
-            utils.splitMessage(mensagem, telegramMessageLimit)
-                    .forEach(parte -> telegramFacade.enviarMensagem(userId, parte));
-        } else {
-            telegramFacade.enviarMensagem(userId, mensagem);
+    private void enviarTranscricao(long userId, String mensagem, long groupId) {
+        try {
+            if (mensagem.length() > telegramMessageLimit) {
+                utils.splitMessage(mensagem, telegramMessageLimit)
+                        .forEach(parte -> telegramFacade.enviarMensagem(userId, parte));
+            } else {
+                telegramFacade.enviarMensagem(userId, mensagem);
+            }
+            log.info("📤 Transcrição enviada para userId={}", userId);
+        } catch (Exception e) {
+            log.error("❌ Falha ao enviar transcrição para userId={}", userId, e);
+            tratarErroTranscricao(e, userId, groupId);
         }
     }
 
