@@ -22,6 +22,12 @@ import net.ddns.adambravo79.tmill.model.*;
 @Component
 public class TmdbClient {
 
+    private static final String INDISPONIVEL_NO_MOMENTO = "Indisponível no momento";
+
+    private static final String PT_BR = "pt-BR";
+
+    private static final String LANGUAGE = "language";
+
     private static final Map<String, String> ATALHOS =
             Map.of(
                     "duna", "Dune 2021",
@@ -82,7 +88,7 @@ public class TmdbClient {
                                             uriBuilder
                                                     .path("/search/movie")
                                                     .queryParam("query", queryFinal)
-                                                    .queryParam("language", "pt-BR")
+                                                    .queryParam(LANGUAGE, PT_BR)
                                                     .queryParam("region", "BR")
                                                     .queryParam("include_adult", "false")
                                                     .build())
@@ -120,7 +126,7 @@ public class TmdbClient {
                                 uriBuilder ->
                                         uriBuilder
                                                 .path("/movie/{id}")
-                                                .queryParam("language", "pt-BR")
+                                                .queryParam(LANGUAGE, PT_BR)
                                                 .build(movieId))
                         .retrieve()
                         .body(MovieRecord.class);
@@ -189,7 +195,7 @@ public class TmdbClient {
                         uriBuilder ->
                                 uriBuilder
                                         .path("/discover/movie")
-                                        .queryParam("language", "pt-BR")
+                                        .queryParam(LANGUAGE, PT_BR)
                                         .queryParam("region", "BR")
                                         .queryParam("release_date.gte", gte)
                                         .queryParam("release_date.lte", lte)
@@ -215,7 +221,7 @@ public class TmdbClient {
                         uriBuilder ->
                                 uriBuilder
                                         .path("/discover/tv")
-                                        .queryParam("language", "pt-BR")
+                                        .queryParam(LANGUAGE, PT_BR)
                                         .queryParam("first_air_date.gte", gte)
                                         .queryParam("first_air_date.lte", lte)
                                         .queryParam("sort_by", "first_air_date.asc")
@@ -254,7 +260,7 @@ public class TmdbClient {
 
             if (response == null || response.results() == null) {
                 log.warn("Resposta inválida para {} id={}", path, id);
-                return "Indisponível no momento";
+                return INDISPONIVEL_NO_MOMENTO;
             }
 
             // Verifica se existe entry para o Brasil
@@ -271,13 +277,13 @@ public class TmdbClient {
                 }
             }
             log.warn("⚠️ Nenhum provedor de streaming encontrado para {} id={}", path, id);
-            return "Indisponível no momento";
+            return INDISPONIVEL_NO_MOMENTO;
         } catch (HttpClientErrorException.NotFound e) {
             log.warn("Watch providers não encontrados para {} id={} (404)", path, id);
-            return "Indisponível no momento";
+            return INDISPONIVEL_NO_MOMENTO;
         } catch (Exception e) {
             log.error("Erro ao buscar provedores para {} id={}", path, id, e);
-            return "Indisponível no momento";
+            return INDISPONIVEL_NO_MOMENTO;
         }
     }
 
@@ -299,7 +305,7 @@ public class TmdbClient {
                         uriBuilder ->
                                 uriBuilder
                                         .path("/watch/providers/movie")
-                                        .queryParam("language", "pt-BR")
+                                        .queryParam(LANGUAGE, PT_BR)
                                         .queryParam("watch_region", "BR")
                                         .build())
                 .retrieve()

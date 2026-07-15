@@ -6,6 +6,7 @@ import java.util.concurrent.Executors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.core.task.support.TaskExecutorAdapter;
 
@@ -15,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration
 public class AppConfig {
 
-    @Value("${bot.token}")
+    @Value("${telegram.bot.token}")
     private String botToken;
 
     @Bean
@@ -26,6 +27,7 @@ public class AppConfig {
     }
 
     @Bean
+    @Primary
     public AsyncTaskExecutor applicationTaskExecutor() {
         // Isso força o Spring a usar Virtual Threads para qualquer @Async
         log.info("⚙️ Configurando AsyncTaskExecutor com Virtual Threads");

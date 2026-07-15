@@ -73,7 +73,7 @@ public class WeeklyReleasesService {
         }
     }
 
-    private LocalDate[] calculateThursdayPeriod() {
+    LocalDate[] calculateThursdayPeriod() {
         LocalDate now = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         LocalDate currentThursday = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.THURSDAY));
         LocalDate nextThursday = currentThursday.plusDays(7);
