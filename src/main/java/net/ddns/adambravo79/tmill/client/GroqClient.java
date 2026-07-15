@@ -13,6 +13,7 @@ import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,18 @@ public class GroqClient {
     private final RestClient restClient;
     private final DigestPromptFactory promptFactory;
     private final int maxPromptLength;
+
+    @Value("${groq.model.transcription:whisper-large-v3}")
+    private String transcriptionModel;
+
+    @Value("${groq.model.refinement:llama-3.1-8b-instant}")
+    private String refinementModel;
+
+    @Value("${groq.model.digest:meta-llama/llama-4-scout-17b-16e-instruct}")
+    private String digestModel;
+
+    @Value("${groq.model.refinement.max-tokens:4000}") // fallback 4000
+    private int refinementMaxTokens;
 
     @Autowired
     public GroqClient(
@@ -76,7 +89,7 @@ public class GroqClient {
 
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("file", new org.springframework.core.io.FileSystemResource(wavFile));
-        builder.part(MODEL, "whisper-large-v3");
+        builder.part(MODEL, transcriptionModel);
 
         TranscriptionResponse response =
                 restClient
@@ -95,29 +108,33 @@ public class GroqClient {
     }
 
     // Método de refinamento de texto (usado pelo AudioPipelineService)
-    @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
+    @Retryable(
+            includes = Exception.class,
+            maxRetries = 3,
+            delay = 2000,
+            multiplier = 3,
+            maxDelay = 30000)
     public String refinarTexto(String textoBruto) {
         if (textoBruto == null || textoBruto.isBlank()) {
             return "";
         }
         return chatCompletion(
-                SYSTEM_PROMPT_REFINAMENTO, textoBruto, "llama-3.1-8b-instant", 0.2, 1200);
+                SYSTEM_PROMPT_REFINAMENTO, textoBruto, refinementModel, 0.18, refinementMaxTokens);
     }
 
     // Método para gerar resumo do digest
     public String gerarResumoDigest(String messages, DigestPersona persona, String periodLabel) {
         String systemPrompt = promptFactory.buildSystemPrompt(persona, periodLabel);
         String userPrompt = promptFactory.buildUserPrompt(messages);
-        return chatCompletion(
-                systemPrompt, userPrompt, "meta-llama/llama-4-scout-17b-16e-instruct", 0.7, 2200);
+        return chatCompletion(systemPrompt, userPrompt, digestModel, 0.5, 2200);
     }
 
     @Retryable(
-            includes = Exception.class,
-            maxRetries = 2,
-            delay = 1000,
-            multiplier = 2,
-            maxDelay = 5000)
+            includes = {Exception.class, HttpClientErrorException.TooManyRequests.class},
+            maxRetries = 4,
+            delay = 2000,
+            multiplier = 3,
+            maxDelay = 60000)
     public String chatCompletion(
             String systemPrompt,
             String userPrompt,

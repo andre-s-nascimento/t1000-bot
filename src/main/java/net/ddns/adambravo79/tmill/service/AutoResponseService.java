@@ -13,11 +13,12 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
+import net.ddns.adambravo79.tmill.model.AutoResponseRule;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 @Slf4j
@@ -65,7 +66,8 @@ public class AutoResponseService {
                 String animation = (String) entry.getValue().get("animation");
 
                 // Extrai timeRange
-                LocalTime startTime = null, endTime = null;
+                LocalTime startTime = null;
+                LocalTime endTime = null;
                 Map<String, String> timeRange =
                         (Map<String, String>) entry.getValue().get("timeRange");
                 if (timeRange != null) {
@@ -166,22 +168,22 @@ public class AutoResponseService {
 
             if (trigger.length() < 3) continue; // ignora triggers muito curtos
             if (!containsExactWord(lowerMsg, trigger)) continue;
-            if (!isTimeInRange(now, rule.getStartTime(), rule.getEndTime())) continue;
+            if (!isTimeInRange(now, rule.startTime(), rule.endTime())) continue;
 
             log.info("✅ Trigger '{}' ativado pela mensagem: '{}'", trigger, lowerMsg);
 
             // Verifica se há override para este userId
             String userIdKey = userId != null ? String.valueOf(userId) : null;
             if (userIdKey != null
-                    && rule.getUserOverrides() != null
-                    && rule.getUserOverrides().containsKey(userIdKey)) {
-                AutoResponseOverride ov = rule.getUserOverrides().get(userIdKey);
+                    && rule.userOverrides() != null
+                    && rule.userOverrides().containsKey(userIdKey)) {
+                AutoResponseOverride ov = rule.userOverrides().get(userIdKey);
                 log.info("🎯 Usando resposta personalizada para userId={}", userId);
                 return Optional.of(ov);
             }
 
             // Usa a resposta padrão da regra
-            return Optional.of(new AutoResponseOverride(rule.getResponse(), rule.getAnimation()));
+            return Optional.of(new AutoResponseOverride(rule.response(), rule.animation()));
         }
         return Optional.empty();
     }

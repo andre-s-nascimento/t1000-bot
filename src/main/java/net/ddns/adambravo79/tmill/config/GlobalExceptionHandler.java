@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.dto.ErrorResponse;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
-import net.ddns.adambravo79.tmill.exception.TelegramFileException;
+import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
 
 @Slf4j
 @ControllerAdvice

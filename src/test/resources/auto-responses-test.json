@@ -1,0 +1,30 @@
+{
+  "regra1": {
+    "triggers": ["bom dia", "boa tarde"],
+    "response": "Olá! Bom dia/tarde para você!",
+    "animation": "https://exemplo.com/gif.gif"
+  },
+  "regra2": {
+    "triggers": ["tchau"],
+    "response": "Até logo!",
+    "timeRange": {
+      "start": "18:00",
+      "end": "23:59"
+    }
+  },
+  "regra3": {
+    "triggers": ["obrigado"],
+    "response": "De nada!",
+    "userResponse": {
+      "123": "Por nada, amigo!",
+      "456": "Disponha!"
+    },
+    "userAnimation": {
+      "123": "https://exemplo.com/amigo.gif"
+    }
+  },
+  "regra4": {
+    "triggers": ["oi", "olá"],
+    "response": "Oi! Como posso ajudar?"
+  }
+}

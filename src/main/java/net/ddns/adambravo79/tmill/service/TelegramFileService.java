@@ -1,27 +1,17 @@
-/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.Path;
 
 import org.springframework.stereotype.Service;
-import org.telegram.telegrambots.meta.api.methods.GetFile;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+
+import com.pengrad.telegrambot.model.File;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.exception.TelegramFileException;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
-/**
- * Serviço responsável por baixar arquivos do Telegram a partir de um fileId.
- *
- * <p>Principais responsabilidades: - Consultar metadados do arquivo via {@link TelegramFacade}. -
- * Realizar o download do arquivo para o sistema local. - Garantir que nunca retorne {@code null},
- * lançando {@link TelegramFileException} em caso de falha.
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -29,74 +19,55 @@ public class TelegramFileService {
 
     private final TelegramFacade telegramFacade;
 
-    /**
-     * Baixa um arquivo do Telegram dado o fileId.
-     *
-     * @param fileId identificador único do arquivo no Telegram.
-     * @return {@link File} baixado e armazenado localmente.
-     * @throws TelegramFileException em caso de falha no download ou se o arquivo não existir.
-     */
-    public File baixarArquivo(String fileId) {
-        int maxTentativas = 3;
-        int tentativa = 0;
-        long backoffMs = 1000;
+    private static final int MAX_ATTEMPTS = 3;
+    private static final long INITIAL_BACKOFF_MS = 1000;
 
-        while (tentativa < maxTentativas) {
+    /**
+     * Baixa um arquivo do Telegram com retry em caso de timeout.
+     *
+     * @param fileId identificador do arquivo no Telegram
+     * @return arquivo baixado (temporário)
+     * @throws RuntimeException se todas as tentativas falharem
+     */
+    public java.io.File baixarArquivo(String fileId) {
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 log.debug(
                         "Baixando arquivo fileId={}, tentativa {}/{}",
                         fileId,
-                        tentativa + 1,
-                        maxTentativas);
-                return baixarArquivoComUmaTentativa(fileId);
-            } catch (TelegramApiException e) {
-                if (isTimeoutError(e) && tentativa < maxTentativas - 1) {
-                    aguardarBackoff(tentativa, backoffMs);
-                    tentativa++;
-                } else {
-                    log.error("❌ Erro na API do Telegram fileId={}", fileId, e);
-                    throw new TelegramFileException(
-                            "Falha ao baixar arquivo: " + e.getMessage(), e);
+                        attempt,
+                        MAX_ATTEMPTS);
+                return baixarComUmaTentativa(fileId);
+            } catch (Exception e) {
+                lastException = e;
+                log.warn("Tentativa {} falhou para fileId={}: {}", attempt, fileId, e.getMessage());
+                if (attempt < MAX_ATTEMPTS) {
+                    long sleepMs = INITIAL_BACKOFF_MS * attempt;
+                    try {
+                        Thread.sleep(sleepMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Download interrompido", ie);
+                    }
                 }
-            } catch (IOException e) {
-                log.error("❌ Erro de I/O ao mover arquivo fileId={}", fileId, e);
-                throw new TelegramFileException("Erro ao salvar arquivo: " + e.getMessage(), e);
             }
         }
-        throw new TelegramFileException(
-                "Não foi possível baixar após " + maxTentativas + " tentativas", null);
+        throw new RuntimeException(
+                "Falha ao baixar arquivo após " + MAX_ATTEMPTS + " tentativas", lastException);
     }
 
-    private boolean isTimeoutError(TelegramApiException e) {
-        String msg = e.getMessage();
-        return msg != null && (msg.contains("timeout") || msg.contains("SocketTimeoutException"));
-    }
-
-    private File baixarArquivoComUmaTentativa(String fileId)
-            throws TelegramApiException, IOException {
-        org.telegram.telegrambots.meta.api.objects.File tgFile =
-                telegramFacade.getFile(new GetFile(fileId));
-        File tempFile = telegramFacade.downloadFile(tgFile);
-        if (tempFile == null || !tempFile.exists()) {
-            throw new TelegramFileException(
-                    "Arquivo não encontrado após download: " + fileId, null);
-        }
-        // Renomeia para .oga
-        String destFileName = tempFile.getAbsolutePath().replace(".tmp", ".oga");
-        File destFile = new File(destFileName);
-        Files.move(tempFile.toPath(), destFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        log.info("Arquivo baixado com sucesso: {} -> {}", tempFile.getName(), destFile.getName());
-        return destFile;
-    }
-
-    private void aguardarBackoff(int tentativaAtual, long backoffMs) throws TelegramFileException {
-        long espera = backoffMs * (tentativaAtual + 1);
-        log.warn("⏱️ Timeout, aguardando {}ms antes de tentar novamente", espera);
+    private java.io.File baixarComUmaTentativa(String fileId) {
+        File tgFile = telegramFacade.getFile(fileId);
+        byte[] data = telegramFacade.downloadFile(tgFile);
         try {
-            Thread.sleep(espera);
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw new TelegramFileException("Download interrompido", ie);
+            Path tempFile = Files.createTempFile("audio", ".oga");
+            Files.write(tempFile, data);
+            log.info("Arquivo baixado: {}", tempFile);
+            return tempFile.toFile();
+        } catch (IOException e) {
+            throw new RuntimeException("Falha ao salvar arquivo temporário", e);
         }
     }
 }

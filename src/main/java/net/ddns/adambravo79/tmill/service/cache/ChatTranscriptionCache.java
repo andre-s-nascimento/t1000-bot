@@ -1,5 +1,5 @@
 /* (c) 2026 | 15/05/2026 */
-package net.ddns.adambravo79.tmill.cache;
+package net.ddns.adambravo79.tmill.service.cache;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-public class TranscricaoCache {
+public class ChatTranscriptionCache {
 
     // Mapeamento: chatId → texto refinado da última transcrição
     private final ConcurrentHashMap<Long, String> cache = new ConcurrentHashMap<>();

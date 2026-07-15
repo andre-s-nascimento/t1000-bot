@@ -1,4 +1,3 @@
-/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.telegram.core;
 
 import static org.mockito.Mockito.*;
@@ -7,44 +6,47 @@ import org.junit.jupiter.api.Test;
 
 class TelegramSafeExecutorTest {
 
+    private final TelegramSafeExecutor executor = new TelegramSafeExecutor();
+
     @Test
-    void deveExecutarComSucesso() throws Exception {
+    void deveExecutarAcaoComSucesso() throws Exception {
         TelegramSender sender = mock(TelegramSender.class);
-        TelegramSafeExecutor executor = new TelegramSafeExecutor();
+        TelegramSafeExecutor.ThrowingRunnable action =
+                mock(TelegramSafeExecutor.ThrowingRunnable.class);
 
-        executor.run(1L, sender, () -> sender.enviar(1L, "ok"));
+        executor.run(123L, sender, action);
 
-        verify(sender).enviar(1L, "ok");
+        verify(action).run();
+        verify(sender, never()).enviar(anyLong(), anyString());
     }
 
     @Test
-    void deveCapturarExcecaoTelegramApi() throws Exception {
+    void deveChamarFallbackEmErro() throws Exception {
         TelegramSender sender = mock(TelegramSender.class);
-        TelegramSafeExecutor executor = new TelegramSafeExecutor();
+        TelegramSafeExecutor.ThrowingRunnable action =
+                mock(TelegramSafeExecutor.ThrowingRunnable.class);
+        doThrow(new RuntimeException("erro")).when(action).run();
 
-        executor.run(
-                1L,
-                sender,
-                () -> {
-                    throw new org.telegram.telegrambots.meta.exceptions.TelegramApiException(
-                            "erro");
-                });
+        executor.run(123L, sender, action);
 
-        verify(sender).enviar(1L, "⚠️ Erro ao enviar mensagem. Tente novamente.");
+        verify(action).run();
+        verify(sender).enviar(eq(123L), contains("Erro ao processar"));
     }
 
     @Test
-    void deveCapturarExcecaoGenerica() throws Exception {
+    void deveLogarErroNoFallback() throws Exception {
         TelegramSender sender = mock(TelegramSender.class);
-        TelegramSafeExecutor executor = new TelegramSafeExecutor();
+        doThrow(new RuntimeException("fallback falhou"))
+                .when(sender)
+                .enviar(anyLong(), anyString());
 
-        executor.run(
-                1L,
-                sender,
-                () -> {
-                    throw new RuntimeException("erro");
-                });
+        TelegramSafeExecutor.ThrowingRunnable action =
+                mock(TelegramSafeExecutor.ThrowingRunnable.class);
+        doThrow(new RuntimeException("erro")).when(action).run();
 
-        verify(sender).enviar(1L, "⚠️ Erro inesperado.");
+        // Apenas verifica que não lança exceção (o erro é logado)
+        executor.run(123L, sender, action);
+
+        verify(sender).enviar(eq(123L), contains("Erro ao processar"));
     }
 }

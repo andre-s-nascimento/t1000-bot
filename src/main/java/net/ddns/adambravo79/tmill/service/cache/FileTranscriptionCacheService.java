@@ -1,5 +1,5 @@
 /* (c) 2026 | 15/05/2026 */
-package net.ddns.adambravo79.tmill.cache;
+package net.ddns.adambravo79.tmill.service.cache;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,13 +13,13 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 
 @Slf4j
 @Service
-public class TranscriptionCacheService {
+public class FileTranscriptionCacheService {
 
-    private final ConcurrentHashMap<String, TranscriptionCacheEntry> cache =
-            new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, TranscriptionCacheEntry> cache = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor();
     private final AtomicLong hits = new AtomicLong(0);
     private final AtomicLong misses = new AtomicLong(0);
@@ -41,7 +41,7 @@ public class TranscriptionCacheService {
                         cache.entrySet()
                                 .removeIf(
                                         entry ->
-                                                now - entry.getValue().getTimestamp()
+                                                now - entry.getValue().timestamp()
                                                         > ttlSeconds * 1000);
                         int after = cache.size();
                         if (before != after) {
