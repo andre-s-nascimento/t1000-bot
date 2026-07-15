@@ -101,30 +101,43 @@ public class TelegramFacade {
     public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
         safeExecutor.run(
                 chatId,
-                this::enviarFallback,
+                (id, msg) -> enviarMensagem(id, msg),
                 () -> {
-                    String lower = filePathOrUrl.toLowerCase();
-                    if (lower.endsWith(".mp4")
-                            || lower.endsWith(".mov")
-                            || lower.endsWith(".avi")) {
-                        executor.execute(
-                                new SendVideo(chatId, filePathOrUrl)
-                                        .caption(caption)
-                                        .parseMode(ParseMode.HTML));
-                    } else if (lower.endsWith(".gif")) {
-                        executor.execute(
-                                new SendAnimation(chatId, filePathOrUrl)
-                                        .caption(caption)
-                                        .parseMode(ParseMode.HTML));
-                    } else if (lower.endsWith(".jpg")
-                            || lower.endsWith(".jpeg")
-                            || lower.endsWith(".png")) {
-                        executor.execute(
-                                new SendPhoto(chatId, filePathOrUrl)
-                                        .caption(caption)
-                                        .parseMode(ParseMode.HTML));
-                    } else {
-                        executor.execute(new SendMessage(chatId, caption));
+                    try {
+                        String lower = filePathOrUrl.toLowerCase();
+                        if (lower.endsWith(".mp4")
+                                || lower.endsWith(".mov")
+                                || lower.endsWith(".avi")) {
+                            executor.execute(
+                                    new SendVideo(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        } else if (lower.endsWith(".gif")) {
+                            executor.execute(
+                                    new SendAnimation(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        } else if (lower.endsWith(".jpg")
+                                || lower.endsWith(".jpeg")
+                                || lower.endsWith(".png")) {
+                            executor.execute(
+                                    new SendPhoto(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        } else {
+                            // Se não reconhecer, tenta como foto (fallback)
+                            executor.execute(
+                                    new SendPhoto(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        }
+                    } catch (Exception e) {
+                        log.warn(
+                                "⚠️ Falha ao enviar mídia para chatId {}: {}. Enviando apenas"
+                                        + " texto.",
+                                chatId,
+                                e.getMessage());
+                        enviarMensagem(chatId, caption);
                     }
                 });
     }

@@ -115,6 +115,10 @@ public class CommandHandler {
         if (isCommand) {
             telegramFacade.enviarMensagem(
                     chatId, "❓ Comando não reconhecido. Use /start para ajuda.");
+            // Logar link se houver
+            if (rawText.contains("http://") || rawText.contains("https://")) {
+                log.warn("🔗 Link não processado: '{}' (chatId={})", rawText, chatId);
+            }
         }
     }
 
@@ -141,10 +145,35 @@ public class CommandHandler {
     private void sendAutoResponse(long chatId, User user, AutoResponseOverride response) {
         String userMention = utils.buildUserMention(user);
         String finalMsg = userMention + ", " + response.getResponse();
-        if (response.getAnimation() != null && !response.getAnimation().isBlank()) {
-            telegramFacade.enviarMidia(chatId, response.getAnimation(), finalMsg);
+        String animation = response.getAnimation();
+
+        if (animation != null && !animation.isBlank()) {
+            // Verifica se a URL tem um host válido (para HTTP/HTTPS)
+            if (isValidUrl(animation)) {
+                telegramFacade.enviarMidia(chatId, animation, finalMsg);
+            } else {
+                log.warn(
+                        "⚠️ Animation inválida para chatId {}: '{}'. Enviando apenas texto.",
+                        chatId,
+                        animation);
+                telegramFacade.enviarMensagemHtml(chatId, finalMsg);
+            }
         } else {
             telegramFacade.enviarMensagemHtml(chatId, finalMsg);
+        }
+    }
+
+    private boolean isValidUrl(String url) {
+        if (url == null || url.isBlank()) return false;
+        try {
+            java.net.URI uri = new java.net.URI(url);
+            String scheme = uri.getScheme();
+            if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                return uri.getHost() != null && !uri.getHost().isBlank();
+            }
+            return false; // URLs com outros esquemas não são suportadas para envio de mídia
+        } catch (java.net.URISyntaxException e) {
+            return false;
         }
     }
 

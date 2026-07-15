@@ -35,12 +35,7 @@ public class MessageUpdateRuleHandler implements UpdateHandler, MessageUpdateRul
 
     @Override
     public void handle(Update update) {
-        log.info(
-                "✉️ [MESSAGE] Update ID {} capturado no MessageUpdateRuleHandler",
-                update.updateId());
-
         if (!authService.isAuthorized(update)) {
-            log.warn("⛔ Update ID {} recusado por regras de autorização.", update.updateId());
             return;
         }
 
@@ -53,10 +48,15 @@ public class MessageUpdateRuleHandler implements UpdateHandler, MessageUpdateRul
                         chatId);
                 audioHandler.handleAudioUpdate(update);
             } else if (update.message().text() != null) {
-                log.info(
-                        "📝 Texto detectado no chat {}: '{}'. Enviando para CommandHandler.",
-                        chatId,
-                        update.message().text());
+                String text = update.message().text();
+                // Log apenas se for comando (inicia com /, t1000, t-1000) ou contém link
+                if (text.startsWith("/") || text.toLowerCase().matches("t-?1000.*")) {
+                    log.info("📝 Comando detectado no chat {}: '{}'", chatId, text);
+                } else if (text.contains("http://") || text.contains("https://")) {
+                    log.info("🔗 Link detectado no chat {}: '{}'", chatId, text);
+                } else {
+                    log.debug("📝 Texto ignorado no chat {}: '{}'", chatId, text);
+                }
                 commandHandler.handleTextUpdate(update);
             }
         }
