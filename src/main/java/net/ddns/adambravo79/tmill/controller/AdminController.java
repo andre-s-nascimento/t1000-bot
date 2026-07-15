@@ -6,9 +6,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +31,7 @@ import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import tools.jackson.databind.ObjectMapper;
 
 @RestController
 @RequestMapping("/admin")
@@ -43,6 +48,9 @@ public class AdminController {
     private final WorldCupSchedulerService worldCupSchedulerService;
     private final StaticWorldCupService staticWorldCupService;
     private final TelegramFacade telegramFacade;
+    private final Environment environment;
+    private final ResourceLoader resourceLoader;
+    private final ObjectMapper objectMapper;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -246,5 +254,117 @@ public class AdminController {
     public ResponseEntity<String> reloadWorldCup() {
         staticWorldCupService.reload();
         return ResponseEntity.ok("Dados da Copa recarregados do arquivo JSON");
+    }
+
+    @GetMapping("/properties")
+    public ResponseEntity<Map<String, Object>> getProperties() {
+        Map<String, Object> props = new LinkedHashMap<>();
+
+        // Propriedades gerais
+        props.put("spring.application.name", environment.getProperty("spring.application.name"));
+        props.put("server.port", environment.getProperty("server.port"));
+        props.put(
+                "spring.threads.virtual.enabled",
+                environment.getProperty("spring.threads.virtual.enabled"));
+
+        // Telegram
+        props.put("telegram.bot.username", environment.getProperty("telegram.bot.username"));
+        props.put(
+                "telegram.bot.polling.enabled",
+                environment.getProperty("telegram.bot.polling.enabled"));
+        props.put(
+                "telegram.bot.polling.timeout",
+                environment.getProperty("telegram.bot.polling.timeout"));
+        props.put("telegram.message.limit", environment.getProperty("telegram.message.limit"));
+        props.put("telegram.owner.id", environment.getProperty("telegram.owner.id"));
+
+        // Tokens (mascarados)
+        props.put("telegram.bot.token", maskToken(environment.getProperty("telegram.bot.token")));
+        props.put("groq.api.key", maskToken(environment.getProperty("groq.api.key")));
+        props.put("tmdb.token", maskToken(environment.getProperty("tmdb.token")));
+
+        // Modelos Groq
+        props.put("groq.model.transcription", environment.getProperty("groq.model.transcription"));
+        props.put("groq.model.refinement", environment.getProperty("groq.model.refinement"));
+        props.put("groq.model.digest", environment.getProperty("groq.model.digest"));
+
+        // Cache
+        props.put(
+                "cache.transcription.enabled",
+                environment.getProperty("cache.transcription.enabled"));
+        props.put(
+                "cache.transcription.ttl-seconds",
+                environment.getProperty("cache.transcription.ttl-seconds"));
+
+        // Digest
+        props.put("digest.enabled", environment.getProperty("digest.enabled"));
+        props.put("digest.chat-ids", environment.getProperty("digest.chat-ids"));
+
+        // World Cup
+        props.put("worldcup.enabled", environment.getProperty("worldcup.enabled"));
+        props.put("worldcup.data.file", environment.getProperty("worldcup.data.file"));
+        props.put("worldcup.update.enabled", environment.getProperty("worldcup.update.enabled"));
+
+        // Auto-response
+        props.put("auto.response.enabled", environment.getProperty("auto.response.enabled"));
+        props.put("auto.response.file", environment.getProperty("auto.response.file"));
+
+        // Easter egg
+        props.put("easter-egg.file", environment.getProperty("easter-egg.file"));
+
+        // Weekly reminder
+        props.put(
+                "weekly.reminder.media-file",
+                environment.getProperty("weekly.reminder.media-file"));
+
+        // Áudio
+        props.put(
+                "t1000.features.transcription-enabled",
+                environment.getProperty("t1000.features.transcription-enabled"));
+        props.put("t1000.audio.max-size-mb", environment.getProperty("t1000.audio.max-size-mb"));
+
+        // Grupos autorizados
+        props.put("bot.allowed-chats", environment.getProperty("bot.allowed-chats"));
+
+        return ResponseEntity.ok(props);
+    }
+
+    private String maskToken(String token) {
+        if (token == null || token.length() < 8) return "***";
+        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
+    }
+
+    // Endpoint GET /admin/config-files
+    @GetMapping("/config-files")
+    public ResponseEntity<Map<String, Object>> getConfigFiles() {
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        // Lista de arquivos para carregar
+        String[] files = {"easter-eggs.json", "auto-responses.json", "worldcup2026.json"};
+
+        for (String fileName : files) {
+            try {
+                // Tenta carregar do classpath primeiro
+                Resource resource = resourceLoader.getResource("classpath:" + fileName);
+                if (!resource.exists()) {
+                    // Se não existir no classpath, tenta do sistema de arquivos
+                    resource = resourceLoader.getResource("file:/app/config/" + fileName);
+                    if (!resource.exists()) {
+                        result.put(fileName, "❌ Arquivo não encontrado");
+                        continue;
+                    }
+                }
+
+                // Lê o conteúdo como JSON
+                Object content = objectMapper.readValue(resource.getInputStream(), Object.class);
+                result.put(fileName, content);
+
+            } catch (Exception e) {
+                log.error("Erro ao carregar arquivo: {}", fileName, e);
+                result.put(fileName, "❌ Erro ao ler: " + e.getMessage());
+            }
+        }
+
+        return ResponseEntity.ok(result);
     }
 }
