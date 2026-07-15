@@ -1,6 +1,5 @@
 package net.ddns.adambravo79.tmill.controller;
 
-import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 

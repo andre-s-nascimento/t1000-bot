@@ -1,6 +1,8 @@
 package net.ddns.adambravo79.tmill.telegram.core;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -168,8 +170,13 @@ public class TelegramFacade {
     public byte[] downloadFile(File file) {
         String filePath = file.filePath();
         String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
-        try (var is = new URL(url).openStream()) {
-            return is.readAllBytes();
+        try {
+            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setConnectTimeout(30_000); // 30s para conectar
+            conn.setReadTimeout(120_000); // 120s para ler (arquivos grandes)
+            try (InputStream is = conn.getInputStream()) {
+                return is.readAllBytes();
+            }
         } catch (IOException e) {
             throw new TelegramFileException("Erro ao baixar arquivo: " + filePath, e);
         }

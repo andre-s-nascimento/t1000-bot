@@ -12,7 +12,7 @@ import com.pengrad.telegrambot.model.*;
 @Component
 public class TelegramUtils {
 
-    private static final int TELEGRAM_LIMIT = 3900;
+    static final int TELEGRAM_LIMIT = 3900;
 
     public String buildFullName(User user) {
         if (user == null) return "";
@@ -58,7 +58,8 @@ public class TelegramUtils {
             int end = Math.min(start + limit, text.length());
             if (end < text.length()) {
                 int lastBreak = text.lastIndexOf("\n", end);
-                if (lastBreak > start + 1000) {
+                // Se encontrarmos uma quebra de linha dentro do trecho, cortamos nela
+                if (lastBreak > start) {
                     end = lastBreak;
                 }
             }
