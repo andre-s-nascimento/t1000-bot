@@ -8,8 +8,11 @@ import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -116,7 +119,8 @@ public class AudioPipelineService {
                         wavFile -> {
                             try {
                                 String bruto = groqClient.transcrever(wavFile);
-                                String refinado = groqClient.refinarTexto(bruto);
+                                // Retry manual para refinamento
+                                String refinado = retryRefinamento(bruto);
                                 return new ProcessedAudio(bruto, refinado);
                             } catch (Exception e) {
                                 throw new CompletionException(e);
@@ -125,6 +129,47 @@ public class AudioPipelineService {
                             }
                         })
                 .whenComplete((result, ex) -> deletarSilenciosamente(ogaFile));
+    }
+
+    private String retryRefinamento(String textoBruto) {
+        int maxRetries = 4;
+        long delay = 2000;
+        Exception lastException = null;
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                return groqClient.refinarTexto(textoBruto);
+            } catch (HttpClientErrorException.TooManyRequests e) {
+                lastException = e;
+                String msg = e.getMessage();
+                if (msg != null && msg.contains("try again in")) {
+                    try {
+                        Pattern pattern = Pattern.compile("try again in (\\d+\\.?\\d*)s");
+                        Matcher matcher = pattern.matcher(msg);
+                        if (matcher.find()) {
+                            double waitSeconds = Double.parseDouble(matcher.group(1));
+                            long waitMs = (long) (waitSeconds * 1000) + 500;
+                            log.warn(
+                                    "Rate limit, aguardando {}ms (tentativa {}/{})",
+                                    waitMs,
+                                    i + 1,
+                                    maxRetries);
+                            Thread.sleep(waitMs);
+                            continue;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+                log.warn("Erro 429, tentativa {}/{}", i + 1, maxRetries);
+                try {
+                    Thread.sleep(delay * (i + 1));
+                } catch (InterruptedException ignored) {
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+        throw new RuntimeException(
+                "Falha no refinamento após " + maxRetries + " tentativas", lastException);
     }
 
     private void deletarSilenciosamente(File file) {
