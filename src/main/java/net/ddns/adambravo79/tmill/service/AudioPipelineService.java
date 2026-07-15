@@ -16,9 +16,9 @@ import org.springframework.web.client.HttpClientErrorException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
 import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
+import net.ddns.adambravo79.tmill.service.cache.ChatTranscriptionCache;
 
 @Slf4j
 @Service
@@ -27,7 +27,7 @@ public class AudioPipelineService {
 
     private final AudioService audioService;
     private final GroqClient groqClient;
-    private final TranscricaoCache transcricaoCache;
+    private final ChatTranscriptionCache chatTranscriptionCache;
     private final TranscriptStoreService transcriptStoreService; // 🆕
 
     /**
@@ -60,7 +60,7 @@ public class AudioPipelineService {
                                     // 👇 Salva a transcrição refinada no banco SQLite
                                     transcriptStoreService.saveTranscript(
                                             chatId, userId, userName, refinado);
-                                    transcricaoCache.salvar(chatId, refinado);
+                                    chatTranscriptionCache.salvar(chatId, refinado);
                                     callback.accept("✨ *Refinado:* \n" + refinado, true);
 
                                 } catch (Exception e) {

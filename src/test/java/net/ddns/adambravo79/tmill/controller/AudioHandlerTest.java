@@ -25,12 +25,12 @@ import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.model.User;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 
-import net.ddns.adambravo79.tmill.cache.TranscriptionCacheEntry;
-import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
+import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
 import net.ddns.adambravo79.tmill.service.TranscriptStoreService;
+import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
@@ -40,7 +40,7 @@ class AudioHandlerTest {
 
     @Mock private TelegramFileService fileService;
     @Mock private AudioPipelineService audioService;
-    @Mock private TranscriptionCacheService cacheService;
+    @Mock private FileTranscriptionCacheService cacheService;
     @Mock private TranscriptStoreService transcriptStore;
     @Mock private TelegramFacade telegramFacade;
     @Mock private TelegramUtils utils;

@@ -23,6 +23,7 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
+import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
@@ -135,8 +136,8 @@ public class CommandHandler {
                             + "💡 <b>Em grupos/canais:</b>\n"
                             + "Ao enviar um áudio, aparecerão botões para você escolher a"
                             + " transcrição bruta ou refinada.\n\n"
-                            + "💡 Dar sugestões: <code>t1000 anotar ideia Achar os pais adotivos do"
-                            + " John Connor...</code>\n\n"
+                            + "💡 Anotar sugestões: <code>t1000 anotar ideia Achar os pais adotivos"
+                            + " do John Connor...</code>\n\n"
                             + "Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.",
                         utils.escapeHtml(firstName));
         telegramFacade.enviarMensagemHtml(chatId, saudacao);
@@ -144,8 +145,8 @@ public class CommandHandler {
 
     private void sendAutoResponse(long chatId, User user, AutoResponseOverride response) {
         String userMention = utils.buildUserMention(user);
-        String finalMsg = userMention + ", " + response.getResponse();
-        String animation = response.getAnimation();
+        String finalMsg = userMention + ", " + response.response();
+        String animation = response.animation();
 
         if (animation != null && !animation.isBlank()) {
             // Verifica se a URL tem um host válido (para HTTP/HTTPS)

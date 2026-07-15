@@ -23,13 +23,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.AutoResponseService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
+import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
 
@@ -42,7 +42,7 @@ public class AdminController {
     private static final String SERVICO_DA_COPA_DESATIVADO = "⛔ Serviço da Copa desativado.";
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
-    private final TranscriptionCacheService transcriptionCacheService;
+    private final FileTranscriptionCacheService fileTranscriptionCacheService;
     private final WeeklyReminderService weeklyReminderService;
     private final AutoResponseService autoResponseService;
     private final WorldCupSchedulerService worldCupSchedulerService;
@@ -96,7 +96,7 @@ public class AdminController {
 
     @GetMapping("/cache-stats")
     public ResponseEntity<Map<String, Long>> getCacheStats() {
-        return ResponseEntity.ok(transcriptionCacheService.getStats());
+        return ResponseEntity.ok(fileTranscriptionCacheService.getStats());
     }
 
     @GetMapping("/custom-digest")

@@ -24,8 +24,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.*;
+import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 class AdminControllerTest {
@@ -35,7 +35,7 @@ class AdminControllerTest {
 
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
-    @Mock private TranscriptionCacheService transcriptionCacheService;
+    @Mock private FileTranscriptionCacheService fileTranscriptionCacheService;
     @Mock private WeeklyReminderService weeklyReminderService;
     @Mock private AutoResponseService autoResponseService;
     @Mock private WorldCupSchedulerService worldCupSchedulerService;
@@ -135,7 +135,7 @@ class AdminControllerTest {
     @Test
     void getCacheStats_deveRetornarStats() throws Exception {
         Map<String, Long> stats = Map.of("hits", 10L, "misses", 2L, "size", 5L);
-        when(transcriptionCacheService.getStats()).thenReturn(stats);
+        when(fileTranscriptionCacheService.getStats()).thenReturn(stats);
         mockMvc.perform(get("/admin/cache-stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hits").value(10))

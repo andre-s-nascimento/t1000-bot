@@ -19,6 +19,9 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
+import net.ddns.adambravo79.tmill.model.AutoResponseRule;
+
 @ExtendWith(MockitoExtension.class)
 class AutoResponseServiceTest {
 
@@ -79,8 +82,8 @@ class AutoResponseServiceTest {
 
         Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "bom dia");
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().getResponse()).isEqualTo("Olá! Bom dia/tarde para você!");
-        assertThat(resultado.get().getAnimation()).isEqualTo("https://exemplo.com/gif.gif");
+        assertThat(resultado.get().response()).isEqualTo("Olá! Bom dia/tarde para você!");
+        assertThat(resultado.get().animation()).isEqualTo("https://exemplo.com/gif.gif");
     }
 
     @Test
@@ -186,33 +189,33 @@ class AutoResponseServiceTest {
     }
 
     // =========================
-    // 🧪 TESTES DE getResponseRule
+    // 🧪 TESTES DE responseRule
     // =========================
 
     @Test
-    void getResponseRule_deveRetornarRespostaParaTriggerExato() throws Exception {
+    void responseRule_deveRetornarRespostaParaTriggerExato() throws Exception {
         carregarRegras();
         Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "bom dia");
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().getResponse()).isEqualTo("Olá! Bom dia/tarde para você!");
+        assertThat(resultado.get().response()).isEqualTo("Olá! Bom dia/tarde para você!");
     }
 
     @Test
-    void getResponseRule_deveIgnorarMaiusculasMinusculas() throws Exception {
+    void responseRule_deveIgnorarMaiusculasMinusculas() throws Exception {
         carregarRegras();
         Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "BOM DIA");
         assertThat(resultado).isPresent();
     }
 
     @Test
-    void getResponseRule_deveRetornarEmptyQuandoTriggerNaoExiste() throws Exception {
+    void responseRule_deveRetornarEmptyQuandoTriggerNaoExiste() throws Exception {
         carregarRegras();
         Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "inexistente");
         assertThat(resultado).isEmpty();
     }
 
     @Test
-    void getResponseRule_deveRetornarEmptyQuandoServicoDesativado() throws Exception {
+    void responseRule_deveRetornarEmptyQuandoServicoDesativado() throws Exception {
         ReflectionTestUtils.setField(service, "enabled", false);
         carregarRegras();
         Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "bom dia");
@@ -220,34 +223,34 @@ class AutoResponseServiceTest {
     }
 
     @Test
-    void getResponseRule_deveRetornarEmptyParaMensagemNull() throws Exception {
+    void responseRule_deveRetornarEmptyParaMensagemNull() throws Exception {
         carregarRegras();
         Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, null);
         assertThat(resultado).isEmpty();
     }
 
     @Test
-    void getResponseRule_deveAplicarUserOverride() throws Exception {
+    void responseRule_deveAplicarUserOverride() throws Exception {
         carregarRegras();
 
         Optional<AutoResponseOverride> resultado1 = service.getResponseRule(123L, "obrigado");
         assertThat(resultado1).isPresent();
-        assertThat(resultado1.get().getResponse()).isEqualTo("Por nada, amigo!");
-        assertThat(resultado1.get().getAnimation()).isEqualTo("https://exemplo.com/amigo.gif");
+        assertThat(resultado1.get().response()).isEqualTo("Por nada, amigo!");
+        assertThat(resultado1.get().animation()).isEqualTo("https://exemplo.com/amigo.gif");
 
         Optional<AutoResponseOverride> resultado2 = service.getResponseRule(456L, "obrigado");
         assertThat(resultado2).isPresent();
-        assertThat(resultado2.get().getResponse()).isEqualTo("Disponha!");
-        assertThat(resultado2.get().getAnimation()).isNull();
+        assertThat(resultado2.get().response()).isEqualTo("Disponha!");
+        assertThat(resultado2.get().animation()).isNull();
 
         Optional<AutoResponseOverride> resultado3 = service.getResponseRule(789L, "obrigado");
         assertThat(resultado3).isPresent();
-        assertThat(resultado3.get().getResponse()).isEqualTo("De nada!");
-        assertThat(resultado3.get().getAnimation()).isNull();
+        assertThat(resultado3.get().response()).isEqualTo("De nada!");
+        assertThat(resultado3.get().animation()).isNull();
     }
 
     @Test
-    void getResponseRule_devePriorizarTriggerMaisEspecifico() throws Exception {
+    void responseRule_devePriorizarTriggerMaisEspecifico() throws Exception {
         AutoResponseService service2 = new AutoResponseService(resourceLoader);
         ReflectionTestUtils.setField(service2, "enabled", true);
         AutoResponseRule rule1 = new AutoResponseRule("Resposta curta", null, null, null, null);
@@ -259,7 +262,7 @@ class AutoResponseServiceTest {
 
         Optional<AutoResponseOverride> resultado = service2.getResponseRule(1L, "oi tudo bem");
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().getResponse()).isEqualTo("Resposta longa");
+        assertThat(resultado.get().response()).isEqualTo("Resposta longa");
     }
 
     // =========================

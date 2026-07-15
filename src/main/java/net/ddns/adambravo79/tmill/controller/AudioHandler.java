@@ -19,12 +19,12 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.cache.TranscriptionCacheEntry;
-import net.ddns.adambravo79.tmill.cache.TranscriptionCacheService;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
+import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
 import net.ddns.adambravo79.tmill.service.TranscriptStoreService;
+import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
@@ -38,7 +38,7 @@ public class AudioHandler {
 
     private final TelegramFileService fileService;
     private final AudioPipelineService audioService;
-    private final TranscriptionCacheService cacheService;
+    private final FileTranscriptionCacheService cacheService;
     private final TranscriptStoreService transcriptStore;
     private final TelegramFacade telegramFacade;
     private final TelegramUtils utils;
@@ -261,8 +261,7 @@ public class AudioHandler {
 
     private void entregarTranscricaoCache(
             long userId, String tipo, TranscriptionCacheEntry cached, long groupId) {
-        String texto =
-                tipo.equals(TRANS_BRUTO) ? cached.getTextoBruto() : cached.getTextoRefinado();
+        String texto = tipo.equals(TRANS_BRUTO) ? cached.textoBruto() : cached.textoRefinado();
         String prefixo =
                 tipo.equals(TRANS_BRUTO) ? "🎙️ Transcrição Bruta:\n" : "✨ Transcrição Refinada:\n";
         enviarTranscricao(userId, prefixo + texto, groupId); // <-- passa groupId

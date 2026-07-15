@@ -1,7 +1,6 @@
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
@@ -16,8 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.web.client.HttpClientErrorException;
 
-import net.ddns.adambravo79.tmill.cache.TranscricaoCache;
 import net.ddns.adambravo79.tmill.client.GroqClient;
+import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
+import net.ddns.adambravo79.tmill.service.cache.ChatTranscriptionCache;
 
 class AudioPipelineServiceTest {
 
@@ -31,7 +31,7 @@ class AudioPipelineServiceTest {
     void deveProcessarFluxoCompleto() throws Exception {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
-        var cache = mock(TranscricaoCache.class);
+        var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
         var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
@@ -62,17 +62,64 @@ class AudioPipelineServiceTest {
         assertThat(wav).doesNotExist();
     }
 
-    // ... outros testes existentes (falhas, etc.)
+    @Test
+    void deveLancarExcecaoQuandoConversaoFalhar() throws Exception {
+        var audio = mock(AudioService.class);
+        var groq = mock(GroqClient.class);
+        var cache = mock(ChatTranscriptionCache.class);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+
+        File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
+
+        when(audio.converterParaWav(input))
+                .thenReturn(
+                        CompletableFuture.failedFuture(new RuntimeException("Falha na conversão")));
+
+        assertThatThrownBy(
+                        () ->
+                                service.processarFluxoAudio(
+                                        input, 1L, 1L, "Usuário Teste", (t, b) -> {}))
+                .isInstanceOf(AudioProcessingException.class)
+                .hasMessageContaining("Erro inesperado no pipeline de áudio");
+
+        verifyNoInteractions(cache);
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoTranscricaoFalhar() throws Exception {
+        var audio = mock(AudioService.class);
+        var groq = mock(GroqClient.class);
+        var cache = mock(ChatTranscriptionCache.class);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+
+        File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
+        File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
+
+        when(audio.converterParaWav(input)).thenReturn(CompletableFuture.completedFuture(wav));
+        when(groq.transcrever(wav)).thenThrow(new RuntimeException("Falha na transcrição"));
+
+        assertThatThrownBy(
+                        () ->
+                                service.processarFluxoAudio(
+                                        input, 1L, 1L, "Usuário Teste", (t, b) -> {}))
+                .isInstanceOf(AudioProcessingException.class)
+                .hasMessageContaining("Erro inesperado no pipeline de áudio");
+
+        assertThat(wav).doesNotExist();
+        verifyNoInteractions(cache);
+    }
 
     // =========================
-    // NOVOS TESTES PARA processarEArmazenar
+    // NOVOS TESTES PARA processarEArmazenar E retryRefinamento
     // =========================
 
     @Test
     void deveProcessarEArmazenarComSucesso() throws Exception {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
-        var cache = mock(TranscricaoCache.class);
+        var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
         var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
@@ -97,7 +144,7 @@ class AudioPipelineServiceTest {
     void deveRetryNoRefinamentoQuandoRecebe429() throws Exception {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
-        var cache = mock(TranscricaoCache.class);
+        var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
         var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
@@ -127,7 +174,7 @@ class AudioPipelineServiceTest {
     void deveFalharNoRefinamentoAposTodasTentativas() throws Exception {
         var audio = mock(AudioService.class);
         var groq = mock(GroqClient.class);
-        var cache = mock(TranscricaoCache.class);
+        var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
         var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
 
