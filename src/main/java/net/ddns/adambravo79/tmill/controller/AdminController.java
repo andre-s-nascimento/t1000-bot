@@ -1,4 +1,3 @@
-/* (c) 2026 | 19/05/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import java.time.LocalDate;
@@ -23,12 +22,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.service.AutoResponseService;
-import net.ddns.adambravo79.tmill.service.DailyDigestService;
-import net.ddns.adambravo79.tmill.service.EasterEggService;
-import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
-import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
-import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
+import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
+import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
@@ -39,7 +34,6 @@ import tools.jackson.databind.ObjectMapper;
 @Slf4j
 public class AdminController {
 
-    private static final String SERVICO_DA_COPA_DESATIVADO = "⛔ Serviço da Copa desativado.";
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
     private final FileTranscriptionCacheService fileTranscriptionCacheService;
@@ -51,11 +45,55 @@ public class AdminController {
     private final Environment environment;
     private final ResourceLoader resourceLoader;
     private final ObjectMapper objectMapper;
+    private final DailyReleasesService dailyReleasesService;
+    private final ReleaseNotifiedRepository releaseNotifiedRepository;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
 
-    private static final long SHOWCASE_CHAT_ID = -5283244164L; // -1003265590455L;
+    private static final long SHOWCASE_CHAT_ID = -5283244164L;
+
+    // ========================= LIMPEZA DE DADOS =========================
+
+    /**
+     * Limpa a tabela de lançamentos notificados (releases_notified). Útil durante desenvolvimento
+     * para evitar duplicatas.
+     */
+    @PostMapping("/clear-releases")
+    public ResponseEntity<String> clearReleases() {
+        try {
+            releaseNotifiedRepository.clearAll();
+            log.info("Tabela releases_notified limpa via endpoint.");
+            return ResponseEntity.ok("✅ Tabela de lançamentos limpa com sucesso.");
+        } catch (Exception e) {
+            log.error("Erro ao limpar releases_notified", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Erro ao limpar tabela: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Limpa todas as tabelas relacionadas ao funcionamento do bot (transcripts, messages,
+     * releases_notified). Use com cautela!
+     */
+    @PostMapping("/clear-all-data")
+    public ResponseEntity<String> clearAllData() {
+        try {
+            int deletedReleases = releaseNotifiedRepository.deleteAll();
+            // Você pode adicionar outros repositórios aqui para limpar transcripts, messages, etc.
+            log.info("Dados limpos via endpoint admin.");
+            return ResponseEntity.ok(
+                    String.format("✅ Dados removidos: %d lançamentos deletados.", deletedReleases));
+        } catch (Exception e) {
+            log.error("Erro ao limpar dados", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Erro ao limpar dados: " + e.getMessage());
+        }
+    }
+
+    // ========================= MÉTODOS EXISTENTES =========================
+    // (mantenha todos os outros métodos que você já tem: reloadAutoResponses,
+    // testWeeklyReminder, testMorningDigest, etc.)
 
     @PostMapping("/reload-auto-responses")
     public ResponseEntity<String> reloadAutoResponses() {
@@ -72,8 +110,7 @@ public class AdminController {
     @PostMapping("/test-weekly-reminder-showcase")
     public ResponseEntity<String> testWeeklyReminderShowcase() {
         weeklyReminderService.sendReminderToChat(SHOWCASE_CHAT_ID);
-        return ResponseEntity.ok(
-                "Lembrete semanal enviado para o grupo showcase (" + SHOWCASE_CHAT_ID + ")");
+        return ResponseEntity.ok("Lembrete semanal enviado para o grupo showcase.");
     }
 
     @PostMapping("/reload-easter-eggs")
@@ -109,9 +146,7 @@ public class AdminController {
             LocalDate[] dates = parseDateRange(startDate, endDate);
             if (dates.length == 0) {
                 return ResponseEntity.badRequest()
-                        .body(
-                                "Formato inválido. Use 'yyyy-MM-dd' ou 'dd-MM-yyyy'. Ex: 2026-05-07"
-                                        + " ou 07-05-2026");
+                        .body("Formato inválido. Use 'yyyy-MM-dd' ou 'dd-MM-yyyy'.");
             }
 
             ZoneId zone = ZoneId.of("America/Sao_Paulo");
@@ -158,43 +193,39 @@ public class AdminController {
     @PostMapping("/test-worldcup")
     public ResponseEntity<String> testWorldCup() {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
         }
         worldCupSchedulerService.sendManualTest();
         return ResponseEntity.ok("✅ Envio manual disparado! Verifique os logs.");
     }
 
-    // Teste da Copa – lista de jogos do dia (showcase)
     @PostMapping("/test-worldcup-showcase")
     public ResponseEntity<String> testWorldCupShowcase() {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
         }
         worldCupSchedulerService.sendManualTestToChat(SHOWCASE_CHAT_ID);
         return ResponseEntity.ok("✅ Teste manual da Copa enviado para o showcase.");
     }
 
-    // Teste da Copa – meio-dia (showcase)
     @PostMapping("/test-worldcup-noon-showcase")
     public ResponseEntity<String> testWorldCupNoonShowcase() {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
         }
         worldCupSchedulerService.sendNoonMatchesToChat(SHOWCASE_CHAT_ID);
         return ResponseEntity.ok("✅ Envio do meio-dia da Copa enviado para o showcase.");
     }
 
-    // Teste da Copa – noite (showcase)
     @PostMapping("/test-worldcup-evening-showcase")
     public ResponseEntity<String> testWorldCupEveningShowcase() {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
         }
         worldCupSchedulerService.sendEveningMatchesToChat(SHOWCASE_CHAT_ID);
         return ResponseEntity.ok("✅ Envio da noite da Copa enviado para o showcase.");
     }
 
-    // Recarregar dados da Copa e enviar confirmação para o showcase
     @PostMapping("/reload-worldcup-showcase")
     public ResponseEntity<String> reloadWorldCupShowcase() {
         staticWorldCupService.reload();
@@ -209,7 +240,7 @@ public class AdminController {
     public ResponseEntity<String> testWorldCupResultsShowcase(
             @RequestParam(defaultValue = "ontem") String dateParam) {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(SERVICO_DA_COPA_DESATIVADO);
+            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
         }
         LocalDate date = parseDateParam(dateParam);
         if (date == null) {
@@ -259,15 +290,11 @@ public class AdminController {
     @GetMapping("/properties")
     public ResponseEntity<Map<String, Object>> getProperties() {
         Map<String, Object> props = new LinkedHashMap<>();
-
-        // Propriedades gerais
         props.put("spring.application.name", environment.getProperty("spring.application.name"));
         props.put("server.port", environment.getProperty("server.port"));
         props.put(
                 "spring.threads.virtual.enabled",
                 environment.getProperty("spring.threads.virtual.enabled"));
-
-        // Telegram
         props.put("telegram.bot.username", environment.getProperty("telegram.bot.username"));
         props.put(
                 "telegram.bot.polling.enabled",
@@ -277,55 +304,34 @@ public class AdminController {
                 environment.getProperty("telegram.bot.polling.timeout"));
         props.put("telegram.message.limit", environment.getProperty("telegram.message.limit"));
         props.put("telegram.owner.id", environment.getProperty("telegram.owner.id"));
-
-        // Tokens (mascarados)
         props.put("telegram.bot.token", maskToken(environment.getProperty("telegram.bot.token")));
         props.put("groq.api.key", maskToken(environment.getProperty("groq.api.key")));
         props.put("tmdb.token", maskToken(environment.getProperty("tmdb.token")));
-
-        // Modelos Groq
         props.put("groq.model.transcription", environment.getProperty("groq.model.transcription"));
         props.put("groq.model.refinement", environment.getProperty("groq.model.refinement"));
         props.put("groq.model.digest", environment.getProperty("groq.model.digest"));
-
-        // Cache
         props.put(
                 "cache.transcription.enabled",
                 environment.getProperty("cache.transcription.enabled"));
         props.put(
                 "cache.transcription.ttl-seconds",
                 environment.getProperty("cache.transcription.ttl-seconds"));
-
-        // Digest
         props.put("digest.enabled", environment.getProperty("digest.enabled"));
         props.put("digest.chat-ids", environment.getProperty("digest.chat-ids"));
-
-        // World Cup
         props.put("worldcup.enabled", environment.getProperty("worldcup.enabled"));
         props.put("worldcup.data.file", environment.getProperty("worldcup.data.file"));
         props.put("worldcup.update.enabled", environment.getProperty("worldcup.update.enabled"));
-
-        // Auto-response
         props.put("auto.response.enabled", environment.getProperty("auto.response.enabled"));
         props.put("auto.response.file", environment.getProperty("auto.response.file"));
-
-        // Easter egg
         props.put("easter-egg.file", environment.getProperty("easter-egg.file"));
-
-        // Weekly reminder
         props.put(
                 "weekly.reminder.media-file",
                 environment.getProperty("weekly.reminder.media-file"));
-
-        // Áudio
         props.put(
                 "t1000.features.transcription-enabled",
                 environment.getProperty("t1000.features.transcription-enabled"));
         props.put("t1000.audio.max-size-mb", environment.getProperty("t1000.audio.max-size-mb"));
-
-        // Grupos autorizados
         props.put("bot.allowed-chats", environment.getProperty("bot.allowed-chats"));
-
         return ResponseEntity.ok(props);
     }
 
@@ -334,37 +340,40 @@ public class AdminController {
         return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
     }
 
-    // Endpoint GET /admin/config-files
     @GetMapping("/config-files")
     public ResponseEntity<Map<String, Object>> getConfigFiles() {
         Map<String, Object> result = new LinkedHashMap<>();
-
-        // Lista de arquivos para carregar
         String[] files = {"easter-eggs.json", "auto-responses.json", "worldcup2026.json"};
-
         for (String fileName : files) {
             try {
-                // Tenta carregar do classpath primeiro
                 Resource resource = resourceLoader.getResource("classpath:" + fileName);
                 if (!resource.exists()) {
-                    // Se não existir no classpath, tenta do sistema de arquivos
                     resource = resourceLoader.getResource("file:/app/config/" + fileName);
                     if (!resource.exists()) {
                         result.put(fileName, "❌ Arquivo não encontrado");
                         continue;
                     }
                 }
-
-                // Lê o conteúdo como JSON
                 Object content = objectMapper.readValue(resource.getInputStream(), Object.class);
                 result.put(fileName, content);
-
             } catch (Exception e) {
                 log.error("Erro ao carregar arquivo: {}", fileName, e);
                 result.put(fileName, "❌ Erro ao ler: " + e.getMessage());
             }
         }
-
         return ResponseEntity.ok(result);
+    }
+
+    // ========================= NOVO ENDPOINT: TESTE DE LANÇAMENTOS =========================
+    @PostMapping("/test-daily-releases")
+    public ResponseEntity<String> testDailyReleases() {
+        dailyReleasesService.sendHourlyReleases();
+        return ResponseEntity.ok("Verificação horária de lançamentos executada (teste).");
+    }
+
+    @PostMapping("/test-weekly-digest")
+    public ResponseEntity<String> testWeeklyDigest() {
+        dailyReleasesService.sendWeeklyDigest();
+        return ResponseEntity.ok("Giro semanal executado (teste).");
     }
 }
