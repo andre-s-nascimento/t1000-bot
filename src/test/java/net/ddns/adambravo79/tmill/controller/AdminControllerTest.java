@@ -104,7 +104,8 @@ class AdminControllerTest {
                         content()
                                 .string(
                                         containsString(
-                                                "Lembrete semanal enviado para o grupo showcase")));
+                                                "Lembrete semanal enviado para o chat"
+                                                        + " -5283244164")));
         verify(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
     }
 
@@ -196,7 +197,8 @@ class AdminControllerTest {
                         content()
                                 .string(
                                         containsString(
-                                                "Teste manual da Copa enviado para o showcase.")));
+                                                "Teste manual da Copa enviado para o chat"
+                                                        + " -5283244164")));
         verify(worldCupSchedulerService).sendManualTestToChat(SHOWCASE_CHAT_ID);
     }
 
@@ -208,8 +210,8 @@ class AdminControllerTest {
                         content()
                                 .string(
                                         containsString(
-                                                "Envio do meio-dia da Copa enviado para o"
-                                                        + " showcase")));
+                                                "Envio do meio-dia da Copa enviado para o chat"
+                                                        + " -5283244164")));
         verify(worldCupSchedulerService).sendNoonMatchesToChat(SHOWCASE_CHAT_ID);
     }
 
@@ -221,7 +223,8 @@ class AdminControllerTest {
                         content()
                                 .string(
                                         containsString(
-                                                "Envio da noite da Copa enviado para o showcase")));
+                                                "Envio da noite da Copa enviado para o chat"
+                                                        + " -5283244164")));
         verify(worldCupSchedulerService).sendEveningMatchesToChat(SHOWCASE_CHAT_ID);
     }
 
@@ -244,7 +247,11 @@ class AdminControllerTest {
                         post("/admin/test-worldcup-results-showcase")
                                 .param("dateParam", "2026-05-07"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Resultados enviados para o showcase")));
+                .andExpect(
+                        content()
+                                .string(
+                                        containsString(
+                                                "Resultados enviados para o chat -5283244164")));
         verify(worldCupSchedulerService)
                 .sendResultsToChat(eq(SHOWCASE_CHAT_ID), any(LocalDate.class));
     }
@@ -265,7 +272,6 @@ class AdminControllerTest {
 
     @Test
     void getProperties_deveRetornarPropriedadesMascaradas() throws Exception {
-        // Mock do Environment
         when(environment.getProperty(anyString())).thenReturn("");
         when(environment.getProperty("spring.application.name")).thenReturn("tmill-bot");
         when(environment.getProperty("telegram.bot.token"))

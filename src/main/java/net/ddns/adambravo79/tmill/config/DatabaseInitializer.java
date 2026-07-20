@@ -1,4 +1,3 @@
-/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.config;
 
 import java.util.List;
@@ -22,7 +21,7 @@ public class DatabaseInitializer {
 
     @PostConstruct
     public void init() {
-        // cria tabela se não existir
+        // Tabela transcripts (já existente)
         jdbcTemplate.execute(
                 """
             CREATE TABLE IF NOT EXISTS transcripts (
@@ -35,8 +34,7 @@ public class DatabaseInitializer {
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """);
-        // se a tabela já existir sem a coluna raw_text, adiciona
-        // No método init(), após criar a tabela, adicione:
+
         try {
             List<Map<String, Object>> columns =
                     jdbcTemplate.queryForList("PRAGMA table_info(transcripts)");
@@ -45,11 +43,49 @@ public class DatabaseInitializer {
             if (!hasRawText) {
                 jdbcTemplate.execute("ALTER TABLE transcripts ADD COLUMN raw_text TEXT");
                 log.info("Coluna raw_text adicionada à tabela transcripts");
-            } else {
-                log.debug("Coluna raw_text já existe");
             }
         } catch (Exception e) {
             log.error("Erro ao verificar/adicionar coluna raw_text", e);
+        }
+
+        // Tabela releases_notified
+        jdbcTemplate.execute(
+                """
+            CREATE TABLE IF NOT EXISTS releases_notified (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tmdb_id INTEGER NOT NULL,
+                media_type TEXT NOT NULL,
+                release_date TEXT NOT NULL,
+                title TEXT,
+                overview TEXT,
+                rating REAL,
+                providers TEXT,
+                poster_path TEXT,
+                notified_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """);
+
+        // Migração para adicionar colunas faltantes (caso a tabela já exista sem elas)
+        ensureColumnExists("releases_notified", "title", "TEXT");
+        ensureColumnExists("releases_notified", "overview", "TEXT");
+        ensureColumnExists("releases_notified", "rating", "REAL");
+        ensureColumnExists("releases_notified", "providers", "TEXT");
+        ensureColumnExists("releases_notified", "poster_path", "TEXT");
+
+        log.info("Tabela releases_notified verificada/criada");
+    }
+
+    private void ensureColumnExists(String table, String column, String type) {
+        try {
+            List<Map<String, Object>> columns =
+                    jdbcTemplate.queryForList("PRAGMA table_info(" + table + ")");
+            boolean exists = columns.stream().anyMatch(row -> column.equals(row.get("name")));
+            if (!exists) {
+                jdbcTemplate.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+                log.info("Coluna {} adicionada à tabela {}", column, table);
+            }
+        } catch (Exception e) {
+            log.warn("Não foi possível verificar/adicionar coluna {}: {}", column, e.getMessage());
         }
     }
 }

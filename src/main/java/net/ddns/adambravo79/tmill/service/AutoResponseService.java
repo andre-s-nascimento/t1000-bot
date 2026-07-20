@@ -1,9 +1,8 @@
-/* (c) 2026 | 21/05/2026 */
+/* (c) 2026 | 20/07/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -75,7 +74,7 @@ public class AutoResponseService {
                     endTime = LocalTime.parse(timeRange.get("end"), TIME_FORMATTER);
                 }
 
-                // Extrai userOverrides (formato unificado ou separado)
+                // Extrai userOverrides
                 Map<String, AutoResponseOverride> userOverrides = new HashMap<>();
 
                 // 1) Tenta o formato "userOverrides" (recomendado)
@@ -149,46 +148,87 @@ public class AutoResponseService {
         }
     }
 
-    public Optional<AutoResponseOverride> getResponseRule(Long userId, String message) {
+    /**
+     * Obtém a regra de resposta para um usuário e mensagem, com horário simulado. Útil para testes e
+     * simulações.
+     */
+    public Optional<AutoResponseOverride> getResponseRule(
+            Long userId, String message, LocalTime time) {
         if (!enabled || message == null || message.isBlank()) {
             return Optional.empty();
         }
 
         String lowerMsg = message.toLowerCase();
-        // Ordena triggers por tamanho (mais específicos primeiro)
         List<Map.Entry<String, AutoResponseRule>> sorted =
                 new ArrayList<>(triggerToRule.entrySet());
         sorted.sort((a, b) -> b.getKey().length() - a.getKey().length());
 
-        LocalTime now = ZonedDateTime.now(BRAZIL_ZONE).toLocalTime();
+        LocalTime now = time != null ? time : LocalTime.now(BRAZIL_ZONE);
 
         for (Map.Entry<String, AutoResponseRule> entry : sorted) {
             String trigger = entry.getKey();
             AutoResponseRule rule = entry.getValue();
 
-            if (trigger.length() < 3) continue; // ignora triggers muito curtos
+            if (trigger.length() < 3) continue;
             if (!containsExactWord(lowerMsg, trigger)) continue;
             if (!isTimeInRange(now, rule.startTime(), rule.endTime())) continue;
 
-            log.info("✅ Trigger '{}' ativado pela mensagem: '{}'", trigger, lowerMsg);
-
-            // Verifica se há override para este userId
             String userIdKey = userId != null ? String.valueOf(userId) : null;
             if (userIdKey != null
                     && rule.userOverrides() != null
                     && rule.userOverrides().containsKey(userIdKey)) {
                 AutoResponseOverride ov = rule.userOverrides().get(userIdKey);
-                log.info("🎯 Usando resposta personalizada para userId={}", userId);
+                log.info(
+                        "🎯 Usando resposta personalizada para userId={} via horário simulado",
+                        userId);
                 return Optional.of(ov);
             }
 
-            // Usa a resposta padrão da regra
+            log.info("✅ Trigger '{}' ativado (horário simulado: {})", trigger, now);
             return Optional.of(new AutoResponseOverride(rule.response(), rule.animation()));
         }
         return Optional.empty();
     }
 
+    /**
+     * Obtém a regra de resposta para um usuário e mensagem, usando o horário real atual. Mantido para
+     * compatibilidade com o código existente.
+     */
+    public Optional<AutoResponseOverride> getResponseRule(Long userId, String message) {
+        return getResponseRule(userId, message, LocalTime.now(BRAZIL_ZONE));
+    }
+
     public void reload() {
         loadResponses();
+    }
+
+    // =========================
+    // MÉTODOS DE ESTATÍSTICA E DEBUG
+    // =========================
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public int getRulesCount() {
+        return triggerToRule.size();
+    }
+
+    /** Retorna um resumo de todas as regras carregadas, útil para debug e listagem. */
+    public Map<String, String> getRulesSummary() {
+        Map<String, String> summary = new LinkedHashMap<>();
+        for (Map.Entry<String, AutoResponseRule> entry : triggerToRule.entrySet()) {
+            String key = entry.getKey();
+            AutoResponseRule rule = entry.getValue();
+            summary.put(
+                    key,
+                    String.format(
+                            "response='%s', start=%s, end=%s, overrides=%d",
+                            rule.response(),
+                            rule.startTime(),
+                            rule.endTime(),
+                            rule.userOverrides() != null ? rule.userOverrides().size() : 0));
+        }
+        return summary;
     }
 }
