@@ -51,6 +51,9 @@ public class CommandHandler {
     @Value("${telegram.message.limit:4000}")
     private int telegramMessageLimit;
 
+    @Value("${worldcup.enabled:false}")
+    private boolean worldcupEnabled;
+
     // Método principal chamado pelo TextCommandHandler
     public void handleTextUpdate(Update update) {
         Message message = update.message();
@@ -91,11 +94,13 @@ public class CommandHandler {
 
         // --- Roteamento de comandos ---
         if (normalized.startsWith("t1000 anotar ideia")) {
-            handleAnotarIdeia(message, chatId, rawText);
+            String idea = rawText.replaceFirst("(?i)^t1000\\s+anotar\\s+ideia\\s*", "").trim();
+            handleAnotarIdeia(message, chatId, idea);
             return;
         }
         if (normalized.startsWith("t1000 buscar")) {
-            handleBuscarFilme(chatId, rawText);
+            String termo = rawText.replaceFirst("(?i)^t1000\\s+buscar\\s*", "").trim();
+            handleBuscarFilme(chatId, termo);
             return;
         }
         if (normalized.startsWith("t1000 estreias da semana")
@@ -178,9 +183,8 @@ public class CommandHandler {
         }
     }
 
-    private void handleAnotarIdeia(Message message, long chatId, String rawText) {
-        log.info("📝 Comando 'anotar ideia' recebido: {}", rawText);
-        String idea = rawText.replace("t1000 anotar ideia", "").trim();
+    private void handleAnotarIdeia(Message message, long chatId, String idea) {
+        log.info("📝 Comando 'anotar ideia' recebido: {}", idea);
         if (idea.isEmpty()) {
             telegramFacade.enviarMensagem(
                     chatId,
@@ -219,8 +223,7 @@ public class CommandHandler {
                 chatId, "✅ Ideia registrada! Obrigado pela contribuição.");
     }
 
-    private void handleBuscarFilme(long chatId, String rawText) {
-        String nome = rawText.replace("t1000 buscar", "").trim();
+    private void handleBuscarFilme(long chatId, String nome) {
         if (nome.length() < 3) {
             telegramFacade.enviarMensagem(chatId, "🔍 O termo deve ter pelo menos 3 caracteres.");
             return;
@@ -249,9 +252,7 @@ public class CommandHandler {
             return;
         }
 
-        // Múltiplos resultados → enviar opções com botões (via CallbackHandler)
-        // Precisamos construir os botões inline. Isso será feito no CallbackHandler.
-        // Vamos delegar a criação de botões para um método que retorna InlineKeyboardMarkup.
+        // Múltiplos resultados → enviar opções com botões
         enviarOpcoesDesambiguacao(chatId, busca.results());
     }
 
@@ -301,11 +302,22 @@ public class CommandHandler {
     }
 
     private void handleJogosCopa(long chatId, String rawText) {
+        if (!worldcupEnabled) {
+            telegramFacade.enviarMensagem(
+                    chatId, "🏆 A Copa de 2026 já acabou. Aguarde a próxima!");
+            return;
+        }
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         worldCupSchedulerService.sendMatchesToChat(chatId, today);
     }
 
     private void handleResultados(long chatId, String rawText) {
+        if (!worldcupEnabled) {
+            telegramFacade.enviarMensagem(
+                    chatId, "🏆 A Copa de 2026 já acabou. Aguarde a próxima!");
+            return;
+        }
+
         // Remove o prefixo "t1000 resultados" e limpa palavras comuns
         String param = rawText.replaceFirst("(?i)^t1000\\s+resultados\\s+", "").trim();
         String cleanedParam = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();

@@ -311,4 +311,25 @@ public class TmdbClient {
                 .retrieve()
                 .body(WatchProvidersResponse.class);
     }
+
+    public TvRecord buscarDetalhesSerie(Long tvId) {
+        log.debug("TMDB: Buscando detalhes da série tvId={}", tvId);
+        TvRecord response =
+                restClient
+                        .get()
+                        .uri(
+                                uriBuilder ->
+                                        uriBuilder
+                                                .path("/tv/{id}")
+                                                .queryParam(LANGUAGE, PT_BR)
+                                                .build(tvId))
+                        .retrieve()
+                        .body(TvRecord.class);
+        if (response == null) {
+            log.error("❌ TMDB: resposta inválida ao buscar detalhes da série tvId={}", tvId);
+            throw new IllegalStateException("Falha ao buscar detalhes da série");
+        }
+        log.info("✅ TMDB: Detalhes da série obtidos tvId={} name={}", tvId, response.name());
+        return response;
+    }
 }
