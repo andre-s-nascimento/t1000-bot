@@ -1,12 +1,16 @@
 package net.ddns.adambravo79.tmill.controller;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -22,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
@@ -52,13 +57,10 @@ public class AdminController {
     private boolean worldcupEnabled;
 
     private static final long SHOWCASE_CHAT_ID = -5283244164L;
+    private static final String WORLD_CUP_DISABLED_MSG = "⛔ Serviço da Copa desativado.";
 
     // ========================= LIMPEZA DE DADOS =========================
 
-    /**
-     * Limpa a tabela de lançamentos notificados (releases_notified). Útil durante desenvolvimento
-     * para evitar duplicatas.
-     */
     @PostMapping("/clear-releases")
     public ResponseEntity<String> clearReleases() {
         try {
@@ -72,15 +74,10 @@ public class AdminController {
         }
     }
 
-    /**
-     * Limpa todas as tabelas relacionadas ao funcionamento do bot (transcripts, messages,
-     * releases_notified). Use com cautela!
-     */
     @PostMapping("/clear-all-data")
     public ResponseEntity<String> clearAllData() {
         try {
             int deletedReleases = releaseNotifiedRepository.deleteAll();
-            // Você pode adicionar outros repositórios aqui para limpar transcripts, messages, etc.
             log.info("Dados limpos via endpoint admin.");
             return ResponseEntity.ok(
                     String.format("✅ Dados removidos: %d lançamentos deletados.", deletedReleases));
@@ -92,8 +89,6 @@ public class AdminController {
     }
 
     // ========================= MÉTODOS EXISTENTES =========================
-    // (mantenha todos os outros métodos que você já tem: reloadAutoResponses,
-    // testWeeklyReminder, testMorningDigest, etc.)
 
     @PostMapping("/reload-auto-responses")
     public ResponseEntity<String> reloadAutoResponses() {
@@ -108,9 +103,11 @@ public class AdminController {
     }
 
     @PostMapping("/test-weekly-reminder-showcase")
-    public ResponseEntity<String> testWeeklyReminderShowcase() {
-        weeklyReminderService.sendReminderToChat(SHOWCASE_CHAT_ID);
-        return ResponseEntity.ok("Lembrete semanal enviado para o grupo showcase.");
+    public ResponseEntity<String> testWeeklyReminderShowcase(
+            @RequestParam(required = false) Long chatId) {
+        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        weeklyReminderService.sendReminderToChat(targetChatId);
+        return ResponseEntity.ok("Lembrete semanal enviado para o chat " + targetChatId);
     }
 
     @PostMapping("/reload-easter-eggs")
@@ -193,62 +190,74 @@ public class AdminController {
     @PostMapping("/test-worldcup")
     public ResponseEntity<String> testWorldCup() {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
+            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
         }
         worldCupSchedulerService.sendManualTest();
         return ResponseEntity.ok("✅ Envio manual disparado! Verifique os logs.");
     }
 
     @PostMapping("/test-worldcup-showcase")
-    public ResponseEntity<String> testWorldCupShowcase() {
+    public ResponseEntity<String> testWorldCupShowcase(
+            @RequestParam(required = false) Long chatId) {
+        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
+            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
         }
-        worldCupSchedulerService.sendManualTestToChat(SHOWCASE_CHAT_ID);
-        return ResponseEntity.ok("✅ Teste manual da Copa enviado para o showcase.");
+        worldCupSchedulerService.sendManualTestToChat(targetChatId);
+        return ResponseEntity.ok("✅ Teste manual da Copa enviado para o chat " + targetChatId);
     }
 
     @PostMapping("/test-worldcup-noon-showcase")
-    public ResponseEntity<String> testWorldCupNoonShowcase() {
+    public ResponseEntity<String> testWorldCupNoonShowcase(
+            @RequestParam(required = false) Long chatId) {
+        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
+            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
         }
-        worldCupSchedulerService.sendNoonMatchesToChat(SHOWCASE_CHAT_ID);
-        return ResponseEntity.ok("✅ Envio do meio-dia da Copa enviado para o showcase.");
+        worldCupSchedulerService.sendNoonMatchesToChat(targetChatId);
+        return ResponseEntity.ok("✅ Envio do meio-dia da Copa enviado para o chat " + targetChatId);
     }
 
     @PostMapping("/test-worldcup-evening-showcase")
-    public ResponseEntity<String> testWorldCupEveningShowcase() {
+    public ResponseEntity<String> testWorldCupEveningShowcase(
+            @RequestParam(required = false) Long chatId) {
+        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
+            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
         }
-        worldCupSchedulerService.sendEveningMatchesToChat(SHOWCASE_CHAT_ID);
-        return ResponseEntity.ok("✅ Envio da noite da Copa enviado para o showcase.");
+        worldCupSchedulerService.sendEveningMatchesToChat(targetChatId);
+        return ResponseEntity.ok("✅ Envio da noite da Copa enviado para o chat " + targetChatId);
     }
 
     @PostMapping("/reload-worldcup-showcase")
-    public ResponseEntity<String> reloadWorldCupShowcase() {
+    public ResponseEntity<String> reloadWorldCupShowcase(
+            @RequestParam(required = false) Long chatId) {
+        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         staticWorldCupService.reload();
         String msg =
                 "✅ Dados da Copa recarregados do arquivo JSON às "
-                        + LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
-        telegramFacade.enviarMensagemHtml(SHOWCASE_CHAT_ID, msg);
-        return ResponseEntity.ok(msg + " (enviado para o showcase)");
+                        + LocalDateTime.now(ZoneId.of("America/Sao_Paulo"))
+                                .format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        telegramFacade.enviarMensagemHtml(targetChatId, msg);
+        return ResponseEntity.ok(msg + " (enviado para o chat " + targetChatId + ")");
     }
 
     @PostMapping("/test-worldcup-results-showcase")
     public ResponseEntity<String> testWorldCupResultsShowcase(
-            @RequestParam(defaultValue = "ontem") String dateParam) {
+            @RequestParam(defaultValue = "ontem") String dateParam,
+            @RequestParam(required = false) Long chatId) {
+        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok("⛔ Serviço da Copa desativado.");
+            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
         }
         LocalDate date = parseDateParam(dateParam);
         if (date == null) {
             return ResponseEntity.badRequest()
                     .body("❓ Data inválida. Use 'ontem', 'hoje' ou AAAA-MM-DD.");
         }
-        worldCupSchedulerService.sendResultsToChat(SHOWCASE_CHAT_ID, date);
-        return ResponseEntity.ok("✅ Resultados enviados para o showcase (data: " + date + ")");
+        worldCupSchedulerService.sendResultsToChat(targetChatId, date);
+        return ResponseEntity.ok(
+                "✅ Resultados enviados para o chat " + targetChatId + " (data: " + date + ")");
     }
 
     private LocalDate parseDateParam(String param) {
@@ -364,7 +373,6 @@ public class AdminController {
         return ResponseEntity.ok(result);
     }
 
-    // ========================= NOVO ENDPOINT: TESTE DE LANÇAMENTOS =========================
     @PostMapping("/test-daily-releases")
     public ResponseEntity<String> testDailyReleases() {
         dailyReleasesService.sendHourlyReleases();
@@ -375,5 +383,110 @@ public class AdminController {
     public ResponseEntity<String> testWeeklyDigest() {
         dailyReleasesService.sendWeeklyDigest();
         return ResponseEntity.ok("Giro semanal executado (teste).");
+    }
+
+    // ========================= TESTES DE AUTO-RESPONSES =========================
+
+    @PostMapping("/test-auto-response")
+    public ResponseEntity<String> testAutoResponse(
+            @RequestParam(required = false) Long userId,
+            @RequestParam String message,
+            @RequestParam(required = false) Long chatId,
+            @RequestParam(required = false) String time) {
+
+        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        LocalTime simulatedTime = parseTime(time);
+
+        Optional<AutoResponseOverride> responseOpt =
+                autoResponseService.getResponseRule(userId, message, simulatedTime);
+
+        if (responseOpt.isEmpty()) {
+            return ResponseEntity.ok(
+                    "⚠️ Nenhuma resposta automática encontrada para essa mensagem.");
+        }
+
+        AutoResponseOverride response = responseOpt.get();
+        String finalMsg =
+                "🧪 *Teste de Auto-Response*\n\n"
+                        + "👤 Usuário: "
+                        + (userId != null ? userId : "NÃO DEFINIDO")
+                        + "\n"
+                        + "📝 Mensagem: "
+                        + message
+                        + "\n"
+                        + "🕒 Horário simulado: "
+                        + (simulatedTime != null ? simulatedTime : "atual")
+                        + "\n\n"
+                        + "✅ Resposta: "
+                        + response.response();
+
+        if (response.animation() != null && !response.animation().isBlank()) {
+            if (isValidUrl(response.animation())) {
+                telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
+            } else {
+                telegramFacade.enviarMensagemHtml(targetChatId, finalMsg);
+            }
+        } else {
+            telegramFacade.enviarMensagemHtml(targetChatId, finalMsg);
+        }
+
+        return ResponseEntity.ok("✅ Resposta enviada para o chat " + targetChatId);
+    }
+
+    @GetMapping("/debug-auto-response")
+    public ResponseEntity<Map<String, Object>> debugAutoResponse(
+            @RequestParam(required = false) Long userId,
+            @RequestParam String message,
+            @RequestParam(required = false) String time) {
+
+        LocalTime simulatedTime = parseTime(time);
+        Optional<AutoResponseOverride> responseOpt =
+                autoResponseService.getResponseRule(userId, message, simulatedTime);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("userId", userId);
+        result.put("message", message);
+        result.put("simulatedTime", simulatedTime != null ? simulatedTime.toString() : "atual");
+        result.put("found", responseOpt.isPresent());
+
+        if (responseOpt.isPresent()) {
+            result.put("response", responseOpt.get().response());
+            result.put("animation", responseOpt.get().animation());
+        } else {
+            result.put("response", "Nenhuma regra encontrada");
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/auto-response-rules")
+    public ResponseEntity<Map<String, Object>> listAutoResponseRules() {
+        return ResponseEntity.ok(
+                Map.of(
+                        "totalRules", autoResponseService.getRulesCount(),
+                        "rules", autoResponseService.getRulesSummary()));
+    }
+
+    // ========================= MÉTODOS AUXILIARES =========================
+
+    private LocalTime parseTime(String timeStr) {
+        if (timeStr == null || timeStr.isBlank()) return null;
+        try {
+            return LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("HH:mm"));
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private boolean isValidUrl(String url) {
+        if (url == null || url.isBlank()) return false;
+        try {
+            URI uri = new URI(url);
+            String scheme = uri.getScheme();
+            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && uri.getHost() != null
+                    && !uri.getHost().isBlank();
+        } catch (URISyntaxException e) {
+            return false;
+        }
     }
 }
