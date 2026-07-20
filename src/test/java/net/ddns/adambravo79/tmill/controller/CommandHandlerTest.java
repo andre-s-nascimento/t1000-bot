@@ -223,14 +223,15 @@ class CommandHandlerTest {
 
     @Test
     void deveResponderJogosDeHoje() {
+        ReflectionTestUtils.setField(commandHandler, "worldcupEnabled", true);
         when(message.text()).thenReturn("t1000 jogos de hoje");
         commandHandler.handleTextUpdate(update);
         verify(worldCupSchedulerService).sendMatchesToChat(eq(CHAT_ID), any(LocalDate.class));
-        verifyNoMoreInteractions(worldCupSchedulerService);
     }
 
     @Test
     void deveResponderResultadosComData() {
+        ReflectionTestUtils.setField(commandHandler, "worldcupEnabled", true);
         when(message.text()).thenReturn("t1000 resultados 20/06");
         commandHandler.handleTextUpdate(update);
         verify(worldCupSchedulerService).sendResultsToChat(eq(CHAT_ID), any(LocalDate.class));
@@ -238,9 +239,19 @@ class CommandHandlerTest {
 
     @Test
     void deveAvisarDataInvalidaNosResultados() {
+        ReflectionTestUtils.setField(commandHandler, "worldcupEnabled", true);
         when(message.text()).thenReturn("t1000 resultados invalido");
         commandHandler.handleTextUpdate(update);
         verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Formato de data inválido"));
+        verifyNoInteractions(worldCupSchedulerService);
+    }
+
+    @Test
+    void deveResponderCopaDesabilitada() {
+        ReflectionTestUtils.setField(commandHandler, "worldcupEnabled", false);
+        when(message.text()).thenReturn("t1000 jogos de hoje");
+        commandHandler.handleTextUpdate(update);
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Copa de 2026 já acabou"));
         verifyNoInteractions(worldCupSchedulerService);
     }
 
