@@ -1,4 +1,3 @@
-/* (c) 2026 | 25/05/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import java.time.Duration;
@@ -14,15 +13,17 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverMovieResponse;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverTvResponse;
 import net.ddns.adambravo79.tmill.model.*;
+import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
 @Slf4j
 @Component
 public class TmdbClient {
 
-    private static final String INDISPONIVEL_NO_MOMENTO = "Indisponível no momento";
+    private static final String INDISPONIVEL_NO_MOMENTO = BotMessages.INDISPONIVEL;
 
     private static final String PT_BR = "pt-BR";
 
@@ -67,7 +68,7 @@ public class TmdbClient {
     // ------------------------------------------------------------------------
 
     @Retryable(
-            includes = Exception.class,
+            includes = {java.io.IOException.class, HttpClientErrorException.class},
             maxRetries = 2,
             delay = 1000,
             multiplier = 2,
@@ -76,9 +77,12 @@ public class TmdbClient {
         String queryNormalizada = query.trim().toLowerCase();
         String queryFinal = ATALHOS.getOrDefault(queryNormalizada, query);
         if (!queryFinal.equals(query)) {
-            log.info("🎬 TMDB: Atalho aplicado '{}' -> '{}'", query, queryFinal);
+            log.info(
+                    "🎬 TMDB: Atalho aplicado '{}' -> '{}'",
+                    LogSanitizer.sanitizeQuery(query),
+                    LogSanitizer.sanitizeQuery(queryFinal));
         }
-        log.info("🔎 TMDB: Pesquisando filme query='{}'", queryFinal);
+        log.info("🔎 TMDB: Pesquisando filme query='{}'", LogSanitizer.sanitizeQuery(queryFinal));
         try {
             MovieSearchResponse response =
                     restClient
@@ -97,22 +101,23 @@ public class TmdbClient {
             if (response == null || response.results() == null) {
                 log.warn(
                         "⚠️ TMDB: resposta inválida para query='{}'. Retornando lista vazia.",
-                        queryFinal);
+                        LogSanitizer.sanitizeQuery(queryFinal));
                 return new MovieSearchResponse(0, 0, 0, List.of());
             }
             log.info(
                     "✅ TMDB: Busca concluída query='{}' resultados={}",
-                    queryFinal,
+                    LogSanitizer.sanitizeQuery(queryFinal),
                     response.results().size());
             return response;
         } catch (Exception e) {
-            log.error("❌ TMDB: erro na busca query='{}'", queryFinal, e);
+            log.error(
+                    "❌ TMDB: erro na busca query='{}'", LogSanitizer.sanitizeQuery(queryFinal), e);
             throw e;
         }
     }
 
     @Retryable(
-            includes = Exception.class,
+            includes = {java.io.IOException.class, HttpClientErrorException.class},
             maxRetries = 2,
             delay = 1000,
             multiplier = 2,
@@ -132,13 +137,20 @@ public class TmdbClient {
                         .body(MovieRecord.class);
         if (response == null) {
             log.error("❌ TMDB: resposta inválida ao buscar detalhes movieId={}", movieId);
-            throw new IllegalStateException("Falha ao buscar detalhes do filme");
+            throw new IllegalStateException(BotMessages.FALHA_BUSCAR_DETALHES_FILME);
         }
-        log.info("✅ TMDB: Detalhes obtidos movieId={} title={}", movieId, response.title());
+        log.info(
+                "✅ TMDB: Detalhes obtidos movieId={} title={}",
+                movieId,
+                LogSanitizer.sanitize(response.title()));
         return response;
     }
 
-    @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
+    @Retryable(
+            includes = {java.io.IOException.class, HttpClientErrorException.class},
+            maxRetries = 1,
+            delay = 500,
+            multiplier = 2)
     public List<CastRecord> buscarElenco(Long movieId) {
         log.debug("TMDB: Buscando elenco movieId={}", movieId);
         CreditsResponse response =
@@ -155,7 +167,11 @@ public class TmdbClient {
         return response.cast();
     }
 
-    @Retryable(includes = Exception.class, maxRetries = 1, delay = 500, multiplier = 2)
+    @Retryable(
+            includes = {java.io.IOException.class, HttpClientErrorException.class},
+            maxRetries = 1,
+            delay = 500,
+            multiplier = 2)
     public String buscarDiretor(Long movieId) {
         log.debug("TMDB: Buscando diretor para movieId={}", movieId);
         CreditsResponse response =
@@ -290,6 +306,11 @@ public class TmdbClient {
     // ------------------------------------------------------------------------
     // MÉTODO LEGADO (para compatibilidade)
     // ------------------------------------------------------------------------
+    /**
+     * @deprecated Use {@link #buscarOndeAssistirFilme(Long)} ou {@link
+     *     #buscarOndeAssistirSerie(Long)}. Este método será removido na v2.0.
+     */
+    @Deprecated(since = "1.3.1", forRemoval = true)
     public String buscarOndeAssistir(Long movieId) {
         return buscarOndeAssistirFilme(movieId);
     }
@@ -327,9 +348,12 @@ public class TmdbClient {
                         .body(TvRecord.class);
         if (response == null) {
             log.error("❌ TMDB: resposta inválida ao buscar detalhes da série tvId={}", tvId);
-            throw new IllegalStateException("Falha ao buscar detalhes da série");
+            throw new IllegalStateException(BotMessages.FALHA_BUSCAR_DETALHES_SERIE);
         }
-        log.info("✅ TMDB: Detalhes da série obtidos tvId={} name={}", tvId, response.name());
+        log.info(
+                "✅ TMDB: Detalhes da série obtidos tvId={} name={}",
+                tvId,
+                LogSanitizer.sanitize(response.name()));
         return response;
     }
 }

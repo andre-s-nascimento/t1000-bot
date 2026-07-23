@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
 @Slf4j
 @Component
@@ -45,7 +46,7 @@ public class DatabaseInitializer {
                 log.info("Coluna raw_text adicionada à tabela transcripts");
             }
         } catch (Exception e) {
-            log.error("Erro ao verificar/adicionar coluna raw_text", e);
+            log.error("Erro ao verificar/adicionar coluna raw_text: {}", e.getMessage());
         }
 
         // Tabela releases_notified
@@ -85,7 +86,10 @@ public class DatabaseInitializer {
                 log.info("Coluna {} adicionada à tabela {}", column, table);
             }
         } catch (Exception e) {
-            log.warn("Não foi possível verificar/adicionar coluna {}: {}", column, e.getMessage());
+            log.warn(
+                    "Não foi possível verificar/adicionar coluna {}: {}",
+                    column,
+                    LogSanitizer.sanitize(e.getMessage()));
         }
     }
 }

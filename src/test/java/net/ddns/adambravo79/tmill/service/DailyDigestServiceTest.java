@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -16,8 +17,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.HttpClientErrorException;
 
 import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
@@ -42,7 +45,7 @@ class DailyDigestServiceTest {
     }
 
     // =========================
-    // 🧪 TESTE DE GERAÇÃO DE DIGEST
+    // TESTES DE GERAÇÃO DE DIGEST
     // =========================
 
     @Test
@@ -76,9 +79,9 @@ class DailyDigestServiceTest {
                                 "timestamp",
                                 from.plusMinutes(10).toString()));
 
-        // Uso de anyString() e any(Object[].class) para resolver ambiguidade
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
-                .thenReturn(messages, transcripts);
+                .thenReturn(messages)
+                .thenReturn(transcripts);
         when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
                 .thenReturn("Resumo do digest");
 
@@ -95,7 +98,8 @@ class DailyDigestServiceTest {
         LocalDateTime from = LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).minusDays(1);
         LocalDateTime to = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
-                .thenReturn(List.of(), List.of());
+                .thenReturn(List.of())
+                .thenReturn(List.of());
 
         service.generateDigestCustom(from, to, CHAT_ID);
 
@@ -119,7 +123,8 @@ class DailyDigestServiceTest {
                                 "timestamp",
                                 from.plusMinutes(1).toString()));
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
-                .thenReturn(messages, List.of());
+                .thenReturn(messages)
+                .thenReturn(List.of());
         when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
                 .thenReturn("Resumo truncado");
 
@@ -147,7 +152,8 @@ class DailyDigestServiceTest {
                                 "timestamp",
                                 from.plusMinutes(1).toString()));
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
-                .thenReturn(messages, List.of());
+                .thenReturn(messages)
+                .thenReturn(List.of());
         when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
                 .thenReturn("<ul><li>Item</li></ul><b>Negrito</b>");
 
@@ -177,13 +183,20 @@ class DailyDigestServiceTest {
                                 "timestamp",
                                 from.plusMinutes(1).toString()));
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
-                .thenReturn(messages, List.of());
+                .thenReturn(messages)
+                .thenReturn(List.of());
         when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
                 .thenReturn("Resumo com <b>tag aberta");
 
-        doThrow(new RuntimeException("can't parse entities"))
-                .when(telegramFacade)
-                .enviarMensagemHtml(eq(CHAT_ID), anyString());
+        HttpClientErrorException ex =
+                HttpClientErrorException.create(
+                        HttpStatusCode.valueOf(400),
+                        "can't parse entities",
+                        null,
+                        null,
+                        StandardCharsets.UTF_8);
+
+        doThrow(ex).when(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), anyString());
 
         service.generateDigestCustom(from, to, CHAT_ID);
 
@@ -192,32 +205,61 @@ class DailyDigestServiceTest {
     }
 
     // =========================
-    // 🧪 TESTES DE SANITIZAÇÃO DIRETA
+    // TESTES DE SANITIZAÇÃO (via comportamento público)
     // =========================
 
     @Test
-    void sanitizeDigestText_deveRemoverTagsNaoPermitidas() {
-        String texto = "<ul><li>Item 1</li><li>Item 2</li></ul><br><b>Negrito</b>";
-        String resultado = ReflectionTestUtils.invokeMethod(service, "sanitizeDigestText", texto);
+    void deveSanitizarTagsNaoPermitidasNoDigest() throws Exception {
+        LocalDateTime from = LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).minusDays(1);
+        LocalDateTime to = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+
+        List<Map<String, Object>> messages =
+                List.of(
+                        Map.of(
+                                "user_name",
+                                "User1",
+                                "text",
+                                "Mensagem",
+                                "timestamp",
+                                from.plusMinutes(1).toString()));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(messages)
+                .thenReturn(List.of());
+        when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
+                .thenReturn("<ul><li>Item 1</li><li>Item 2</li></ul><br><b>Negrito</b>");
+
+        service.generateDigestCustom(from, to, CHAT_ID);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), captor.capture());
+        String resultado = captor.getValue();
         assertThat(resultado)
                 .doesNotContain("<ul>", "</ul>", "<li>", "</li>", "<br>")
                 .contains("<b>Negrito</b>", "• Item 1", "• Item 2");
     }
 
     @Test
-    void sanitizeDigestText_deveLidarComTextoNull() {
-        String resultado =
-                ReflectionTestUtils.invokeMethod(service, "sanitizeDigestText", (Object) null);
-        assertThat(resultado).isEmpty();
-    }
+    void deveLidarComResumoNuloDoGroq() throws Exception {
+        LocalDateTime from = LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).minusDays(1);
+        LocalDateTime to = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
 
-    // =========================
-    // 🧪 TESTE DE CONSTRUÇÃO DE MENSAGENS (esboço – será preenchido depois)
-    // =========================
+        List<Map<String, Object>> messages =
+                List.of(
+                        Map.of(
+                                "user_name",
+                                "User1",
+                                "text",
+                                "Mensagem",
+                                "timestamp",
+                                from.plusMinutes(1).toString()));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(messages)
+                .thenReturn(List.of());
+        when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
+                .thenReturn(null);
 
-    @Test
-    void buildMessagesBlock_deveAgruparPorBlocos() {
-        // Este teste será implementado em uma iteração futura
-        assertThat(true).isTrue(); // placeholder para evitar warning de teste sem asserção
+        service.generateDigestCustom(from, to, CHAT_ID);
+
+        verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 }

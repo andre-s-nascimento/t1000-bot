@@ -19,6 +19,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
+import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
 @Slf4j
 @Component
@@ -33,7 +34,7 @@ public class TelegramFacade {
 
     @PostConstruct
     public void init() {
-        log.info("🔑 Token carregado: {}", botToken.substring(0, 4) + "...");
+        log.info("🔑 Token carregado: {}", maskToken(botToken));
     }
 
     public void enviarMensagem(long chatId, String texto) {
@@ -137,8 +138,8 @@ public class TelegramFacade {
                         log.warn(
                                 "⚠️ Falha ao enviar mídia para chatId {}: {}. Enviando apenas"
                                         + " texto.",
-                                chatId,
-                                e.getMessage());
+                                LogSanitizer.sanitizeId(chatId),
+                                LogSanitizer.sanitize(e.getMessage()));
                         enviarMensagem(chatId, caption);
                     }
                 });
@@ -149,7 +150,7 @@ public class TelegramFacade {
         try {
             executor.execute(new SendMessage(chatId, texto));
         } catch (Exception e) {
-            log.error("Falha no fallback", e);
+            log.error("Falha no fallback: {}", LogSanitizer.sanitize(e.getMessage()));
         }
     }
 
@@ -170,8 +171,9 @@ public class TelegramFacade {
     public byte[] downloadFile(File file) {
         String filePath = file.filePath();
         String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
+        HttpURLConnection conn = null;
         try {
-            HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+            conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setConnectTimeout(30_000); // 30s para conectar
             conn.setReadTimeout(120_000); // 120s para ler (arquivos grandes)
             try (InputStream is = conn.getInputStream()) {
@@ -179,6 +181,18 @@ public class TelegramFacade {
             }
         } catch (IOException e) {
             throw new TelegramFileException("Erro ao baixar arquivo: " + filePath, e);
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
         }
+    }
+
+    /** Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4 últimos caracteres. */
+    private static String maskToken(String token) {
+        if (token == null || token.length() < 8) {
+            return "***";
+        }
+        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
     }
 }

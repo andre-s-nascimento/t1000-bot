@@ -1,4 +1,3 @@
-/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.util.List;
@@ -11,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.TmdbClient;
+import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
 import net.ddns.adambravo79.tmill.model.CastRecord;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
@@ -54,7 +54,7 @@ public class MovieService {
 
         var busca = tmdbClient.pesquisarFilme(sanitized);
         if (busca == null || busca.results() == null || busca.results().isEmpty()) {
-            throw new MovieNotFoundException("Filme não encontrado: " + nome);
+            throw new MovieNotFoundException(BotMessages.FILME_NAO_ENCONTRADO + ": " + nome);
         }
         return busca;
     }
@@ -83,7 +83,8 @@ public class MovieService {
 
         MovieRecord detalhes = detalhesFuture.join();
         if (detalhes == null) {
-            throw new MovieNotFoundException("Detalhes do filme não encontrados para ID: " + id);
+            throw new MovieNotFoundException(
+                    BotMessages.FALHA_BUSCAR_DETALHES_FILME + " para ID: " + id);
         }
 
         // 🔥 Limitar elenco aos 5 primeiros nomes e exibir total restante
@@ -104,9 +105,9 @@ public class MovieService {
         String ano =
                 (detalhes.releaseDate() != null && detalhes.releaseDate().length() >= 4)
                         ? detalhes.releaseDate().substring(0, 4)
-                        : "TBA";
+                        : BotMessages.TBA;
 
-        String bandeiras = "🌐";
+        String bandeiras = BotMessages.GLOBE_EMOJI;
         if (detalhes.originCountry() != null && !detalhes.originCountry().isEmpty()) {
             StringBuilder sb = new StringBuilder();
             for (String code : detalhes.originCountry()) {
@@ -140,7 +141,7 @@ public class MovieService {
                         bandeiras,
                         linkTmdb,
                         detalhes.voteAverage(),
-                        (diretor != null && !diretor.isBlank()) ? diretor : "N/A",
+                        (diretor != null && !diretor.isBlank()) ? diretor : BotMessages.N_A,
                         elenco,
                         escapeHtml(detalhes.overview()),
                         streamings,

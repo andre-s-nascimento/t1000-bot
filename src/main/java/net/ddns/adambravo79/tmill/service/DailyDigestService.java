@@ -1,10 +1,15 @@
-/* (c) 2026 | 18/05/2026 */
+/* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.service;
+
+import static net.ddns.adambravo79.tmill.constant.BotMessages.BRAZIL_ZONE;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_DD_MM_YYYY_HH_MM;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -12,9 +17,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 import jakarta.annotation.PostConstruct;
 import lombok.Builder;
@@ -22,16 +30,44 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.GroqClient;
+import net.ddns.adambravo79.tmill.constant.BotMessages;
+import net.ddns.adambravo79.tmill.exception.DigestGenerationException;
+import net.ddns.adambravo79.tmill.exception.DigestSendException;
+import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramMessageSplitter;
 
+/**
+ * Serviço responsável pela geração e envio de digests diários de conversas.
+ *
+ * <p>Exception handling strategy:
+ *
+ * <ul>
+ *   <li>{@link DataAccessException} — erro no banco de dados; log + skip digest.
+ *   <li>{@link HttpClientErrorException} — erro no Groq (rate limit, auth, etc.).
+ *   <li>{@link GroqRateLimitException} — rate limit específico do Groq.
+ *   <li>{@link DigestGenerationException} — erro na geração do conteúdo do digest.
+ *   <li>{@link DigestSendException} — erro no envio para o Telegram.
+ *   <li>Erros fatais (Error, InterruptedException) — NUNCA engolidos.
+ * </ul>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DailyDigestService {
 
     private static final int MAX_PROMPT_SIZE = 32000;
+    private static final int ALLOWED_MESSAGES_MARGIN = 4000;
+    private static final int TRUNCATE_SLICE_DIVISOR = 3;
+
+    /** Formato interno para queries SQL: yyyy-MM-dd HH:mm:ss */
+    private static final DateTimeFormatter SQL_DTF =
+            DateTimeFormatter.ofPattern(BotMessages.FMT_YYYY_MM_DD + " HH:mm:ss");
+
+    private static final DateTimeFormatter HOUR_FORMAT = DateTimeFormatter.ofPattern(FMT_HH_MM);
+    private static final DateTimeFormatter HEADER_FORMAT =
+            DateTimeFormatter.ofPattern(FMT_DD_MM_YYYY_HH_MM);
 
     private final JdbcTemplate jdbcTemplate;
     private final GroqClient groqClient;
@@ -47,51 +83,144 @@ public class DailyDigestService {
 
     @PostConstruct
     public void init() {
-        if (digestChatIdsStr != null && !digestChatIdsStr.isBlank()) {
-            for (String s : digestChatIdsStr.split(",")) {
-                try {
-                    digestChatIds.add(Long.parseLong(s.trim()));
-                } catch (NumberFormatException e) {
-                    log.warn("ID inválido em digest.chat-ids: {}", s);
-                }
-            }
-            log.info("📊 Digests serão enviados para os chats: {}", digestChatIds);
-        } else {
+        if (digestChatIdsStr == null || digestChatIdsStr.isBlank()) {
             log.info("Nenhum chat configurado para digest.");
+            return;
+        }
+
+        for (String s : digestChatIdsStr.split(",")) {
+            String trimmed = s.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                digestChatIds.add(Long.parseLong(trimmed));
+            } catch (NumberFormatException e) {
+                log.warn("ID inválido em digest.chat-ids: '{}' — ignorado", s);
+            }
+        }
+
+        if (!digestChatIds.isEmpty()) {
+            log.info("📊 Digests serão enviados para os chats: {}", digestChatIds);
         }
     }
 
+    /**
+     * Gera um digest para um período personalizado e chat específico.
+     *
+     * @param from início do período
+     * @param to fim do período
+     * @param specificChatId chat alvo (null para todos os chats configurados)
+     * @throws IllegalArgumentException se from estiver após to
+     * @throws DigestGenerationException se houver erro na geração do digest
+     * @throws DigestSendException se houver erro no envio
+     */
     public void generateDigestCustom(LocalDateTime from, LocalDateTime to, Long specificChatId) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException(
+                    "Período não pode ser nulo (from=" + from + ", to=" + to + ")");
+        }
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException(
+                    "Período inválido: from (" + from + ") está após to (" + to + ")");
+        }
         generateDigest(from, to, "PERÍODO PERSONALIZADO", specificChatId);
     }
 
-    @Scheduled(cron = "0 30 8 * * *", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 30 8 * * *", zone = BRAZIL_ZONE)
     public void generateMorningDigest() {
         if (!digestEnabled || digestChatIds.isEmpty()) {
+            log.debug("Digest matinal desabilitado ou sem chats configurados.");
             return;
         }
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDateTime now = LocalDateTime.now(ZoneId.of(BRAZIL_ZONE));
         LocalDateTime from = now.minusDays(1).withHour(20).withMinute(30).withSecond(0);
         LocalDateTime to = now.withHour(8).withMinute(30).withSecond(0);
         generateDigest(from, to, "RESUMO DA MADRUGADA/MANHÃ", null);
     }
 
-    @Scheduled(cron = "0 30 20 * * *", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 30 20 * * *", zone = BRAZIL_ZONE)
     public void generateEveningDigest() {
         if (!digestEnabled || digestChatIds.isEmpty()) {
+            log.debug("Digest noturno desabilitado ou sem chats configurados.");
             return;
         }
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDateTime now = LocalDateTime.now(ZoneId.of(BRAZIL_ZONE));
         LocalDateTime from = now.withHour(8).withMinute(30).withSecond(0);
         LocalDateTime to = now.withHour(20).withMinute(30).withSecond(0);
         generateDigest(from, to, "RESUMO DO DIA", null);
     }
 
+    // ======================== CORE PIPELINE ========================
+
     private void generateDigest(
             LocalDateTime from, LocalDateTime to, String periodLabel, Long specificChatId) {
+
         log.info("Gerando {} | {} -> {}", periodLabel, from, to);
 
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        try {
+            List<ChatMessage> allMessages = fetchMessages(from, to);
+
+            if (allMessages.isEmpty()) {
+                log.info("Nenhuma interação encontrada no período.");
+                return;
+            }
+
+            String finalMessages = buildMessagesBlock(allMessages);
+            finalMessages = truncateIfNeeded(finalMessages);
+
+            log.info("📦 Mensagens finais size={}", finalMessages.length());
+
+            String summary = generateSummary(finalMessages, periodLabel);
+            if (summary == null || summary.isBlank()) {
+                log.warn("Resumo vazio do Groq para período {}.", periodLabel);
+                return;
+            }
+
+            String finalMessage = buildHeader(periodLabel, from, to) + sanitizeDigestText(summary);
+            Set<Long> targets = specificChatId != null ? Set.of(specificChatId) : digestChatIds;
+
+            for (Long chatId : targets) {
+                sendDigestToChat(chatId, finalMessage);
+            }
+
+        } catch (DataAccessException e) {
+            log.error("❌ Erro de acesso ao banco de dados ao gerar digest {}", periodLabel, e);
+            // Não relança — digest é best-effort, mas logamos severamente
+
+        } catch (HttpClientErrorException e) {
+            log.error(
+                    "❌ Erro HTTP do Groq ao gerar digest {}: {}",
+                    periodLabel,
+                    e.getStatusCode(),
+                    e);
+            // Rate limit ou erro de autenticação — não retry aqui, apenas log
+
+        } catch (GroqRateLimitException e) {
+            log.error(
+                    "❌ Rate limit do Groq ao gerar digest {}. Considerar retry agendado.",
+                    periodLabel,
+                    e);
+
+        } catch (DigestGenerationException e) {
+            log.error("❌ Falha na geração do digest {}", periodLabel, e);
+
+        } catch (DigestSendException e) {
+            log.error("❌ Falha no envio do digest {}", periodLabel, e);
+
+        } catch (RuntimeException e) {
+            log.error("❌ Erro inesperado de runtime ao gerar digest {}", periodLabel, e);
+            throw new DigestGenerationException(
+                    "Erro inesperado ao gerar digest: " + periodLabel, e);
+        }
+    }
+
+    // ======================== FETCH & BUILD ========================
+
+    private List<ChatMessage> fetchMessages(LocalDateTime from, LocalDateTime to) {
+        String fromStr = from.format(SQL_DTF);
+        String toStr = to.format(SQL_DTF);
+
         List<Map<String, Object>> messages =
                 jdbcTemplate.queryForList(
                         """
@@ -100,8 +229,8 @@ public class DailyDigestService {
             WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
             ORDER BY timestamp ASC
             """,
-                        from.format(dtf),
-                        to.format(dtf));
+                        fromStr,
+                        toStr);
 
         List<Map<String, Object>> transcripts =
                 jdbcTemplate.queryForList(
@@ -111,81 +240,45 @@ public class DailyDigestService {
             WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
             ORDER BY timestamp ASC
             """,
-                        from.format(dtf),
-                        to.format(dtf));
+                        fromStr,
+                        toStr);
 
-        if (messages.isEmpty() && transcripts.isEmpty()) {
-            log.info("Nenhuma interação encontrada.");
-            return;
-        }
+        List<ChatMessage> allMessages = new ArrayList<>(messages.size() + transcripts.size());
 
-        List<ChatMessage> allMessages = new ArrayList<>();
         for (Map<String, Object> row : messages) {
-            allMessages.add(
-                    ChatMessage.builder()
-                            .user((String) row.get("user_name"))
-                            .text((String) row.get("text"))
-                            .timestamp(String.valueOf(row.get("timestamp")))
-                            .audio(false)
-                            .build());
+            allMessages.add(buildChatMessage(row, false));
         }
         for (Map<String, Object> row : transcripts) {
-            allMessages.add(
-                    ChatMessage.builder()
-                            .user((String) row.get("user_name"))
-                            .text((String) row.get("text"))
-                            .timestamp(String.valueOf(row.get("timestamp")))
-                            .audio(true)
-                            .build());
+            allMessages.add(buildChatMessage(row, true));
         }
 
         allMessages.sort(Comparator.comparing(ChatMessage::getTimestamp));
+        return allMessages;
+    }
 
-        String finalMessages = buildMessagesBlock(allMessages);
-        if (finalMessages.length() > MAX_PROMPT_SIZE) {
-            int allowedMessagesSize = MAX_PROMPT_SIZE - 4000;
-            log.warn(
-                    "✂️ Mensagens truncadas de {} para {} chars",
-                    finalMessages.length(),
-                    allowedMessagesSize);
-            int slice = allowedMessagesSize / 3;
-            String start = finalMessages.substring(0, Math.min(slice, finalMessages.length()));
-            String middle =
-                    finalMessages.substring(
-                            Math.max(0, (finalMessages.length() / 2) - (slice / 2)),
-                            Math.min(
-                                    finalMessages.length(),
-                                    (finalMessages.length() / 2) + (slice / 2)));
-            String end = finalMessages.substring(Math.max(0, finalMessages.length() - slice));
-            finalMessages = start + "\n\n[...]\n\n" + middle + "\n\n[...]\n\n" + end;
-        }
-
-        log.info("📦 Mensagens finais size={}", finalMessages.length());
-
-        try {
-            DigestPersona persona = DigestPersona.T1000;
-            String summary = groqClient.gerarResumoDigest(finalMessages, persona, periodLabel);
-            if (summary == null || summary.isBlank()) {
-                log.warn("Resumo vazio.");
-                return;
-            }
-
-            String finalMessage = buildHeader(periodLabel, from, to) + sanitizeDigestText(summary);
-            Set<Long> targets = specificChatId != null ? Set.of(specificChatId) : digestChatIds;
-            for (Long chatId : targets) {
-                sendDigestToChat(chatId, finalMessage);
-            }
-        } catch (Exception e) {
-            log.error("❌ Erro ao gerar digest", e);
-        }
+    private ChatMessage buildChatMessage(Map<String, Object> row, boolean isAudio) {
+        String user = (String) row.get("user_name");
+        String text = (String) row.get("text");
+        String timestamp = String.valueOf(row.get("timestamp"));
+        return ChatMessage.builder()
+                .user(user != null ? user : "Desconhecido")
+                .text(text != null ? text : "")
+                .timestamp(timestamp)
+                .audio(isAudio)
+                .build();
     }
 
     private String buildMessagesBlock(List<ChatMessage> messages) {
         StringBuilder sb = new StringBuilder();
-        DateTimeFormatter hourFormat = DateTimeFormatter.ofPattern("HH:mm");
         LocalDateTime previous = null;
+
         for (ChatMessage msg : messages) {
-            LocalDateTime current = LocalDateTime.parse(msg.getTimestamp().replace(" ", "T"));
+            LocalDateTime current = parseTimestampSafely(msg.getTimestamp());
+            if (current == null) {
+                log.warn("Timestamp inválido ignorado: {}", msg.getTimestamp());
+                continue;
+            }
+
             if (previous != null) {
                 long diff = Duration.between(previous, current).toMinutes();
                 if (diff >= 20) {
@@ -194,10 +287,11 @@ public class DailyDigestService {
                     sb.append("==============================\n\n");
                 }
             }
+
             String line =
                     String.format(
                             "[%s] %s%s: %s%n",
-                            hourFormat.format(current),
+                            HOUR_FORMAT.format(current),
                             msg.getUser(),
                             msg.isAudio() ? " (áudio)" : "",
                             msg.getText());
@@ -207,19 +301,83 @@ public class DailyDigestService {
         return sb.toString();
     }
 
+    /** Faz parse seguro de timestamp, suportando formatos com e sem 'T'. */
+    private LocalDateTime parseTimestampSafely(String timestamp) {
+        if (timestamp == null || timestamp.isBlank()) {
+            return null;
+        }
+        try {
+            String normalized = timestamp.replace(" ", "T");
+            return LocalDateTime.parse(normalized);
+        } catch (DateTimeParseException e) {
+            log.warn("Não foi possível parsear timestamp: '{}'", timestamp);
+            return null;
+        }
+    }
+
+    private String truncateIfNeeded(String finalMessages) {
+        if (finalMessages.length() <= MAX_PROMPT_SIZE) {
+            return finalMessages;
+        }
+
+        int allowedMessagesSize = MAX_PROMPT_SIZE - ALLOWED_MESSAGES_MARGIN;
+        log.warn(
+                "✂️ Mensagens truncadas de {} para {} chars",
+                finalMessages.length(),
+                allowedMessagesSize);
+
+        int slice = allowedMessagesSize / TRUNCATE_SLICE_DIVISOR;
+        int len = finalMessages.length();
+
+        String start = safeSubstring(finalMessages, 0, slice);
+        String middle =
+                safeSubstring(
+                        finalMessages,
+                        Math.max(0, (len / 2) - (slice / 2)),
+                        Math.min(len, (len / 2) + (slice / 2)));
+        String end = safeSubstring(finalMessages, Math.max(0, len - slice), len);
+
+        return start + "\n\n[...]\n\n" + middle + "\n\n[...]\n\n" + end;
+    }
+
+    private String safeSubstring(String str, int begin, int end) {
+        int safeBegin = Math.max(0, Math.min(begin, str.length()));
+        int safeEnd = Math.max(safeBegin, Math.min(end, str.length()));
+        return str.substring(safeBegin, safeEnd);
+    }
+
+    // ======================== SUMMARY ========================
+
+    private String generateSummary(String finalMessages, String periodLabel) {
+        try {
+            DigestPersona persona = DigestPersona.T1000;
+            return groqClient.gerarResumoDigest(finalMessages, persona, periodLabel);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            throw new GroqRateLimitException("Rate limit do Groq ao gerar resumo", e);
+        } catch (HttpClientErrorException e) {
+            throw new DigestGenerationException(
+                    "Erro HTTP do Groq ao gerar resumo: " + e.getStatusCode(), e);
+        } catch (ResourceAccessException e) {
+            throw new DigestGenerationException("Falha de conectividade com Groq", e);
+        }
+    }
+
     private String buildHeader(String periodLabel, LocalDateTime from, LocalDateTime to) {
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
         return String.format(
                 """
         <b>📊 %s</b>
         <i>Período: %s - %s</i>
 
         """,
-                periodLabel, from.format(fmt), to.format(fmt));
+                periodLabel, from.format(HEADER_FORMAT), to.format(HEADER_FORMAT));
     }
 
+    // ======================== SANITIZE ========================
+
     private String sanitizeDigestText(String text) {
-        if (text == null) return "";
+        if (text == null) {
+            return "";
+        }
 
         // 1. Converte quebras de linha
         String sanitized =
@@ -228,19 +386,7 @@ public class DailyDigestService {
                         .replaceAll("(?i)<li\\s*>", "• ")
                         .replaceAll("(?i)</li\\s*>", "\n");
 
-        // 2. Remove todas as tags HTML, exceto as permitidas
-        // Lista de tags permitidas (abertura e fechamento)
-        String allowedTags = "(/?(?:b|i|u|s|code|pre|a)(?:\\s+[^>]*)?)";
-        // Substitui qualquer tag que não seja permitida por vazio
-        // Usamos um loop para lidar com tags aninhadas (simplificado)
-        // Primeiro, escapamos todas as tags que não são permitidas
-        // Vamos usar uma abordagem com regex para remover tags não permitidas
-        // Mas cuidado: não podemos simplesmente remover tudo, pois pode quebrar o texto.
-        // Vamos usar uma abordagem mais segura: substituir < por &lt; e > por &gt; fora das tags
-        // permitidas.
-        // Por simplicidade, faremos uma limpeza passo a passo:
-
-        // Protege as tags permitidas temporariamente
+        // 2. Protege tags permitidas temporariamente
         String protectedText =
                 sanitized
                         .replace("<b>", "##B_OPEN##")
@@ -255,15 +401,13 @@ public class DailyDigestService {
                         .replace("</code>", "##C_CLOSE##")
                         .replace("<pre>", "##P_OPEN##")
                         .replace("</pre>", "##P_CLOSE##")
-                        // Protege tags <a> com seus atributos (simplificado)
                         .replaceAll("<a\\s+[^>]*>", "##A_OPEN##")
                         .replace("</a>", "##A_CLOSE##");
 
-        // Agora escapa todos os caracteres < e > que sobraram (não protegidos)
-        // Substitui < por &lt; e > por &gt;
+        // 3. Escapa caracteres < e > restantes
         String escaped = protectedText.replace("<", "&lt;").replace(">", "&gt;");
 
-        // Restaura as tags permitidas
+        // 4. Restaura tags permitidas
         String restored =
                 escaped.replace("##B_OPEN##", "<b>")
                         .replace("##B_CLOSE##", "</b>")
@@ -277,29 +421,18 @@ public class DailyDigestService {
                         .replace("##C_CLOSE##", "</code>")
                         .replace("##P_OPEN##", "<pre>")
                         .replace("##P_CLOSE##", "</pre>")
-                        .replace(
-                                "##A_OPEN##",
-                                "<a>") // Simplificado: perde atributos, mas evita erro
+                        .replace("##A_OPEN##", "<a>")
                         .replace("##A_CLOSE##", "</a>");
 
-        // Remove tags <a> vazias (sem href) - opcional
-        restored = restored.replaceAll("<a>\\s*</a>", "");
-
-        return restored;
+        // Remove tags <a> vazias
+        return restored.replaceAll("<a>\\s*</a>", "");
     }
 
-    @Data
-    @Builder
-    private static class ChatMessage {
-        private String user;
-        private String text;
-        private String timestamp;
-        private boolean audio;
-    }
+    // ======================== SEND ========================
 
     /**
-     * Envia o digest para um chat específico, tentando com HTML primeiro. Se houver erro de parse
-     * (tags não fechadas), reenvia o mesmo conteúdo em texto puro.
+     * Envia o digest para um chat específico. Se falhar, lança DigestSendException para que o caller
+     * possa decidir.
      */
     private void sendDigestToChat(Long chatId, String finalMessage) {
         try {
@@ -308,27 +441,61 @@ public class DailyDigestService {
                 sendChunk(chatId, chunk);
             }
             log.info("✅ Digest enviado chatId={}", chatId);
-        } catch (Exception e) {
+        } catch (DigestSendException e) {
             log.error("❌ Falha ao enviar digest chatId={}", chatId, e);
+            throw e; // Repropaga para o caller decidir
+        } catch (RuntimeException e) {
+            log.error("❌ Erro inesperado ao enviar digest chatId={}", chatId, e);
+            throw new DigestSendException(
+                    "Erro inesperado no envio do digest para chatId=" + chatId, e);
         }
     }
 
     /**
-     * Envia um chunk de mensagem, tentando com HTML primeiro. Se houver erro de parse, reenvia em
-     * texto puro.
+     * Envia um chunk de mensagem, tentando com HTML primeiro. Se houver erro de parse de entidades
+     * HTML, reenvia em texto puro.
      */
-    private void sendChunk(Long chatId, String chunk) throws Exception {
+    private void sendChunk(Long chatId, String chunk) {
         try {
             telegramFacade.enviarMensagemHtml(chatId, chunk);
-        } catch (Exception e) {
-            // Se falhar por parse de entidades, reenvia o mesmo chunk sem parse_mode
-            if (e.getMessage() != null && e.getMessage().contains("can't parse entities")) {
+        } catch (HttpClientErrorException.BadRequest e) {
+            if (isHtmlParseError(e)) {
                 log.warn(
-                        "⚠️ Erro de parse HTML, reenviando como texto puro para chatId={}", chatId);
-                telegramFacade.enviarMensagem(chatId, chunk);
+                        "⚠️ Erro de parse HTML (BadRequest), reenviando como texto puro para"
+                                + " chatId={}",
+                        chatId);
+                try {
+                    telegramFacade.enviarMensagem(chatId, chunk);
+                } catch (RuntimeException fallbackEx) {
+                    throw new DigestSendException(
+                            "Falha no fallback de texto puro para chatId=" + chatId, fallbackEx);
+                }
             } else {
-                throw e;
+                throw new DigestSendException(
+                        "Erro BadRequest do Telegram (não é parse HTML) para chatId=" + chatId, e);
             }
+        } catch (HttpClientErrorException e) {
+            throw new DigestSendException(
+                    "Erro HTTP " + e.getStatusCode() + " do Telegram para chatId=" + chatId, e);
+        } catch (ResourceAccessException e) {
+            throw new DigestSendException(
+                    "Falha de conectividade com Telegram para chatId=" + chatId, e);
         }
+    }
+
+    private boolean isHtmlParseError(HttpClientErrorException.BadRequest e) {
+        String msg = e.getMessage();
+        return msg != null && msg.contains("can't parse entities");
+    }
+
+    // ======================== INNER CLASS ========================
+
+    @Data
+    @Builder
+    private static class ChatMessage {
+        private String user;
+        private String text;
+        private String timestamp;
+        private boolean audio;
     }
 }

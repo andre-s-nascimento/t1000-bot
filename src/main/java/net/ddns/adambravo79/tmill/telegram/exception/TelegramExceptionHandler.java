@@ -27,7 +27,7 @@ public class TelegramExceptionHandler {
     }
 
     private String mapearMensagem(Exception e) {
-        // Exceções customizadas do projeto
+        // 1. Exceções customizadas do projeto (prioridade alta)
         if (e instanceof TelegramFileException) {
             return "⚠️ Não consegui baixar o áudio.";
         }
@@ -37,53 +37,56 @@ public class TelegramExceptionHandler {
         if (e instanceof IOException) {
             return "📡 Problema de comunicação com o servidor.";
         }
+        if (e instanceof org.springframework.web.client.ResourceAccessException) {
+            return "⏱️ Timeout na comunicação com o servidor. Tente novamente.";
+        }
 
-        // Exceções específicas da biblioteca Pengrad
+        // 2. Exceções da biblioteca Pengrad
         if (e instanceof TelegramException) {
-            TelegramException te = (TelegramException) e;
-            String msg = te.getMessage();
-            if (msg != null && msg.contains("429")) {
-                return "⏳ Muitas requisições. Tente novamente em alguns segundos.";
-            }
-            if (msg != null && msg.contains("400") && msg.contains("chat not found")) {
-                return "❌ Não consegui encontrar este chat. Verifique se o ID está correto.";
-            }
-            if (msg != null && msg.toLowerCase().contains("unauthorized")) {
-                return "🔑 Token inválido ou expirado. Verifique suas credenciais.";
-            }
-            if (msg != null && msg.toLowerCase().contains("file is too big")) {
-                return "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.";
-            }
-            if (msg != null && msg.toLowerCase().contains("wrong file type")) {
-                return "🛑 Formato de arquivo não suportado. Envie em outro formato.";
-            }
-            if (msg != null && msg.toLowerCase().contains("timeout")) {
-                return "⏱️ O servidor demorou a responder. Tente novamente em instantes.";
-            }
-            return "⚠️ Erro ao falar com o Telegram: " + (msg != null ? msg : "erro desconhecido");
+            return mapearTelegramException((TelegramException) e);
         }
 
-        // Fallback baseado em mensagem
+        // 3. Fallback por análise de mensagem
+        return mapearPorMensagem(e.getMessage());
+    }
+
+    private String mapearTelegramException(TelegramException e) {
         String msg = e.getMessage();
-        if (msg != null) {
-            String lower = msg.toLowerCase();
-            if (lower.contains("429"))
-                return "⏳ Muitas requisições. Tente novamente em alguns segundos.";
-            if (lower.contains("timeout"))
-                return "⏱️ O servidor demorou a responder. Tente novamente em instantes.";
-            if (lower.contains("401") || lower.contains("unauthorized")) {
-                return "🔑 Token inválido ou expirado. Verifique suas credenciais.";
-            }
-            if (lower.contains("400") && lower.contains("chat not found")) {
-                return "❌ Não consegui encontrar este chat. Verifique se o ID está correto.";
-            }
-            if (lower.contains("file is too big")) {
-                return "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.";
-            }
-            if (lower.contains("wrong file type")) {
-                return "🛑 Formato de arquivo não suportado. Envie em outro formato.";
-            }
-        }
+        if (msg == null) return "⚠️ Erro ao falar com o Telegram: erro desconhecido";
+
+        String lower = msg.toLowerCase();
+        if (lower.contains("429"))
+            return "⏳ Muitas requisições. Tente novamente em alguns segundos.";
+        if (lower.contains("chat not found"))
+            return "❌ Não consegui encontrar este chat. Verifique se o ID está correto.";
+        if (lower.contains("unauthorized"))
+            return "🔑 Token inválido ou expirado. Verifique suas credenciais.";
+        if (lower.contains("file is too big"))
+            return "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.";
+        if (lower.contains("wrong file type"))
+            return "🛑 Formato de arquivo não suportado. Envie em outro formato.";
+        if (lower.contains("timeout"))
+            return "⏱️ O servidor demorou a responder. Tente novamente em instantes.";
+
+        return "⚠️ Erro ao falar com o Telegram: " + msg;
+    }
+
+    private String mapearPorMensagem(String msg) {
+        if (msg == null) return "⚠️ Ocorreu um erro inesperado.";
+
+        String lower = msg.toLowerCase();
+        if (lower.contains("429"))
+            return "⏳ Muitas requisições. Tente novamente em alguns segundos.";
+        if (lower.contains("timeout"))
+            return "⏱️ O servidor demorou a responder. Tente novamente em instantes.";
+        if (lower.contains("unauthorized"))
+            return "🔑 Token inválido ou expirado. Verifique suas credenciais.";
+        if (lower.contains("chat not found"))
+            return "❌ Não consegui encontrar este chat. Verifique se o ID está correto.";
+        if (lower.contains("file is too big"))
+            return "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.";
+        if (lower.contains("wrong file type"))
+            return "🛑 Formato de arquivo não suportado. Envie em outro formato.";
 
         return "⚠️ Ocorreu um erro inesperado.";
     }

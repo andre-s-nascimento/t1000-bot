@@ -13,6 +13,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -29,11 +30,11 @@ class MovieServiceTest {
     @Mock private TmdbClient tmdbClient;
     @Mock private EasterEggService easterEggService;
 
-    private MovieService movieService;
+    @InjectMocks private MovieService movieService;
 
     @BeforeEach
     void setUp() {
-        movieService = new MovieService(tmdbClient, easterEggService);
+        // stubEmptyEasterEgg é chamado nos testes que necessitam
     }
 
     // =========================
@@ -71,6 +72,23 @@ class MovieServiceTest {
         verify(tmdbClient).pesquisarFilme("válidotermo");
     }
 
+    @Test
+    void deveLancarExcecaoQuandoFilmeNaoEncontrado() {
+        when(tmdbClient.pesquisarFilme("xyz")).thenReturn(null);
+        assertThatThrownBy(() -> movieService.buscarFilme("xyz"))
+                .isInstanceOf(MovieNotFoundException.class)
+                .hasMessageContaining("Filme nao encontrado");
+    }
+
+    @Test
+    void deveLancarExcecaoQuandoListaVazia() {
+        when(tmdbClient.pesquisarFilme("xyz"))
+                .thenReturn(new MovieSearchResponse(1, 0, 0, List.of()));
+        assertThatThrownBy(() -> movieService.buscarFilme("xyz"))
+                .isInstanceOf(MovieNotFoundException.class)
+                .hasMessageContaining("Filme nao encontrado");
+    }
+
     // =========================
     // TESTES QUE CHAMAM buscarPorId (usam easterEggService)
     // =========================
@@ -78,13 +96,12 @@ class MovieServiceTest {
         when(easterEggService.getEasterEgg(anyLong())).thenReturn(Optional.empty());
     }
 
+    @SuppressWarnings("removal")
     @Test
     void deveFormatarRespostaCompleta() {
         stubEmptyEasterEgg();
         Long id = 1L;
 
-        // Simula a busca por nome (apenas para obter o ID, mas não usaremos executarBuscaFormatada)
-        // Vamos chamar diretamente buscarPorId
         when(tmdbClient.buscarDetalhes(id))
                 .thenReturn(
                         new MovieRecord(
@@ -116,6 +133,7 @@ class MovieServiceTest {
         assertThat(result.urlFoto()).contains("image.tmdb.org");
     }
 
+    @SuppressWarnings("removal")
     @Test
     void deveUsarGloboQuandoNaoHouverPais() {
         stubEmptyEasterEgg();
@@ -139,6 +157,7 @@ class MovieServiceTest {
         assertThat(result.textoFormatado()).contains("🌐");
     }
 
+    @SuppressWarnings("removal")
     @Test
     void deveUsarTBAQuandoSemData() {
         stubEmptyEasterEgg();
@@ -154,6 +173,7 @@ class MovieServiceTest {
         assertThat(result.textoFormatado()).contains("TBA");
     }
 
+    @SuppressWarnings("removal")
     @Test
     void deveUsarGloboQuandoPaisInvalido() {
         stubEmptyEasterEgg();
@@ -170,28 +190,42 @@ class MovieServiceTest {
     }
 
     @Test
-    void deveLancarExcecaoQuandoFilmeNaoEncontrado() {
-        when(tmdbClient.pesquisarFilme("xyz")).thenReturn(null);
-        assertThatThrownBy(() -> movieService.buscarFilme("xyz"))
-                .isInstanceOf(MovieNotFoundException.class)
-                .hasMessageContaining("Filme não encontrado");
-    }
-
-    @Test
-    void deveLancarExcecaoQuandoListaVazia() {
-        when(tmdbClient.pesquisarFilme("xyz"))
-                .thenReturn(new MovieSearchResponse(1, 0, 0, List.of()));
-        assertThatThrownBy(() -> movieService.buscarFilme("xyz"))
-                .isInstanceOf(MovieNotFoundException.class)
-                .hasMessageContaining("Filme não encontrado");
-    }
-
-    @Test
     void deveLancarExcecaoQuandoDetalhesForemNull() {
-        // não chame stubEmptyEasterEgg() aqui
+        // NÃO chamar stubEmptyEasterEgg() — o método lança exceção antes de usar o easterEggService
         when(tmdbClient.buscarDetalhes(1L)).thenReturn(null);
         assertThatThrownBy(() -> movieService.buscarPorId(1L))
                 .isInstanceOf(MovieNotFoundException.class)
-                .hasMessageContaining("Detalhes do filme não encontrados");
+                .hasMessageContaining("Falha ao buscar detalhes do filme para ID");
+    }
+
+    @SuppressWarnings("removal")
+    @Test
+    void deveIncluirEasterEggQuandoPresente() {
+        when(easterEggService.getEasterEgg(anyLong()))
+                .thenReturn(Optional.of("🎬 Easter Egg especial!"));
+        Long id = 42L;
+
+        when(tmdbClient.buscarDetalhes(id))
+                .thenReturn(
+                        new MovieRecord(
+                                id,
+                                "Filme Teste",
+                                "Test Movie",
+                                "2024",
+                                "desc",
+                                5.0,
+                                7.0,
+                                "/poster",
+                                List.of("US")));
+
+        when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
+        when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor");
+        when(tmdbClient.buscarOndeAssistir(id)).thenReturn("Prime Video");
+
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result.textoFormatado())
+                .contains("Easter Egg especial!")
+                .contains("Prime Video");
     }
 }

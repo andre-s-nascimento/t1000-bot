@@ -98,7 +98,7 @@ class AudioHandlerTest {
 
         audioHandler.handleAudioUpdate(update);
 
-        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Transcrição desativada"));
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Transcricao desativada"));
         verifyNoInteractions(fileService, audioService);
     }
 
@@ -354,7 +354,7 @@ class AudioHandlerTest {
 
         verify(telegramFacade)
                 .answerCallbackQuery(
-                        eq("cb123"), eq("Pedido expirado. Envie o áudio novamente."), eq(true));
+                        eq("cb123"), eq("Pedido expirado. Envie o audio novamente."), eq(true));
         verifyNoInteractions(cacheService, fileService, audioService);
     }
 
