@@ -1,195 +1,174 @@
 package net.ddns.adambravo79.tmill.telegram.core;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URI;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
 import com.pengrad.telegrambot.model.File;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.*;
 import com.pengrad.telegrambot.response.GetFileResponse;
-
 import io.ksilisk.telegrambot.core.executor.TelegramBotExecutor;
 import jakarta.annotation.PostConstruct;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class TelegramFacade {
 
-    private final TelegramBotExecutor executor;
-    private final TelegramSafeExecutor safeExecutor;
+  private final TelegramBotExecutor executor;
+  private final TelegramSafeExecutor safeExecutor;
 
-    @Value("${telegram.bot.token}")
-    private String botToken;
+  @Value("${telegram.bot.token}")
+  private String botToken;
 
-    @PostConstruct
-    public void init() {
-        log.info("🔑 Token carregado: {}", maskToken(botToken));
-    }
+  @PostConstruct
+  public void init() {
+    log.info("🔑 Token carregado: {}", maskToken(botToken));
+  }
 
-    public void enviarMensagem(long chatId, String texto) {
-        safeExecutor.run(
-                chatId,
-                this::enviarFallback,
-                () -> executor.execute(new SendMessage(chatId, texto)));
-    }
+  public void enviarMensagem(long chatId, String texto) {
+    safeExecutor.run(
+        chatId, this::enviarFallback, () -> executor.execute(new SendMessage(chatId, texto)));
+  }
 
-    public void enviarMensagemHtml(long chatId, String texto) {
-        safeExecutor.run(
-                chatId,
-                this::enviarFallback,
-                () -> executor.execute(new SendMessage(chatId, texto).parseMode(ParseMode.HTML)));
-    }
+  public void enviarMensagemHtml(long chatId, String texto) {
+    safeExecutor.run(
+        chatId,
+        this::enviarFallback,
+        () -> executor.execute(new SendMessage(chatId, texto).parseMode(ParseMode.HTML)));
+  }
 
-    public void enviarFotoHtml(long chatId, String url, String legenda) {
-        safeExecutor.run(
-                chatId,
-                this::enviarFallback,
-                () ->
-                        executor.execute(
-                                new SendPhoto(chatId, url)
-                                        .caption(legenda)
-                                        .parseMode(ParseMode.HTML)));
-    }
+  public void enviarFotoHtml(long chatId, String url, String legenda) {
+    safeExecutor.run(
+        chatId,
+        this::enviarFallback,
+        () ->
+            executor.execute(
+                new SendPhoto(chatId, url).caption(legenda).parseMode(ParseMode.HTML)));
+  }
 
-    public void enviarComBotoesHtml(long chatId, String texto, InlineKeyboardMarkup markup) {
-        safeExecutor.run(
-                chatId,
-                this::enviarFallback,
-                () ->
-                        executor.execute(
-                                new SendMessage(chatId, texto)
-                                        .parseMode(ParseMode.HTML)
-                                        .replyMarkup(markup)));
-    }
+  public void enviarComBotoesHtml(long chatId, String texto, InlineKeyboardMarkup markup) {
+    safeExecutor.run(
+        chatId,
+        this::enviarFallback,
+        () ->
+            executor.execute(
+                new SendMessage(chatId, texto).parseMode(ParseMode.HTML).replyMarkup(markup)));
+  }
 
-    public void editarMensagemHtml(long chatId, int messageId, String novoTexto) {
-        safeExecutor.run(
-                chatId,
-                this::enviarFallback,
-                () ->
-                        executor.execute(
-                                new EditMessageText(chatId, messageId, novoTexto)
-                                        .parseMode(ParseMode.HTML)));
-    }
+  public void editarMensagemHtml(long chatId, int messageId, String novoTexto) {
+    safeExecutor.run(
+        chatId,
+        this::enviarFallback,
+        () ->
+            executor.execute(
+                new EditMessageText(chatId, messageId, novoTexto).parseMode(ParseMode.HTML)));
+  }
 
-    public void editarMensagem(long chatId, int messageId, String novoTexto) {
-        safeExecutor.run(
-                chatId,
-                this::enviarFallback,
-                () -> executor.execute(new EditMessageText(chatId, messageId, novoTexto)));
-    }
+  public void editarMensagem(long chatId, int messageId, String novoTexto) {
+    safeExecutor.run(
+        chatId,
+        this::enviarFallback,
+        () -> executor.execute(new EditMessageText(chatId, messageId, novoTexto)));
+  }
 
-    public void answerCallbackQuery(String callbackQueryId, String mensagem, boolean showAlert) {
-        safeExecutor.run(
-                0L,
-                (id, msg) -> log.debug("Fallback para answerCallbackQuery"),
-                () ->
-                        executor.execute(
-                                new AnswerCallbackQuery(callbackQueryId)
-                                        .text(mensagem)
-                                        .showAlert(showAlert)));
-    }
+  public void answerCallbackQuery(String callbackQueryId, String mensagem, boolean showAlert) {
+    safeExecutor.run(
+        0L,
+        (id, msg) -> log.debug("Fallback para answerCallbackQuery"),
+        () ->
+            executor.execute(
+                new AnswerCallbackQuery(callbackQueryId).text(mensagem).showAlert(showAlert)));
+  }
 
-    public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
-        safeExecutor.run(
-                chatId,
-                this::enviarMensagem, // method reference
-                () -> {
-                    try {
-                        String lower = filePathOrUrl.toLowerCase();
-                        if (lower.endsWith(".mp4")
-                                || lower.endsWith(".mov")
-                                || lower.endsWith(".avi")) {
-                            executor.execute(
-                                    new SendVideo(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
-                        } else if (lower.endsWith(".gif")) {
-                            executor.execute(
-                                    new SendAnimation(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
-                        } else if (lower.endsWith(".jpg")
-                                || lower.endsWith(".jpeg")
-                                || lower.endsWith(".png")) {
-                            executor.execute(
-                                    new SendPhoto(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
-                        } else {
-                            executor.execute(
-                                    new SendPhoto(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
-                        }
-                    } catch (Exception e) {
-                        log.warn(
-                                "⚠️ Falha ao enviar mídia para chatId {}: {}. Enviando apenas"
-                                        + " texto.",
-                                LogSanitizer.sanitizeId(chatId),
-                                LogSanitizer.sanitize(e.getMessage()));
-                        enviarMensagem(chatId, caption);
-                    }
-                });
-    }
-
-    // Fallback simples (sem parse mode)
-    private void enviarFallback(long chatId, String texto) {
-        try {
-            executor.execute(new SendMessage(chatId, texto));
-        } catch (Exception e) {
-            log.error("Falha no fallback: {}", LogSanitizer.sanitize(e.getMessage()));
-        }
-    }
-
-    // Obtém metadados do arquivo
-    public File getFile(String fileId) {
-        GetFile getFile = new GetFile(fileId);
-        GetFileResponse response = executor.execute(getFile);
-        if (response.isOk()) {
-            return response.file();
-        }
-        throw new TelegramFileException("Falha ao obter arquivo: " + response.description(), null);
-    }
-
-    /**
-     * Baixa o arquivo usando a URL pública do Telegram. O {@link TelegramBotExecutor} não expõe
-     * {@code downloadFile}, então fazemos manualmente.
-     */
-    public byte[] downloadFile(File file) {
-        String filePath = file.filePath();
-        String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) URI.create(url).toURL().openConnection(); // corrigido
-            conn.setConnectTimeout(30_000);
-            conn.setReadTimeout(120_000);
-            try (InputStream is = conn.getInputStream()) {
-                return is.readAllBytes();
+  public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
+    safeExecutor.run(
+        chatId,
+        this::enviarMensagem, // method reference
+        () -> {
+          try {
+            String lower = filePathOrUrl.toLowerCase();
+            if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
+              executor.execute(
+                  new SendVideo(chatId, filePathOrUrl).caption(caption).parseMode(ParseMode.HTML));
+            } else if (lower.endsWith(".gif")) {
+              executor.execute(
+                  new SendAnimation(chatId, filePathOrUrl)
+                      .caption(caption)
+                      .parseMode(ParseMode.HTML));
+            } else if (lower.endsWith(".jpg")
+                || lower.endsWith(".jpeg")
+                || lower.endsWith(".png")) {
+              executor.execute(
+                  new SendPhoto(chatId, filePathOrUrl).caption(caption).parseMode(ParseMode.HTML));
+            } else {
+              executor.execute(
+                  new SendPhoto(chatId, filePathOrUrl).caption(caption).parseMode(ParseMode.HTML));
             }
-        } catch (IOException e) {
-            throw new TelegramFileException("Erro ao baixar arquivo: " + filePath, e);
-        } finally {
-            if (conn != null) conn.disconnect();
-        }
-    }
+          } catch (Exception e) {
+            log.warn(
+                "⚠️ Falha ao enviar mídia para chatId {}: {}. Enviando apenas" + " texto.",
+                LogSanitizer.sanitizeId(chatId),
+                LogSanitizer.sanitize(e.getMessage()));
+            enviarMensagem(chatId, caption);
+          }
+        });
+  }
 
-    /** Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4 últimos caracteres. */
-    private static String maskToken(String token) {
-        if (token == null || token.length() < 8) {
-            return "***";
-        }
-        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
+  // Fallback simples (sem parse mode)
+  private void enviarFallback(long chatId, String texto) {
+    try {
+      executor.execute(new SendMessage(chatId, texto));
+    } catch (Exception e) {
+      log.error("Falha no fallback: {}", LogSanitizer.sanitize(e.getMessage()));
     }
+  }
+
+  // Obtém metadados do arquivo
+  public File getFile(String fileId) {
+    GetFile getFile = new GetFile(fileId);
+    GetFileResponse response = executor.execute(getFile);
+    if (response.isOk()) {
+      return response.file();
+    }
+    throw new TelegramFileException("Falha ao obter arquivo: " + response.description(), null);
+  }
+
+  /**
+   * Baixa o arquivo usando a URL pública do Telegram. O {@link TelegramBotExecutor} não expõe
+   * {@code downloadFile}, então fazemos manualmente.
+   */
+  public byte[] downloadFile(File file) {
+    String filePath = file.filePath();
+    String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
+    HttpURLConnection conn = null;
+    try {
+      conn = (HttpURLConnection) URI.create(url).toURL().openConnection(); // corrigido
+      conn.setConnectTimeout(30_000);
+      conn.setReadTimeout(120_000);
+      try (InputStream is = conn.getInputStream()) {
+        return is.readAllBytes();
+      }
+    } catch (IOException e) {
+      throw new TelegramFileException("Erro ao baixar arquivo: " + filePath, e);
+    } finally {
+      if (conn != null) conn.disconnect();
+    }
+  }
+
+  /** Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4 últimos caracteres. */
+  private static String maskToken(String token) {
+    if (token == null || token.length() < 8) {
+      return "***";
+    }
+    return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
+  }
 }
