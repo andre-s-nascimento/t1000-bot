@@ -236,12 +236,63 @@ public class AudioHandler {
       return;
     }
 
+<<<<<<< HEAD
     String fileId = request.fileId();
     long groupId = request.groupId();
     TranscriptionCacheEntry cached = cacheService.get(fileId);
     if (cached != null) {
       entregarTranscricaoCache(userId, tipo, cached, groupId);
       return;
+=======
+    // ========================= CALLBACK =========================
+
+    public void handleTranscriptionCallback(CallbackQuery callback, String data) {
+        String[] parts = data.split("\\|", 2);
+        if (parts.length < 2) {
+            log.error("Callback malformado: {}", data);
+            return;
+        }
+
+        String tipo = parts[0];
+        String token = parts[1];
+        long userId = callback.from().id();
+
+        var msg = callback.maybeInaccessibleMessage();
+        if (msg == null) {
+            log.warn("Callback sem mensagem acessível (message may have been deleted)");
+            safeAnswerCallback(callback.id(), "Mensagem original não disponível", true);
+            return;
+        }
+        long chatId = msg.chat().id();
+
+        log.info(
+                "📊 Clique no botão {} | userId={} | chatId={} | token={}",
+                tipo,
+                userId,
+                chatId,
+                token);
+
+        AudioRequest request = pendingRequests.get(token);
+        if (request == null) {
+            log.warn(
+                    "Token inválido ou expirado: {} (userId={}, chatId={})", token, userId, chatId);
+            safeAnswerCallback(callback.id(), TOKEN_EXPIRADO, true);
+            return;
+        }
+
+        String fileId = request.fileId();
+        long groupId = request.groupId();
+        TranscriptionCacheEntry cached = cacheService.get(fileId);
+        if (cached != null) {
+            entregarTranscricaoCache(userId, tipo, cached, groupId);
+            return;
+        }
+
+        log.info("Cache miss para fileId={}, processando novamente.", fileId);
+        safeAnswerCallback(callback.id(), "Processando áudio... enviarei no privado.", false);
+        CompletableFuture.runAsync(
+                () -> processarAudioCallback(userId, tipo, fileId, request, groupId));
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
     }
 
     log.info("Cache miss para fileId={}, processando novamente.", fileId);
@@ -407,6 +458,7 @@ public class AudioHandler {
 
   // ========================= ERROS =========================
 
+<<<<<<< HEAD
   private void tratarErroTranscricao(Exception e, long userId, long groupId) {
     String errorMsg = e.getMessage();
     boolean isForbidden =
@@ -418,6 +470,29 @@ public class AudioHandler {
       safeSendMessage(groupId, USUARIO_PRECISA_INICIAR_BOT);
     } else {
       safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Erro no processamento.");
+=======
+            String mensagem =
+                    """
+          🎧 Áudio de <b>%s</b> (%s%s) processado!
+
+          Clique num botão para receber a transcrição no seu privado:
+          """
+                            .formatted(utils.escapeHtml(senderName), duracao, hint);
+
+            InlineKeyboardMarkup markup =
+                    new InlineKeyboardMarkup(
+                            new InlineKeyboardButton("🎙️ Transcrição Bruta")
+                                    .callbackData(TRANS_BRUTO + "|" + token),
+                            new InlineKeyboardButton("✨ Transcrição Refinada")
+                                    .callbackData(TRANS_REFINADO + "|" + token));
+
+            telegramFacade.enviarComBotoesHtml(chatId, mensagem, markup);
+        } catch (HttpClientErrorException e) {
+            log.error("Erro HTTP {} ao enviar botões para chatId={}", e.getStatusCode(), chatId, e);
+        } catch (ResourceAccessException e) {
+            log.error("Falha de conectividade ao enviar botões para chatId={}", chatId);
+        }
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
     }
   }
 
@@ -459,9 +534,58 @@ public class AudioHandler {
     if (t instanceof Error error) {
       throw error;
     }
+<<<<<<< HEAD
     if (t instanceof InterruptedException ie) {
       Thread.currentThread().interrupt();
       throw new RuntimeException("Thread interrompida", ie);
+=======
+
+    // ========================= UTILITÁRIOS =========================
+
+    private boolean isGroupChat(Message message) {
+        return message.chat().type() == com.pengrad.telegrambot.model.Chat.Type.group
+                || message.chat().type() == com.pengrad.telegrambot.model.Chat.Type.supergroup;
+    }
+
+    private String gerarToken(String fileId) {
+        String token =
+                Long.toHexString(System.nanoTime())
+                        + Integer.toHexString(fileId.hashCode() & 0xFFFF);
+        return token.length() > TOKEN_MAX_LENGTH ? token.substring(0, TOKEN_MAX_LENGTH) : token;
+    }
+
+    private void cleanExpiredTokens() {
+        long now = System.currentTimeMillis();
+        int before = pendingRequests.size();
+        pendingRequests
+                .entrySet()
+                .removeIf(entry -> now - entry.getValue().timestamp() > TOKEN_EXPIRATION_MS);
+        int after = pendingRequests.size();
+        if (before != after) {
+            log.info(
+                    "🧹 Cache de tokens limpo: {} entradas removidas, {} restantes",
+                    before - after,
+                    after);
+        }
+    }
+
+    /** Desempacota CompletionException para obter a causa raiz. */
+    private Throwable unwrapCause(Throwable ex) {
+        return (ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null)
+                ? ex.getCause()
+                : ex;
+    }
+
+    /** Repropaga erros fatais (Error, InterruptedException) sem engoli-los. */
+    private void rethrowIfFatal(Throwable t) {
+        if (t instanceof Error error) {
+            throw error;
+        }
+        if (t instanceof InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Thread interrompida", ie);
+        }
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
     }
   }
 }

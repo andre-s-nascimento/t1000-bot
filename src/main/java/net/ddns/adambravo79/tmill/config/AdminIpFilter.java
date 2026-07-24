@@ -28,6 +28,7 @@ public class AdminIpFilter extends OncePerRequestFilter {
 
   private List<String> allowedIps;
 
+<<<<<<< HEAD
   @Override
   @SuppressWarnings("null")
   protected void initFilterBean() {
@@ -49,6 +50,18 @@ public class AdminIpFilter extends OncePerRequestFilter {
     if (!path.startsWith("/admin")) {
       filterChain.doFilter(request, response);
       return;
+=======
+    @Override
+    @SuppressWarnings("null")
+    protected void initFilterBean() {
+        if (allowedIpsStr != null && !allowedIpsStr.isBlank()) {
+            allowedIps = Arrays.stream(allowedIpsStr.split(",")).map(String::trim).toList();
+            log.info("🛡️ Admin endpoints restritos aos IPs: {}", allowedIps);
+        } else {
+            allowedIps = List.of();
+            log.warn("🛡️ Admin endpoints SEM restrição de IP (admin.allowed-ips não configurado)");
+        }
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
     }
 
     // Se não houver IPs configurados, permite (modo dev)

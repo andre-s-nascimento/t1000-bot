@@ -137,6 +137,7 @@ public class DailyDigestService {
     generateDigest(from, to, "RESUMO DA MADRUGADA/MANHÃ", null);
   }
 
+<<<<<<< HEAD
   @Scheduled(cron = "0 30 20 * * *", zone = BRAZIL_ZONE)
   public void generateEveningDigest() {
     if (!digestEnabled || digestChatIds.isEmpty()) {
@@ -148,6 +149,12 @@ public class DailyDigestService {
     LocalDateTime to = now.withHour(20).withMinute(30).withSecond(0);
     generateDigest(from, to, "RESUMO DO DIA", null);
   }
+=======
+    @SuppressWarnings("null")
+    private List<ChatMessage> fetchMessages(LocalDateTime from, LocalDateTime to) {
+        String fromStr = from.format(SQL_DTF);
+        String toStr = to.format(SQL_DTF);
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
   // ======================== CORE PIPELINE ========================
 
@@ -248,6 +255,7 @@ public class DailyDigestService {
     return allMessages;
   }
 
+<<<<<<< HEAD
   private ChatMessage buildChatMessage(Map<String, Object> row, boolean isAudio) {
     String user = (String) row.get("user_name");
     String text = (String) row.get("text");
@@ -259,13 +267,34 @@ public class DailyDigestService {
         .audio(isAudio)
         .build();
   }
+=======
+    // ======================== FETCH & BUILD ========================
+
+    @SuppressWarnings({"null", "TimeZone"})
+    private String buildMessagesBlock(List<ChatMessage> messages) {
+        StringBuilder sb = new StringBuilder();
+        LocalDateTime previous = null;
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
   // ======================== FETCH & BUILD ========================
 
+<<<<<<< HEAD
   @SuppressWarnings({"null", "TimeZone"})
   private String buildMessagesBlock(List<ChatMessage> messages) {
     StringBuilder sb = new StringBuilder();
     LocalDateTime previous = null;
+=======
+            if (previous != null) {
+                ZoneId zone = ZoneId.of(BRAZIL_ZONE);
+                long diff =
+                        Duration.between(previous.atZone(zone), current.atZone(zone)).toMinutes();
+                if (diff >= 20) {
+                    sb.append("\n==============================\n");
+                    sb.append("NOVO BLOCO DE CONVERSA\n");
+                    sb.append("==============================\n\n");
+                }
+            }
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     for (ChatMessage msg : messages) {
       LocalDateTime current = parseTimestampSafely(msg.getTimestamp());
@@ -358,9 +387,64 @@ public class DailyDigestService {
     }
   }
 
+<<<<<<< HEAD
   private String buildHeader(String periodLabel, LocalDateTime from, LocalDateTime to) {
     return String.format(
         """
+=======
+    private String truncateIfNeeded(String finalMessages) {
+        if (finalMessages.length() <= MAX_PROMPT_SIZE) {
+            return finalMessages;
+        }
+
+        int allowedMessagesSize = MAX_PROMPT_SIZE - ALLOWED_MESSAGES_MARGIN;
+        log.warn(
+                "✂️ Mensagens truncadas de {} para {} chars",
+                finalMessages.length(),
+                allowedMessagesSize);
+
+        int slice = allowedMessagesSize / TRUNCATE_SLICE_DIVISOR;
+        int len = finalMessages.length();
+
+        String start = safeSubstring(finalMessages, 0, slice);
+        String middle =
+                safeSubstring(
+                        finalMessages,
+                        Math.max(0, (len / 2) - (slice / 2)),
+                        Math.min(len, (len / 2) + (slice / 2)));
+        String end = safeSubstring(finalMessages, Math.max(0, len - slice), len);
+
+        return start + "\n\n[...]\n\n" + middle + "\n\n[...]\n\n" + end;
+    }
+
+    // ======================== TRUNCATE ========================
+
+    private String safeSubstring(String str, int begin, int end) {
+        int safeBegin = Math.clamp(begin, 0, str.length());
+        int safeEnd = Math.clamp(end, safeBegin, str.length());
+        return str.substring(safeBegin, safeEnd);
+    }
+
+    // ======================== SUMMARY ========================
+
+    private String generateSummary(String finalMessages, String periodLabel) {
+        try {
+            DigestPersona persona = DigestPersona.T1000;
+            return groqClient.gerarResumoDigest(finalMessages, persona, periodLabel);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            throw new GroqRateLimitException("Rate limit do Groq ao gerar resumo", e);
+        } catch (HttpClientErrorException e) {
+            throw new DigestGenerationException(
+                    "Erro HTTP do Groq ao gerar resumo: " + e.getStatusCode(), e);
+        } catch (ResourceAccessException e) {
+            throw new DigestGenerationException("Falha de conectividade com Groq", e);
+        }
+    }
+
+    private String buildHeader(String periodLabel, LocalDateTime from, LocalDateTime to) {
+        return String.format(
+                """
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
         <b>📊 %s</b>
         <i>Período: %s - %s</i>
 
@@ -400,6 +484,7 @@ public class DailyDigestService {
             .replaceAll("(?i)<a[^>]*>", "##A_OPEN##") // regex simplificada
             .replace("</a>", "##A_CLOSE##");
 
+<<<<<<< HEAD
     // Escapa caracteres < e > restantes
     String escaped = protectedText.replace("<", "&lt;").replace(">", "&gt;");
 
@@ -426,6 +511,52 @@ public class DailyDigestService {
   }
 
   // ======================== SEND ========================
+=======
+        // Converte quebras de linha
+        String sanitized =
+                text.replaceAll("(?i)<br\\s*/?>", "\n")
+                        .replaceAll("(?i)</?ul\\s*>", "")
+                        .replaceAll("(?i)<li\\s*>", "• ")
+                        .replaceAll("(?i)</li\\s*>", "\n");
+
+        // Protege tags permitidas (usando regex mais simples para <a>)
+        String protectedText =
+                sanitized
+                        .replace("<b>", "##B_OPEN##")
+                        .replace("</b>", "##B_CLOSE##")
+                        .replace("<i>", "##I_OPEN##")
+                        .replace("</i>", "##I_CLOSE##")
+                        .replace("<u>", "##U_OPEN##")
+                        .replace("</u>", "##U_CLOSE##")
+                        .replace("<s>", "##S_OPEN##")
+                        .replace("</s>", "##S_CLOSE##")
+                        .replace("<code>", "##C_OPEN##")
+                        .replace("</code>", "##C_CLOSE##")
+                        .replace("<pre>", "##P_OPEN##")
+                        .replace("</pre>", "##P_CLOSE##")
+                        .replaceAll("(?i)<a[^>]*>", "##A_OPEN##") // regex simplificada
+                        .replace("</a>", "##A_CLOSE##");
+
+        // Escapa caracteres < e > restantes
+        String escaped = protectedText.replace("<", "&lt;").replace(">", "&gt;");
+
+        // Restaura tags permitidas
+        String restored =
+                escaped.replace("##B_OPEN##", "<b>")
+                        .replace("##B_CLOSE##", "</b>")
+                        .replace("##I_OPEN##", "<i>")
+                        .replace("##I_CLOSE##", "</i>")
+                        .replace("##U_OPEN##", "<u>")
+                        .replace("##U_CLOSE##", "</u>")
+                        .replace("##S_OPEN##", "<s>")
+                        .replace("##S_CLOSE##", "</s>")
+                        .replace("##C_OPEN##", "<code>")
+                        .replace("##C_CLOSE##", "</code>")
+                        .replace("##P_OPEN##", "<pre>")
+                        .replace("##P_CLOSE##", "</pre>")
+                        .replace("##A_OPEN##", "<a>")
+                        .replace("##A_CLOSE##", "</a>");
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
   /**
    * Envia o digest para um chat específico. Se falhar, lança DigestSendException para que o caller

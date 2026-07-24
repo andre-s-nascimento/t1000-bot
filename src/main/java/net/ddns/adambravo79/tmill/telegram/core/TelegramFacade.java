@@ -1,5 +1,16 @@
 package net.ddns.adambravo79.tmill.telegram.core;
 
+<<<<<<< HEAD
+=======
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 import com.pengrad.telegrambot.model.File;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.model.request.ParseMode;
@@ -89,6 +100,7 @@ public class TelegramFacade {
                 new AnswerCallbackQuery(callbackQueryId).text(mensagem).showAlert(showAlert)));
   }
 
+<<<<<<< HEAD
   public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
     safeExecutor.run(
         chatId,
@@ -122,6 +134,91 @@ public class TelegramFacade {
           }
         });
   }
+=======
+    public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
+        safeExecutor.run(
+                chatId,
+                this::enviarMensagem, // method reference
+                () -> {
+                    try {
+                        String lower = filePathOrUrl.toLowerCase();
+                        if (lower.endsWith(".mp4")
+                                || lower.endsWith(".mov")
+                                || lower.endsWith(".avi")) {
+                            executor.execute(
+                                    new SendVideo(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        } else if (lower.endsWith(".gif")) {
+                            executor.execute(
+                                    new SendAnimation(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        } else if (lower.endsWith(".jpg")
+                                || lower.endsWith(".jpeg")
+                                || lower.endsWith(".png")) {
+                            executor.execute(
+                                    new SendPhoto(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        } else {
+                            executor.execute(
+                                    new SendPhoto(chatId, filePathOrUrl)
+                                            .caption(caption)
+                                            .parseMode(ParseMode.HTML));
+                        }
+                    } catch (Exception e) {
+                        log.warn(
+                                "⚠️ Falha ao enviar mídia para chatId {}: {}. Enviando apenas"
+                                        + " texto.",
+                                LogSanitizer.sanitizeId(chatId),
+                                LogSanitizer.sanitize(e.getMessage()));
+                        enviarMensagem(chatId, caption);
+                    }
+                });
+    }
+
+    // Fallback simples (sem parse mode)
+    private void enviarFallback(long chatId, String texto) {
+        try {
+            executor.execute(new SendMessage(chatId, texto));
+        } catch (Exception e) {
+            log.error("Falha no fallback: {}", LogSanitizer.sanitize(e.getMessage()));
+        }
+    }
+
+    // Obtém metadados do arquivo
+    public File getFile(String fileId) {
+        GetFile getFile = new GetFile(fileId);
+        GetFileResponse response = executor.execute(getFile);
+        if (response.isOk()) {
+            return response.file();
+        }
+        throw new TelegramFileException("Falha ao obter arquivo: " + response.description(), null);
+    }
+
+    /**
+     * Baixa o arquivo usando a URL pública do Telegram. O {@link TelegramBotExecutor} não expõe
+     * {@code downloadFile}, então fazemos manualmente.
+     */
+    public byte[] downloadFile(File file) {
+        String filePath = file.filePath();
+        String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) URI.create(url).toURL().openConnection(); // corrigido
+            conn.setConnectTimeout(30_000);
+            conn.setReadTimeout(120_000);
+            try (InputStream is = conn.getInputStream()) {
+                return is.readAllBytes();
+            }
+        } catch (IOException e) {
+            throw new TelegramFileException("Erro ao baixar arquivo: " + filePath, e);
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
   // Fallback simples (sem parse mode)
   private void enviarFallback(long chatId, String texto) {

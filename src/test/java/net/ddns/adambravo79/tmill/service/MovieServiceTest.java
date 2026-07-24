@@ -91,11 +91,18 @@ class MovieServiceTest {
     when(easterEggService.getEasterEgg(anyLong())).thenReturn(Optional.empty());
   }
 
+<<<<<<< HEAD
   @SuppressWarnings("removal")
   @Test
   void deveFormatarRespostaCompleta() {
     stubEmptyEasterEgg();
     Long id = 1L;
+=======
+    @Test
+    void deveFormatarRespostaCompleta() {
+        stubEmptyEasterEgg();
+        Long id = 1L;
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     when(tmdbClient.buscarDetalhes(id))
         .thenReturn(
@@ -113,8 +120,13 @@ class MovieServiceTest {
     when(tmdbClient.buscarElenco(id))
         .thenReturn(List.of(new CastRecord("Wagner Moura", "Marcelo")));
 
+<<<<<<< HEAD
     when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor Teste");
     when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Netflix");
+=======
+        when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor Teste");
+        when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Netflix");
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     MovieOrchestrationResponse result = movieService.buscarPorId(id);
 
@@ -128,6 +140,7 @@ class MovieServiceTest {
     assertThat(result.urlFoto()).contains("image.tmdb.org");
   }
 
+<<<<<<< HEAD
   @SuppressWarnings("removal")
   @Test
   void deveUsarGloboQuandoNaoHouverPais() {
@@ -147,11 +160,32 @@ class MovieServiceTest {
     when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
     when(tmdbClient.buscarDiretor(1L)).thenReturn(null);
     when(tmdbClient.buscarOndeAssistirFilme(1L)).thenReturn("N/A");
+=======
+    @Test
+    void deveUsarGloboQuandoNaoHouverPais() {
+        stubEmptyEasterEgg();
+        var movie =
+                new MovieRecord(
+                        1L,
+                        "O Agente Secreto",
+                        "The Secret Agent",
+                        "2025-09-10",
+                        "desc",
+                        10.0,
+                        8.5,
+                        "/img",
+                        List.of());
+        when(tmdbClient.buscarDetalhes(1L)).thenReturn(movie);
+        when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
+        when(tmdbClient.buscarDiretor(1L)).thenReturn(null);
+        when(tmdbClient.buscarOndeAssistirFilme(1L)).thenReturn("N/A");
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     MovieOrchestrationResponse result = movieService.buscarPorId(1L);
     assertThat(result.textoFormatado()).contains("🌐");
   }
 
+<<<<<<< HEAD
   @SuppressWarnings("removal")
   @Test
   void deveUsarTBAQuandoSemData() {
@@ -162,11 +196,24 @@ class MovieServiceTest {
     when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
     when(tmdbClient.buscarDiretor(id)).thenReturn(null);
     when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("N/A");
+=======
+    @Test
+    void deveUsarTBAQuandoSemData() {
+        stubEmptyEasterEgg();
+        Long id = 1L;
+        var movie =
+                new MovieRecord(id, "Teste", "Test", null, "desc", 1.0, 1.0, "/img", List.of("US"));
+        when(tmdbClient.buscarDetalhes(id)).thenReturn(movie);
+        when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
+        when(tmdbClient.buscarDiretor(id)).thenReturn(null);
+        when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("N/A");
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     MovieOrchestrationResponse result = movieService.buscarPorId(id);
     assertThat(result.textoFormatado()).contains("TBA");
   }
 
+<<<<<<< HEAD
   @SuppressWarnings("removal")
   @Test
   void deveUsarGloboQuandoPaisInvalido() {
@@ -177,6 +224,18 @@ class MovieServiceTest {
     when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
     when(tmdbClient.buscarDiretor(1L)).thenReturn(null);
     when(tmdbClient.buscarOndeAssistirFilme(1L)).thenReturn("N/A");
+=======
+    @Test
+    void deveUsarGloboQuandoPaisInvalido() {
+        stubEmptyEasterEgg();
+        var movie =
+                new MovieRecord(
+                        1L, "Teste", "Test", "2020", "desc", 1.0, 1.0, "/img", List.of("XXX"));
+        when(tmdbClient.buscarDetalhes(1L)).thenReturn(movie);
+        when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
+        when(tmdbClient.buscarDiretor(1L)).thenReturn(null);
+        when(tmdbClient.buscarOndeAssistirFilme(1L)).thenReturn("N/A");
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     MovieOrchestrationResponse result = movieService.buscarPorId(1L);
     assertThat(result.textoFormatado()).contains("🌐");
@@ -191,11 +250,19 @@ class MovieServiceTest {
         .hasMessageContaining("Falha ao buscar detalhes do filme para ID");
   }
 
+<<<<<<< HEAD
   @Test
   void deveIncluirEasterEggQuandoPresente() {
     when(easterEggService.getEasterEgg(anyLong()))
         .thenReturn(Optional.of("🎬 Easter Egg especial!"));
     Long id = 42L;
+=======
+    @Test
+    void deveIncluirEasterEggQuandoPresente() {
+        when(easterEggService.getEasterEgg(anyLong()))
+                .thenReturn(Optional.of("🎬 Easter Egg especial!"));
+        Long id = 42L;
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     when(tmdbClient.buscarDetalhes(id))
         .thenReturn(
@@ -210,9 +277,15 @@ class MovieServiceTest {
                 "/poster",
                 List.of("US")));
 
+<<<<<<< HEAD
     when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
     when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor");
     when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Prime Video");
+=======
+        when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
+        when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor");
+        when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Prime Video");
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
     MovieOrchestrationResponse result = movieService.buscarPorId(id);
 

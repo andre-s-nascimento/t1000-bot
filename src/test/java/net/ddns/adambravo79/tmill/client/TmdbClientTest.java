@@ -126,15 +126,26 @@ class TmdbClientTest {
                     List.of(new Provider("Netflix", 1, "/logo.png")))));
     when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
+<<<<<<< HEAD
     assertThat(new TmdbClient(restClient).buscarOndeAssistirFilme(1L)).contains("Netflix");
   }
+=======
+        assertThat(new TmdbClient(restClient).buscarOndeAssistirFilme(1L)).contains("Netflix");
+    }
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 
   @Test
   void deveRetornarMensagemDefaultQuandoNaoHaStreaming() {
     when(responseSpec.body(WatchProviderResponse.class))
         .thenReturn(new WatchProviderResponse(Map.of()));
 
+<<<<<<< HEAD
     assertThat(new TmdbClient(restClient).buscarOndeAssistirFilme(1L))
         .contains("Indisponivel no momento");
   }
+=======
+        assertThat(new TmdbClient(restClient).buscarOndeAssistirFilme(1L))
+                .contains("Indisponivel no momento");
+    }
+>>>>>>> 6286d61 (feat: ajustes de refatoracao, ajustes nos testes)
 }
