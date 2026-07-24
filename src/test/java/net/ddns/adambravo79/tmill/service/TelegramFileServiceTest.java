@@ -1,7 +1,6 @@
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import org.junit.jupiter.api.Test;
@@ -26,22 +25,19 @@ class TelegramFileServiceTest {
 
     @Test
     void deveBaixarArquivoComSucesso() {
-        // Arrange
         File tgFile = mock(File.class);
         when(telegramFacade.getFile(FILE_ID)).thenReturn(tgFile);
         when(telegramFacade.downloadFile(tgFile)).thenReturn(DATA);
 
-        // Act
         java.io.File result = service.baixarArquivo(FILE_ID);
 
-        // Assert
-        assertThat(result).exists();
-        assertThat(result).hasContent("conteúdo do arquivo");
+        assertThat(result).exists().hasContent("conteúdo do arquivo");
+
         assertThat(result.getName()).startsWith("audio").endsWith(".oga");
+
         verify(telegramFacade).getFile(FILE_ID);
         verify(telegramFacade).downloadFile(tgFile);
 
-        // Cleanup
         result.delete();
     }
 

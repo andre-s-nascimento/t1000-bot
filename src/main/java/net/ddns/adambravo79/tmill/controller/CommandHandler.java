@@ -1,3 +1,7 @@
+/**********************************************************
+ * ARQUIVO: ./src/main/java/net/ddns/adambravo79/tmill/controller/CommandHandler.java
+ **********************************************************/
+
 package net.ddns.adambravo79.tmill.controller;
 
 import java.time.LocalDate;
@@ -22,6 +26,7 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
@@ -35,6 +40,17 @@ import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 @Component
 @RequiredArgsConstructor
 public class CommandHandler {
+
+    private static final int MAX_LOG_LENGTH = 200;
+
+    private static String sanitizeForLog(String input) {
+        if (input == null) return "null";
+        String sanitized = input.replaceAll("\s+", " ").trim();
+        if (sanitized.length() > MAX_LOG_LENGTH) {
+            sanitized = sanitized.substring(0, MAX_LOG_LENGTH) + "...";
+        }
+        return sanitized;
+    }
 
     private final MovieService movieService;
     private final AutoResponseService autoResponseService;
@@ -94,12 +110,12 @@ public class CommandHandler {
 
         // --- Roteamento de comandos ---
         if (normalized.startsWith("t1000 anotar ideia")) {
-            String idea = rawText.replaceFirst("(?i)^t1000\\s+anotar\\s+ideia\\s*", "").trim();
+            String idea = rawText.replaceFirst("(?i)^t1000\s+anotar\s+ideia\s*", "").trim();
             handleAnotarIdeia(message, chatId, idea);
             return;
         }
         if (normalized.startsWith("t1000 buscar")) {
-            String termo = rawText.replaceFirst("(?i)^t1000\\s+buscar\\s*", "").trim();
+            String termo = rawText.replaceFirst("(?i)^t1000\s+buscar\s*", "").trim();
             handleBuscarFilme(chatId, termo);
             return;
         }
@@ -119,11 +135,13 @@ public class CommandHandler {
 
         // Se for comando não reconhecido
         if (isCommand) {
-            telegramFacade.enviarMensagem(
-                    chatId, "❓ Comando não reconhecido. Use /start para ajuda.");
+            telegramFacade.enviarMensagem(chatId, BotMessages.COMANDO_NAO_RECONHECIDO);
             // Logar link se houver
             if (rawText.contains("http://") || rawText.contains("https://")) {
-                log.warn("🔗 Link não processado: '{}' (chatId={})", rawText, chatId);
+                log.warn(
+                        "🔗 Link não processado: '{}' (chatId={})",
+                        sanitizeForLog(rawText),
+                        chatId);
             }
         }
     }
@@ -184,18 +202,16 @@ public class CommandHandler {
     }
 
     private void handleAnotarIdeia(Message message, long chatId, String idea) {
-        log.info("📝 Comando 'anotar ideia' recebido: {}", idea);
+        log.info("📝 Comando 'anotar ideia' recebido: {}", sanitizeForLog(idea));
         if (idea.isEmpty()) {
-            telegramFacade.enviarMensagem(
-                    chatId,
-                    "❓ Digite a ideia após o comando. Ex: `T1000 anotar ideia: fazer café`");
+            telegramFacade.enviarMensagem(chatId, BotMessages.IDEIA_DIGITE_APOS_COMANDO);
             return;
         }
         if (idea.startsWith(":") || idea.startsWith("：")) {
             idea = idea.substring(1).trim();
         }
         if (idea.isEmpty()) {
-            telegramFacade.enviarMensagem(chatId, "❓ A ideia não pode ficar vazia.");
+            telegramFacade.enviarMensagem(chatId, BotMessages.IDEIA_VAZIA);
             return;
         }
 
@@ -217,20 +233,20 @@ public class CommandHandler {
                         utils.buildUserMention(from),
                         utils.escapeHtml(chatName),
                         LocalDateTime.now()
-                                .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
+                                .format(
+                                        DateTimeFormatter.ofPattern(
+                                                BotMessages.FMT_DD_MM_YYYY_HH_MM)));
         telegramFacade.enviarMensagemHtml(ownerId, adminMsg);
-        telegramFacade.enviarMensagemHtml(
-                chatId, "✅ Ideia registrada! Obrigado pela contribuição.");
+        telegramFacade.enviarMensagemHtml(chatId, BotMessages.IDEIA_REGISTRADA);
     }
 
     private void handleBuscarFilme(long chatId, String nome) {
         if (nome.length() < 3) {
-            telegramFacade.enviarMensagem(chatId, "🔍 O termo deve ter pelo menos 3 caracteres.");
+            telegramFacade.enviarMensagem(chatId, BotMessages.BUSCA_TERM_CURTO);
             return;
         }
         if (nome.length() > 100) {
-            telegramFacade.enviarMensagem(
-                    chatId, "🔍 O termo é muito longo (máx. 100 caracteres).");
+            telegramFacade.enviarMensagem(chatId, BotMessages.BUSCA_TERM_LONGO);
             return;
         }
 
@@ -243,7 +259,7 @@ public class CommandHandler {
         }
 
         if (busca == null || busca.results() == null || busca.results().isEmpty()) {
-            telegramFacade.enviarMensagem(chatId, "❌ Filme não encontrado.");
+            telegramFacade.enviarMensagem(chatId, "❌ " + BotMessages.FILME_NAO_ENCONTRADO);
             return;
         }
 
@@ -303,28 +319,26 @@ public class CommandHandler {
 
     private void handleJogosCopa(long chatId, String rawText) {
         if (!worldcupEnabled) {
-            telegramFacade.enviarMensagem(
-                    chatId, "🏆 A Copa de 2026 já acabou. Aguarde a próxima!");
+            telegramFacade.enviarMensagem(chatId, BotMessages.WORLD_CUP_FINISHED);
             return;
         }
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         worldCupSchedulerService.sendMatchesToChat(chatId, today);
     }
 
     private void handleResultados(long chatId, String rawText) {
         if (!worldcupEnabled) {
-            telegramFacade.enviarMensagem(
-                    chatId, "🏆 A Copa de 2026 já acabou. Aguarde a próxima!");
+            telegramFacade.enviarMensagem(chatId, BotMessages.WORLD_CUP_FINISHED);
             return;
         }
 
         // Remove o prefixo "t1000 resultados" e limpa palavras comuns
-        String param = rawText.replaceFirst("(?i)^t1000\\s+resultados\\s+", "").trim();
-        String cleanedParam = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
+        String param = rawText.replaceFirst("(?i)^t1000\s+resultados\s+", "").trim();
+        String cleanedParam = param.replaceAll("(?i)\b(do|dia|de|da|as|os|dias)\b", " ").trim();
 
         LocalDate date;
         if (cleanedParam.isEmpty()) {
-            date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+            date = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
             log.info("📅 Comando 'resultados' sem data, usando hoje: {}", date);
         } else {
             date = parseDateParam(cleanedParam);
@@ -334,15 +348,14 @@ public class CommandHandler {
         if (date != null) {
             worldCupSchedulerService.sendResultsToChat(chatId, date);
         } else {
-            telegramFacade.enviarMensagem(
-                    chatId, "❓ Formato de data inválido. Use 'hoje', 'ontem', DD/MM.");
+            telegramFacade.enviarMensagem(chatId, BotMessages.DATA_INVALIDA);
         }
     }
 
     // Utilitário de parse de data (copiado do controller original)
     private LocalDate parseDateParam(String param) {
         if (param == null || param.isBlank()) return null;
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         String lower = param.toLowerCase().trim();
         if (lower.equals("hoje") || lower.equals("de hoje")) return today;
         if (lower.equals("ontem") || lower.equals("de ontem")) return today.minusDays(1);

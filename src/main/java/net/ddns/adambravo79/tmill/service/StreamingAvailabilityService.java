@@ -34,6 +34,7 @@ public class StreamingAvailabilityService {
      * @param type O tipo do título: "movie" ou "tv".
      * @return Uma lista com os nomes dos serviços de streaming disponíveis no Brasil.
      */
+    @SuppressWarnings("null")
     public List<String> getStreamingServicesForTitle(long tmdbId, String type) {
         try {
             String endpoint = String.format("/%s/%d", type, tmdbId);
@@ -47,7 +48,6 @@ public class StreamingAvailabilityService {
             if (response != null
                     && response.streamingInfo() != null
                     && response.streamingInfo().containsKey("br")) {
-                // Acessa o objeto CountryStreamingInfo e depois sua lista 'br'
                 return response.streamingInfo().get("br").br().stream()
                         .map(StreamingAvailabilityResponse.Service::serviceName)
                         .toList();

@@ -3,7 +3,6 @@ package net.ddns.adambravo79.tmill.service.cache;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Map;
-import java.util.concurrent.ScheduledExecutorService;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,8 +31,7 @@ class FileTranscriptionCacheServiceTest {
 
         service.startCleanerAndStatsLogger();
 
-        ScheduledExecutorService cleaner =
-                (ScheduledExecutorService) ReflectionTestUtils.getField(service, "cleaner");
+        var cleaner = ReflectionTestUtils.getField(service, "cleaner");
         assertThat(cleaner).isNotNull();
     }
 
@@ -112,7 +110,7 @@ class FileTranscriptionCacheServiceTest {
     }
 
     // =========================
-    // TESTES DE CLEANUP (TTL)
+    // TESTES DE CLEANUP (TTL) - SEM Thread.sleep()
     // =========================
 
     @Test
@@ -123,17 +121,21 @@ class FileTranscriptionCacheServiceTest {
         String fileId = "file-id";
         service.put(fileId, "bruto", "refinado");
 
-        Thread.sleep(1500);
+        // Modifica o timestamp para expirado
+        Map<String, TranscriptionCacheEntry> cache = getCacheMap();
+        TranscriptionCacheEntry entry = cache.get(fileId);
+        long expiredTimestamp = System.currentTimeMillis() - 2000;
+        cache.put(
+                fileId,
+                new TranscriptionCacheEntry(
+                        entry.textoBruto(), entry.textoRefinado(), expiredTimestamp));
 
-        // Força a limpeza manual (acesso ao cache via reflection)
-        java.util.Map<String, TranscriptionCacheEntry> cache =
-                (java.util.Map<String, TranscriptionCacheEntry>)
-                        ReflectionTestUtils.getField(service, "cache");
-        long now = System.currentTimeMillis();
-        cache.entrySet().removeIf(entry -> now - entry.getValue().timestamp() > 1000);
+        // Chama o método público de limpeza
+        service.cleanExpired();
 
         TranscriptionCacheEntry result = service.get(fileId);
         assertThat(result).isNull();
+        assertThat(cache).doesNotContainKey(fileId);
     }
 
     // =========================
@@ -200,5 +202,15 @@ class FileTranscriptionCacheServiceTest {
         assertThat(entry.textoBruto()).isEqualTo(bruto);
         assertThat(entry.textoRefinado()).isEqualTo(refinado);
         assertThat(entry.timestamp()).isGreaterThan(0);
+    }
+
+    // =========================
+    // MÉTODO AUXILIAR
+    // =========================
+
+    @SuppressWarnings("unchecked")
+    private Map<String, TranscriptionCacheEntry> getCacheMap() {
+        return (Map<String, TranscriptionCacheEntry>)
+                ReflectionTestUtils.getField(service, "cache");
     }
 }

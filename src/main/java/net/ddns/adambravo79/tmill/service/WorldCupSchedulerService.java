@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
@@ -27,16 +28,18 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 @Service
 public class WorldCupSchedulerService {
 
+    private static final String POSICAO_PLACAR = "%s (%s) x (%s) %s - %s";
+    private static final String FECHA_BOLD = "</b>\n\n";
     private final StaticWorldCupService worldCupService;
     private final TelegramFacade telegramFacade;
     private final Set<Long> allowedGroups = new HashSet<>();
     private final Set<String> remindersSent = ConcurrentHashMap.newKeySet();
     private final WorldCupUpdaterService worldCupUpdaterService;
 
-    @Value("${worldcup.enabled:false}")
+    @Value(BotMessages.DEFAULT_WORLDCUP_ENABLED)
     private boolean worldcupEnabled;
 
-    @Value("${bot.allowed-chats:}")
+    @Value(BotMessages.DEFAULT_BOT_ALLOWED_CHATS)
     private String allowedChatsStr;
 
     public WorldCupSchedulerService(
@@ -57,54 +60,54 @@ public class WorldCupSchedulerService {
                     long id = Long.parseLong(s.trim());
                     if (id < 0) allowedGroups.add(id);
                 } catch (NumberFormatException e) {
-                    log.warn("ID inválido para Copa: {}", s);
+                    log.warn("ID invalido para Copa: {}", s);
                 }
             }
         }
-        log.info("🏆 Serviço de Copa ativo para grupos: {}", allowedGroups);
+        log.info("🏆 Servico de Copa ativo para grupos: {}", allowedGroups);
     }
 
-    @Scheduled(cron = "0 0 12 * * *", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 0 12 * * *", zone = BotMessages.BRAZIL_ZONE)
     public void sendNoonMatches() {
         if (!worldcupEnabled || allowedGroups.isEmpty()) return;
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessage(today, "🏆 JOGOS DE HOJE (meio-dia)");
     }
 
-    @Scheduled(cron = "0 30 18 * * *", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 30 18 * * *", zone = BotMessages.BRAZIL_ZONE)
     public void sendEveningMatches() {
         if (!worldcupEnabled || allowedGroups.isEmpty()) return;
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessage(today, "🏆 RESUMO DOS JOGOS DE HOJE");
     }
 
-    @Scheduled(cron = "0 * * * * *", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 * * * * *", zone = BotMessages.BRAZIL_ZONE)
     public void checkThirtyMinutesBeforeEachMatch() {
         if (!worldcupEnabled || allowedGroups.isEmpty()) return;
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
+        LocalDateTime now = LocalDateTime.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
 
         List<WorldCupMatch> matches = worldCupService.getMatchesForDay(today);
         for (WorldCupMatch match : matches) {
-            ZonedDateTime matchZdt = match.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
+            ZonedDateTime matchZdt = match.getMatchDateTime(ZoneId.of(BotMessages.BRAZIL_ZONE));
             LocalDateTime matchTime = matchZdt.toLocalDateTime();
             LocalDateTime reminderTime = matchTime.minusMinutes(30);
             String reminderKey = today + "_" + match.homeTeam() + "_" + match.awayTeam();
 
-            if (now.isAfter(reminderTime) && now.isBefore(matchTime)) {
-                if (remindersSent.add(reminderKey)) {
-                    sendThirtyMinuteReminder(match);
-                    log.info(
-                            "⏰ Aviso enviado para jogo: {} vs {} às {}",
-                            match.homeTeam(),
-                            match.awayTeam(),
-                            matchTime);
-                }
+            if (now.isAfter(reminderTime)
+                    && now.isBefore(matchTime)
+                    && remindersSent.add(reminderKey)) {
+                sendThirtyMinuteReminder(match);
+                log.info(
+                        "⏰ Aviso enviado para jogo: {} vs {} as {}",
+                        match.homeTeam(),
+                        match.awayTeam(),
+                        matchTime);
             }
         }
     }
 
-    @Scheduled(cron = "0 5 0 * * *", zone = "America/Sao_Paulo")
+    @Scheduled(cron = "0 5 0 * * *", zone = BotMessages.BRAZIL_ZONE)
     public void cleanReminders() {
         remindersSent.clear();
         log.info("🧹 Avisos de jogos limpos para um novo dia");
@@ -117,14 +120,14 @@ public class WorldCupSchedulerService {
             return;
         }
 
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM);
         StringBuilder sb = new StringBuilder();
-        sb.append("<b>").append(title).append("</b>\n\n");
+        sb.append("<b>").append(title).append(FECHA_BOLD);
         for (WorldCupMatch m : matches) {
-            ZonedDateTime localTime = m.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
+            ZonedDateTime localTime = m.getMatchDateTime(ZoneId.of(BotMessages.BRAZIL_ZONE));
             String line =
                     String.format(
-                            "%s (%s) x (%s) %s - %s",
+                            POSICAO_PLACAR,
                             translateTeam(m.homeTeam()),
                             flagEmoji(m.homeTeam()),
                             flagEmoji(m.awayTeam()),
@@ -142,26 +145,24 @@ public class WorldCupSchedulerService {
     }
 
     private void sendThirtyMinuteReminder(WorldCupMatch match) {
-        ZonedDateTime localTime = match.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
+        ZonedDateTime localTime = match.getMatchDateTime(ZoneId.of(BotMessages.BRAZIL_ZONE));
         String message =
                 String.format(
-                        "<b>⏰ Faltam 30 minutos para o início do jogo!</b>\n\n"
+                        "<b>⏰ Faltam 30 minutos para o inicio do jogo!</b>\n\n"
                                 + "⚽ %s (%s) x (%s) %s - %s",
                         translateTeam(match.homeTeam()),
                         flagEmoji(match.homeTeam()),
                         flagEmoji(match.awayTeam()),
                         translateTeam(match.awayTeam()),
-                        localTime.format(DateTimeFormatter.ofPattern("HH:mm")));
+                        localTime.format(DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM)));
         for (Long groupId : allowedGroups) {
             telegramFacade.enviarMensagemHtml(groupId, message);
         }
     }
 
-    // Dentro de WorldCupSchedulerService.java
-
     public void sendResultsToChat(long chatId, LocalDate date) {
         if (!worldcupEnabled) {
-            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             return;
         }
 
@@ -169,18 +170,16 @@ public class WorldCupSchedulerService {
         if (matches.isEmpty()) {
             telegramFacade.enviarMensagemHtml(
                     chatId,
-                    "📭 Nenhum jogo encontrado para "
-                            + date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                            + ".");
+                    BotMessages.WORLD_CUP_NO_MATCHES_DATE
+                            + date.format(DateTimeFormatter.ofPattern(BotMessages.FMT_DD_MM_YYYY)));
             return;
         }
 
-        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern(BotMessages.FMT_DD_MM_YYYY);
         StringBuilder sb = new StringBuilder();
-        sb.append("<b>📊 RESULTADOS - ").append(date.format(dateFormatter)).append("</b>\n\n");
+        sb.append("<b>📊 RESULTADOS - ").append(date.format(dateFormatter)).append(FECHA_BOLD);
 
         for (WorldCupMatch m : matches) {
-            // Verifica se tem placar (ft)
             if (!m.hasScore()) {
                 sb.append("⏳ ")
                         .append(translateTeam(m.homeTeam()))
@@ -199,7 +198,6 @@ public class WorldCupSchedulerService {
             int homeGoals = ft.get(0);
             int awayGoals = ft.get(1);
 
-            // Monta o cabeçalho do jogo com detalhes de prorrogação/pênaltis
             StringBuilder header = new StringBuilder();
             header.append(flagEmoji(m.homeTeam()))
                     .append(" ")
@@ -213,14 +211,12 @@ public class WorldCupSchedulerService {
                     .append(" ")
                     .append(flagEmoji(m.awayTeam()));
 
-            // Se houver prorrogação, mostra o placar da prorrogação
             if (score.et() != null && score.et().size() == 2) {
                 int etHome = score.et().get(0);
                 int etAway = score.et().get(1);
                 header.append(" (pro) ").append(etHome).append("-").append(etAway);
             }
 
-            // Se houver pênaltis, mostra o resultado
             if (score.p() != null && score.p().size() == 2) {
                 int pHome = score.p().get(0);
                 int pAway = score.p().get(1);
@@ -229,7 +225,6 @@ public class WorldCupSchedulerService {
 
             sb.append(header.toString()).append("\n");
 
-            // Coleta e ordena gols (já implementado)
             List<Gol> todosGols = new ArrayList<>();
             if (m.goals1() != null) {
                 for (Goal g : m.goals1()) {
@@ -259,7 +254,7 @@ public class WorldCupSchedulerService {
         }
 
         telegramFacade.enviarMensagemHtml(chatId, sb.toString());
-    } // Classe auxiliar interna para associar o gol ao time
+    }
 
     private static class Gol {
         final Goal goal;
@@ -275,7 +270,6 @@ public class WorldCupSchedulerService {
         }
     }
 
-    // Converte minuto como "45+3" para 48, "90+7" para 97, "6" para 6
     private int parseMinuteToInt(String minute) {
         if (minute == null || minute.isBlank()) return 0;
         minute = minute.trim();
@@ -303,37 +297,33 @@ public class WorldCupSchedulerService {
         return ResponseEntity.ok("Dados da Copa recarregados com sucesso!");
     }
 
-    // Envia a lista de jogos do meio-dia para um chat específico
     public void sendNoonMatchesToChat(long chatId) {
         if (!worldcupEnabled) {
-            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             return;
         }
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessageToChat(chatId, today, "🏆 JOGOS DE HOJE (meio-dia)");
     }
 
-    // Envia a lista de jogos da noite para um chat específico
     public void sendEveningMatchesToChat(long chatId) {
         if (!worldcupEnabled) {
-            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             return;
         }
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessageToChat(chatId, today, "🏆 RESUMO DOS JOGOS DE HOJE");
     }
 
-    // Envia o teste manual para um chat específico
     public void sendManualTestToChat(long chatId) {
         if (!worldcupEnabled) {
-            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             return;
         }
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessageToChat(chatId, today, "🧪 TESTE MANUAL - Copa 2026");
     }
 
-    // Método auxiliar que envia a mensagem para um chat específico
     private void sendMatchesMessageToChat(long chatId, LocalDate date, String title) {
         List<WorldCupMatch> matches = worldCupService.getMatchesForDay(date);
         if (matches.isEmpty()) {
@@ -341,14 +331,14 @@ public class WorldCupSchedulerService {
                     chatId, "📭 Nenhum jogo programado para " + date + ".");
             return;
         }
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM);
         StringBuilder sb = new StringBuilder();
-        sb.append("<b>").append(title).append("</b>\n\n");
+        sb.append("<b>").append(title).append(FECHA_BOLD);
         for (WorldCupMatch m : matches) {
-            ZonedDateTime localTime = m.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
+            ZonedDateTime localTime = m.getMatchDateTime(ZoneId.of(BotMessages.BRAZIL_ZONE));
             sb.append(
                     String.format(
-                            "%s (%s) x (%s) %s - %s",
+                            POSICAO_PLACAR,
                             translateTeam(m.homeTeam()),
                             flagEmoji(m.homeTeam()),
                             flagEmoji(m.awayTeam()),
@@ -364,10 +354,10 @@ public class WorldCupSchedulerService {
 
     public void sendManualTest() {
         if (!worldcupEnabled || allowedGroups.isEmpty()) {
-            log.warn("Teste manual ignorado: serviço desabilitado ou sem grupos");
+            log.warn("Teste manual ignorado: servico desabilitado ou sem grupos");
             return;
         }
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessage(today, "🧪 TESTE MANUAL - Copa 2026");
     }
 
@@ -376,36 +366,34 @@ public class WorldCupSchedulerService {
         String normalized = team.toLowerCase().trim();
         String flag = FLAG_MAP.get(normalized);
         if (flag != null) return flag;
-        // Fallback por substring
         for (var entry : FLAG_MAP.entrySet()) {
             if (normalized.contains(entry.getKey())) {
                 return entry.getValue();
             }
         }
-        log.warn("Bandeira não encontrada para: {}", team);
+        log.warn("Bandeira nao encontrada para: {}", team);
         return "🏳️";
     }
 
-    // Dentro de WorldCupSchedulerService.java
     public void sendMatchesToChat(long chatId, LocalDate date) {
         if (!worldcupEnabled) {
-            telegramFacade.enviarMensagemHtml(chatId, "⛔ Serviço de Copa desativado.");
+            telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             return;
         }
         List<WorldCupMatch> matches = worldCupService.getMatchesForDay(date);
         if (matches.isEmpty()) {
-            telegramFacade.enviarMensagemHtml(chatId, "📭 Nenhum jogo programado para hoje.");
+            telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_NO_MATCHES_TODAY);
             return;
         }
 
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM);
         StringBuilder sb = new StringBuilder();
         sb.append("<b>🏆 JOGOS DE HOJE</b>\n\n");
         for (WorldCupMatch m : matches) {
-            ZonedDateTime localTime = m.getMatchDateTime(ZoneId.of("America/Sao_Paulo"));
+            ZonedDateTime localTime = m.getMatchDateTime(ZoneId.of(BotMessages.BRAZIL_ZONE));
             sb.append(
                     String.format(
-                            "%s (%s) x (%s) %s - %s",
+                            POSICAO_PLACAR,
                             translateTeam(m.homeTeam()),
                             flagEmoji(m.homeTeam()),
                             flagEmoji(m.awayTeam()),
@@ -425,95 +413,92 @@ public class WorldCupSchedulerService {
                     Map.entry("brazil", "Brasil"),
                     Map.entry("argentina", "Argentina"),
                     Map.entry("uruguay", "Uruguai"),
-                    Map.entry("colombia", "Colômbia"),
+                    Map.entry("colombia", "Colombia"),
                     Map.entry("ecuador", "Equador"),
                     Map.entry("paraguay", "Paraguai"),
                     Map.entry("peru", "Peru"),
                     Map.entry("chile", "Chile"),
-                    Map.entry("bolivia", "Bolívia"),
+                    Map.entry("bolivia", "Bolivia"),
                     Map.entry("venezuela", "Venezuela"),
                     // UEFA
                     Map.entry("germany", "Alemanha"),
-                    Map.entry("france", "França"),
+                    Map.entry("france", "Franca"),
                     Map.entry("spain", "Espanha"),
                     Map.entry("england", "Inglaterra"),
-                    Map.entry("italy", "Itália"),
+                    Map.entry("italy", "Italia"),
                     Map.entry("netherlands", "Holanda"),
                     Map.entry("portugal", "Portugal"),
-                    Map.entry("belgium", "Bélgica"),
-                    Map.entry("croatia", "Croácia"),
-                    Map.entry("switzerland", "Suíça"),
+                    Map.entry("belgium", "Belgica"),
+                    Map.entry("croatia", "Croacia"),
+                    Map.entry("switzerland", "Suica"),
                     Map.entry("denmark", "Dinamarca"),
-                    Map.entry("sweden", "Suécia"),
-                    Map.entry("poland", "Polônia"),
-                    Map.entry("serbia", "Sérvia"),
+                    Map.entry("sweden", "Suecia"),
+                    Map.entry("poland", "Polonia"),
+                    Map.entry("serbia", "Servia"),
                     Map.entry("turkey", "Turquia"),
-                    Map.entry("ukraine", "Ucrânia"),
-                    Map.entry("austria", "Áustria"),
-                    Map.entry("czech republic", "República Tcheca"),
-                    Map.entry("bosnia & herzegovina", "Bósnia"),
+                    Map.entry("ukraine", "Ucrania"),
+                    Map.entry("austria", "Austria"),
+                    Map.entry("czech republic", "Republica Tcheca"),
+                    Map.entry("bosnia & herzegovina", "Bosnia"),
                     Map.entry("norway", "Noruega"),
-                    Map.entry("scotland", "Escócia"),
+                    Map.entry("scotland", "Escocia"),
                     // CONCACAF
-                    Map.entry("mexico", "México"),
+                    Map.entry("mexico", "Mexico"),
                     Map.entry("united states", "Estados Unidos"),
                     Map.entry("usa", "Estados Unidos"),
-                    Map.entry("canada", "Canadá"),
-                    Map.entry("panama", "Panamá"),
+                    Map.entry("canada", "Canada"),
+                    Map.entry("panama", "Panama"),
                     Map.entry("costa rica", "Costa Rica"),
                     Map.entry("honduras", "Honduras"),
                     Map.entry("jamaica", "Jamaica"),
                     Map.entry("el salvador", "El Salvador"),
                     Map.entry("haiti", "Haiti"),
-                    Map.entry("curaçao", "Curaçao"),
+                    Map.entry("curacao", "Curacao"),
                     // CAF
                     Map.entry("morocco", "Marrocos"),
                     Map.entry("senegal", "Senegal"),
-                    Map.entry("tunisia", "Tunísia"),
-                    Map.entry("algeria", "Argélia"),
-                    Map.entry("nigeria", "Nigéria"),
-                    Map.entry("cameroon", "Camarões"),
+                    Map.entry("tunisia", "Tunisia"),
+                    Map.entry("algeria", "Argelia"),
+                    Map.entry("nigeria", "Nigeria"),
+                    Map.entry("cameroon", "Camaroes"),
                     Map.entry("ivory coast", "Costa do Marfim"),
                     Map.entry("ghana", "Gana"),
                     Map.entry("egypt", "Egito"),
                     Map.entry("mali", "Mali"),
                     Map.entry("burkina faso", "Burkina Faso"),
-                    Map.entry("dr congo", "República Democrática do Congo"),
-                    Map.entry("south africa", "África do Sul"),
+                    Map.entry("dr congo", "Republica Democratica do Congo"),
+                    Map.entry("south africa", "Africa do Sul"),
                     Map.entry("cape verde", "Cabo Verde"),
                     // AFC
-                    Map.entry("japan", "Japão"),
+                    Map.entry("japan", "Japao"),
                     Map.entry("south korea", "Coreia do Sul"),
-                    Map.entry("australia", "Austrália"),
-                    Map.entry("saudi arabia", "Arábia Saudita"),
-                    Map.entry("iran", "Irã"),
+                    Map.entry("australia", "Australia"),
+                    Map.entry("saudi arabia", "Arabia Saudita"),
+                    Map.entry("iran", "Ira"),
                     Map.entry("iraq", "Iraque"),
-                    Map.entry("uzbekistan", "Uzbequistão"),
-                    Map.entry("united arab emirates", "Emirados Árabes Unidos"),
+                    Map.entry("uzbekistan", "Uzbequistao"),
+                    Map.entry("united arab emirates", "Emirados Arabes Unidos"),
                     Map.entry("qatar", "Catar"),
                     Map.entry("china", "China"),
-                    Map.entry("syria", "Síria"),
-                    Map.entry("vietnam", "Vietnã"),
-                    Map.entry("oman", "Omã"),
-                    Map.entry("jordan", "Jordânia"),
+                    Map.entry("syria", "Siria"),
+                    Map.entry("vietnam", "Vietna"),
+                    Map.entry("oman", "Oma"),
+                    Map.entry("jordan", "Jordania"),
                     // OFC
-                    Map.entry("new zealand", "Nova Zelândia"),
+                    Map.entry("new zealand", "Nova Zelandia"),
                     Map.entry("tahiti", "Taiti"));
 
     private String translateTeam(String teamName) {
         if (teamName == null || teamName.isBlank()) return "?";
         String key = teamName.toLowerCase().trim();
-        // Tenta primeira correspondência exata
         if (TEAM_NAME_PT.containsKey(key)) {
             return TEAM_NAME_PT.get(key);
         }
-        // Fallback: tenta substring (ex.: "Czech Republic" vs "czech republic")
         for (var entry : TEAM_NAME_PT.entrySet()) {
             if (key.contains(entry.getKey())) {
                 return entry.getValue();
             }
         }
-        // Se não encontrar, mantém o original
         return teamName;
     }
 
@@ -563,7 +548,7 @@ public class WorldCupSchedulerService {
                     Map.entry("jamaica", "🇯🇲"),
                     Map.entry("el salvador", "🇸🇻"),
                     Map.entry("haiti", "🇭🇹"),
-                    Map.entry("curaçao", "🇨🇼"),
+                    Map.entry("curacao", "🇨🇼"),
                     // CAF
                     Map.entry("morocco", "🇲🇦"),
                     Map.entry("senegal", "🇸🇳"),
