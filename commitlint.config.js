@@ -36,10 +36,8 @@ module.exports = {
     },
 
     ignores: [
-        // 🔥 CRÍTICO: evita quebrar CI com merges automáticos
         (message) => message.startsWith('Merge'),
-
-        // 🔥 opcional: ignorar commits gerados automaticamente
+        (message) => message.includes('into develop'), // 🔥 captura este padrão
         (message) => message.startsWith('Revert'),
     ],
 };
