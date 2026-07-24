@@ -57,7 +57,13 @@ public class AudioService {
 
             Process p = startProcess(pb);
 
+            // 🔥 Consome stdout/stderr em thread separada para evitar deadlock de buffer
+            Thread drainThread = new Thread(() -> drainStream(p.getInputStream()));
+            drainThread.setDaemon(true);
+            drainThread.start();
+
             boolean finished = p.waitFor(30, TimeUnit.SECONDS);
+            drainThread.join(1000); // aguarda até 1s a drenagem
 
             if (finished && p.exitValue() == 0) {
                 log.info("FFmpeg: Conversão concluída com sucesso.");
@@ -75,6 +81,14 @@ public class AudioService {
         } catch (Exception e) {
             log.error("Erro crítico no AudioService", e);
             return CompletableFuture.failedFuture(new AudioProcessingException("FFmpeg falhou", e));
+        }
+    }
+
+    private void drainStream(java.io.InputStream stream) {
+        try (stream) {
+            stream.transferTo(java.io.OutputStream.nullOutputStream());
+        } catch (java.io.IOException e) {
+            log.debug("FFmpeg stdout drenado com exceção (ignorável): {}", e.getMessage());
         }
     }
 

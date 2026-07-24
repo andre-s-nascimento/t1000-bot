@@ -1,4 +1,3 @@
-/* (c) 2026 | 17/05/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import java.io.File;
@@ -79,7 +78,7 @@ public class GroqClient {
     }
 
     @Retryable(
-            includes = Exception.class,
+            includes = {java.io.IOException.class, HttpClientErrorException.class},
             maxRetries = 2,
             delay = 1000,
             multiplier = 2,
@@ -109,7 +108,7 @@ public class GroqClient {
 
     // Método de refinamento de texto (usado pelo AudioPipelineService)
     @Retryable(
-            includes = Exception.class,
+            includes = {java.io.IOException.class, HttpClientErrorException.class},
             maxRetries = 3,
             delay = 2000,
             multiplier = 3,
@@ -130,7 +129,7 @@ public class GroqClient {
     }
 
     @Retryable(
-            includes = {Exception.class, HttpClientErrorException.TooManyRequests.class},
+            includes = {java.io.IOException.class, HttpClientErrorException.class},
             maxRetries = 4,
             delay = 2000,
             multiplier = 3,

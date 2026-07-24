@@ -23,8 +23,9 @@ import net.ddns.adambravo79.tmill.dto.TmdbDiscoverTvResponse;
 public class WeeklyReleasesService {
 
     private final TmdbClient tmdbClient;
-    private static final int MAX_ITEMS_PER_DAY = 15; // limite por dia para não ficar gigante
+    private static final int MAX_ITEMS_PER_DAY = 15;
 
+    @SuppressWarnings("null")
     public String getWeeklyReleasesMessage() {
         try {
             LocalDate[] period = calculateThursdayPeriod();
@@ -38,7 +39,7 @@ public class WeeklyReleasesService {
             all.addAll(movies);
             all.addAll(series);
 
-            // Filtra datas nulas e fora do período
+            // 🔥 CORREÇÃO: usar collect(Collectors.toList()) para obter lista mutável
             List<ReleaseItem> filtered =
                     all.stream()
                             .filter(item -> item.getReleaseDate() != null)
@@ -52,12 +53,10 @@ public class WeeklyReleasesService {
                 return "Nenhum lançamento encontrado para esta semana.";
             }
 
-            // Ordena por data (e depois por título para consistência)
             filtered.sort(
                     Comparator.comparing(ReleaseItem::getReleaseDate)
                             .thenComparing(ReleaseItem::getTitle));
 
-            // Agrupa por data
             Map<LocalDate, List<ReleaseItem>> groupedByDate =
                     filtered.stream()
                             .collect(
@@ -87,7 +86,7 @@ public class WeeklyReleasesService {
         if (response == null || response.results() == null) return List.of();
         return response.results().stream()
                 .map(m -> new ReleaseItem(m.title(), m.release_date(), "movie"))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private List<ReleaseItem> fetchSeries(LocalDate start, LocalDate end) {
@@ -96,14 +95,14 @@ public class WeeklyReleasesService {
         if (response == null || response.results() == null) return List.of();
         return response.results().stream()
                 .map(t -> new ReleaseItem(t.name(), t.first_air_date(), "tv"))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private String formatMessage(
             LocalDate start, LocalDate end, Map<LocalDate, List<ReleaseItem>> groupedByDate) {
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("dd/MM");
         DateTimeFormatter dayOfWeekFormatter =
-                DateTimeFormatter.ofPattern("EEEE", new Locale("pt", "BR"));
+                DateTimeFormatter.ofPattern("EEEE", Locale.of("pt", "BR"));
         String period = start.format(dateFormatter) + " – " + end.format(dateFormatter);
 
         StringBuilder sb = new StringBuilder();
@@ -122,7 +121,6 @@ public class WeeklyReleasesService {
                     .append(dayOfWeek)
                     .append(")</b>\n");
 
-            // Limita a quantidade por dia para não sobrecarregar
             List<ReleaseItem> toShow = items.stream().limit(MAX_ITEMS_PER_DAY).toList();
             for (ReleaseItem item : toShow) {
                 sb.append("▪️ ").append(item.getTitle());

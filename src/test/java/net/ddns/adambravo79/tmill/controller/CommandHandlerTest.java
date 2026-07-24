@@ -242,7 +242,7 @@ class CommandHandlerTest {
         ReflectionTestUtils.setField(commandHandler, "worldcupEnabled", true);
         when(message.text()).thenReturn("t1000 resultados invalido");
         commandHandler.handleTextUpdate(update);
-        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Formato de data inválido"));
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Formato de data invalido"));
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -251,7 +251,7 @@ class CommandHandlerTest {
         ReflectionTestUtils.setField(commandHandler, "worldcupEnabled", false);
         when(message.text()).thenReturn("t1000 jogos de hoje");
         commandHandler.handleTextUpdate(update);
-        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Copa de 2026 já acabou"));
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Copa de 2026 ja acabou"));
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -308,14 +308,14 @@ class CommandHandlerTest {
     void deveResponderComandoNaoReconhecido() {
         when(message.text()).thenReturn("t1000 comando invalido");
         commandHandler.handleTextUpdate(update);
-        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Comando não reconhecido"));
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Comando nao reconhecido"));
     }
 
     @Test
     void deveLogarLinkNaoProcessado() {
         when(message.text()).thenReturn("t1000 comando invalido http://link.com");
         commandHandler.handleTextUpdate(update);
-        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Comando não reconhecido"));
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Comando nao reconhecido"));
         // não lança exceção
     }
 

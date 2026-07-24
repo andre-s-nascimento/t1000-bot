@@ -1,5 +1,18 @@
+/* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
+import static net.ddns.adambravo79.tmill.constant.BotMessages.BRAZIL_ZONE;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.DATA_INVALIDA_WORLDCUP;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_LIMPAR_DADOS;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_LIMPAR_RELEASES;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_DD_MM_YYYY_HYPHEN;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM_SS;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_YYYY_MM_DD;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_DISABLED;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_NOT_AVAILABLE;
+
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.LocalDate;
@@ -16,6 +29,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,21 +37,49 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
-import net.ddns.adambravo79.tmill.service.*;
+import net.ddns.adambravo79.tmill.service.AutoResponseService;
+import net.ddns.adambravo79.tmill.service.DailyDigestService;
+import net.ddns.adambravo79.tmill.service.DailyReleasesService;
+import net.ddns.adambravo79.tmill.service.EasterEggService;
+import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
+import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
+import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * Controller administrativo para testes, limpeza de dados e monitoramento.
+ *
+ * <p>Exception handling strategy:
+ *
+ * <ul>
+ *   <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
+ *   <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem apropriada.
+ *   <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe detalhes).
+ *   <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
+ *   <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
+ *   <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
+ * </ul>
+ */
 @RestController
 @RequestMapping("/admin")
 @RequiredArgsConstructor
 @Slf4j
 public class AdminController {
+
+    private static final long SHOWCASE_CHAT_ID = -5283244164L;
+    private static final String MSG_ERRO_INTERNO =
+            "Erro interno do servidor. Contate o administrador.";
 
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
@@ -56,9 +98,6 @@ public class AdminController {
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
 
-    private static final long SHOWCASE_CHAT_ID = -5283244164L;
-    private static final String WORLD_CUP_DISABLED_MSG = "⛔ Serviço da Copa desativado.";
-
     // ========================= LIMPEZA DE DADOS =========================
 
     @PostMapping("/clear-releases")
@@ -67,10 +106,11 @@ public class AdminController {
             releaseNotifiedRepository.clearAll();
             log.info("Tabela releases_notified limpa via endpoint.");
             return ResponseEntity.ok("✅ Tabela de lançamentos limpa com sucesso.");
-        } catch (Exception e) {
-            log.error("Erro ao limpar releases_notified", e);
+
+        } catch (DataAccessException e) {
+            log.error("Erro de banco ao limpar releases_notified", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Erro ao limpar tabela: " + e.getMessage());
+                    .body(ERRO_LIMPAR_RELEASES);
         }
     }
 
@@ -81,10 +121,10 @@ public class AdminController {
             log.info("Dados limpos via endpoint admin.");
             return ResponseEntity.ok(
                     String.format("✅ Dados removidos: %d lançamentos deletados.", deletedReleases));
-        } catch (Exception e) {
-            log.error("Erro ao limpar dados", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Erro ao limpar dados: " + e.getMessage());
+
+        } catch (DataAccessException e) {
+            log.error("Erro de banco ao limpar dados", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ERRO_LIMPAR_DADOS);
         }
     }
 
@@ -139,58 +179,67 @@ public class AdminController {
             @RequestParam("end") String endDate,
             @RequestParam(value = "chatId", required = false) Long chatId) {
 
-        try {
-            LocalDate[] dates = parseDateRange(startDate, endDate);
-            if (dates.length == 0) {
-                return ResponseEntity.badRequest()
-                        .body("Formato inválido. Use 'yyyy-MM-dd' ou 'dd-MM-yyyy'.");
-            }
-
-            ZoneId zone = ZoneId.of("America/Sao_Paulo");
-            LocalDateTime from = dates[0].atStartOfDay(zone).toLocalDateTime();
-            LocalDateTime to = dates[1].atTime(23, 59, 59);
-
-            dailyDigestService.generateDigestCustom(from, to, chatId);
-
-            String message =
-                    "Resumo personalizado gerado para período: " + startDate + " até " + endDate;
-            if (chatId != null) {
-                message += " (enviado apenas para o chat " + chatId + ")";
-            } else {
-                message += " (enviado para todos os chats configurados)";
-            }
-            return ResponseEntity.ok(message);
-
-        } catch (Exception e) {
-            log.error("Erro ao processar datas", e);
-            return ResponseEntity.internalServerError().body("Erro interno: " + e.getMessage());
+        // --- Validação de entrada ---
+        if (startDate == null || startDate.isBlank() || endDate == null || endDate.isBlank()) {
+            return ResponseEntity.badRequest().body("Parâmetros 'start' e 'end' são obrigatórios.");
         }
+
+        LocalDate[] dates = parseDateRange(startDate, endDate);
+        if (dates.length == 0) {
+            return ResponseEntity.badRequest()
+                    .body("Formato inválido. Use 'yyyy-MM-dd' ou 'dd-MM-yyyy'.");
+        }
+
+        ZoneId zone = ZoneId.of(BRAZIL_ZONE);
+        LocalDateTime from = dates[0].atStartOfDay(zone).toLocalDateTime();
+        LocalDateTime to = dates[1].atTime(23, 59, 59);
+
+        try {
+            dailyDigestService.generateDigestCustom(from, to, chatId);
+        } catch (IllegalArgumentException e) {
+            log.warn("Parâmetros inválidos para custom digest: {}", e.getMessage());
+            return ResponseEntity.badRequest().body("Parâmetros inválidos: " + e.getMessage());
+        } catch (RuntimeException e) {
+            log.error("Erro ao gerar digest customizado", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(MSG_ERRO_INTERNO);
+        }
+
+        String message =
+                "Resumo personalizado gerado para período: " + startDate + " até " + endDate;
+        if (chatId != null) {
+            message += " (enviado apenas para o chat " + chatId + ")";
+        } else {
+            message += " (enviado para todos os chats configurados)";
+        }
+        return ResponseEntity.ok(message);
     }
+
+    // ========================= WORLD CUP =========================
 
     @PostMapping("/test-worldcup-noon")
     public ResponseEntity<String> testWorldCupNoon() {
-        if (worldCupSchedulerService != null) {
-            worldCupSchedulerService.sendNoonMatches();
-            return ResponseEntity.ok("Envio de jogos do meio-dia executado (simulado)");
+        if (worldCupSchedulerService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(WORLD_CUP_NOT_AVAILABLE);
         }
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body("Serviço de Copa não disponível");
+        worldCupSchedulerService.sendNoonMatches();
+        return ResponseEntity.ok("Envio de jogos do meio-dia executado (simulado)");
     }
 
     @PostMapping("/test-worldcup-evening")
     public ResponseEntity<String> testWorldCupEvening() {
-        if (worldCupSchedulerService != null) {
-            worldCupSchedulerService.sendEveningMatches();
-            return ResponseEntity.ok("Envio de jogos da noite executado (simulado)");
+        if (worldCupSchedulerService == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(WORLD_CUP_NOT_AVAILABLE);
         }
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body("Serviço de Copa não disponível");
+        worldCupSchedulerService.sendEveningMatches();
+        return ResponseEntity.ok("Envio de jogos da noite executado (simulado)");
     }
 
     @PostMapping("/test-worldcup")
     public ResponseEntity<String> testWorldCup() {
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
+            return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
         worldCupSchedulerService.sendManualTest();
         return ResponseEntity.ok("✅ Envio manual disparado! Verifique os logs.");
@@ -201,7 +250,7 @@ public class AdminController {
             @RequestParam(required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
+            return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
         worldCupSchedulerService.sendManualTestToChat(targetChatId);
         return ResponseEntity.ok("✅ Teste manual da Copa enviado para o chat " + targetChatId);
@@ -212,7 +261,7 @@ public class AdminController {
             @RequestParam(required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
+            return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
         worldCupSchedulerService.sendNoonMatchesToChat(targetChatId);
         return ResponseEntity.ok("✅ Envio do meio-dia da Copa enviado para o chat " + targetChatId);
@@ -223,7 +272,7 @@ public class AdminController {
             @RequestParam(required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
+            return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
         worldCupSchedulerService.sendEveningMatchesToChat(targetChatId);
         return ResponseEntity.ok("✅ Envio da noite da Copa enviado para o chat " + targetChatId);
@@ -232,13 +281,28 @@ public class AdminController {
     @PostMapping("/reload-worldcup-showcase")
     public ResponseEntity<String> reloadWorldCupShowcase(
             @RequestParam(required = false) Long chatId) {
+
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         staticWorldCupService.reload();
+
         String msg =
                 "✅ Dados da Copa recarregados do arquivo JSON às "
-                        + LocalDateTime.now(ZoneId.of("America/Sao_Paulo"))
-                                .format(DateTimeFormatter.ofPattern("HH:mm:ss"));
-        telegramFacade.enviarMensagemHtml(targetChatId, msg);
+                        + LocalDateTime.now(ZoneId.of(BRAZIL_ZONE))
+                                .format(DateTimeFormatter.ofPattern(FMT_HH_MM_SS));
+
+        try {
+            telegramFacade.enviarMensagemHtml(targetChatId, msg);
+        } catch (HttpClientErrorException e) {
+            log.warn(
+                    "Erro HTTP ao enviar notificação de reload para chatId={}: {}",
+                    targetChatId,
+                    e.getStatusCode());
+        } catch (ResourceAccessException e) {
+            log.warn(
+                    "Falha de conectividade ao enviar notificação de reload para chatId={}",
+                    targetChatId);
+        }
+
         return ResponseEntity.ok(msg + " (enviado para o chat " + targetChatId + ")");
     }
 
@@ -246,48 +310,20 @@ public class AdminController {
     public ResponseEntity<String> testWorldCupResultsShowcase(
             @RequestParam(defaultValue = "ontem") String dateParam,
             @RequestParam(required = false) Long chatId) {
+
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
-            return ResponseEntity.ok(WORLD_CUP_DISABLED_MSG);
+            return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
+
         LocalDate date = parseDateParam(dateParam);
         if (date == null) {
-            return ResponseEntity.badRequest()
-                    .body("❓ Data inválida. Use 'ontem', 'hoje' ou AAAA-MM-DD.");
+            return ResponseEntity.badRequest().body(DATA_INVALIDA_WORLDCUP);
         }
+
         worldCupSchedulerService.sendResultsToChat(targetChatId, date);
         return ResponseEntity.ok(
                 "✅ Resultados enviados para o chat " + targetChatId + " (data: " + date + ")");
-    }
-
-    private LocalDate parseDateParam(String param) {
-        if (param == null || param.isBlank()) return null;
-        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        if (param.equalsIgnoreCase("ontem")) {
-            return today.minusDays(1);
-        } else if (param.equalsIgnoreCase("hoje")) {
-            return today;
-        } else {
-            try {
-                return LocalDate.parse(param);
-            } catch (DateTimeParseException e) {
-                return null;
-            }
-        }
-    }
-
-    private LocalDate[] parseDateRange(String startDate, String endDate) {
-        for (String pattern : new String[] {"yyyy-MM-dd", "dd-MM-yyyy"}) {
-            try {
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
-                LocalDate start = LocalDate.parse(startDate, formatter);
-                LocalDate end = LocalDate.parse(endDate, formatter);
-                return new LocalDate[] {start, end};
-            } catch (DateTimeParseException ignored) {
-                // tenta próximo padrão
-            }
-        }
-        return new LocalDate[0];
     }
 
     @PostMapping("/reload-worldcup")
@@ -295,6 +331,8 @@ public class AdminController {
         staticWorldCupService.reload();
         return ResponseEntity.ok("Dados da Copa recarregados do arquivo JSON");
     }
+
+    // ========================= CONFIG & PROPERTIES =========================
 
     @GetMapping("/properties")
     public ResponseEntity<Map<String, Object>> getProperties() {
@@ -344,34 +382,27 @@ public class AdminController {
         return ResponseEntity.ok(props);
     }
 
-    private String maskToken(String token) {
-        if (token == null || token.length() < 8) return "***";
-        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
-    }
-
     @GetMapping("/config-files")
     public ResponseEntity<Map<String, Object>> getConfigFiles() {
         Map<String, Object> result = new LinkedHashMap<>();
         String[] files = {"easter-eggs.json", "auto-responses.json", "worldcup2026.json"};
+
         for (String fileName : files) {
             try {
-                Resource resource = resourceLoader.getResource("classpath:" + fileName);
-                if (!resource.exists()) {
-                    resource = resourceLoader.getResource("file:/app/config/" + fileName);
-                    if (!resource.exists()) {
-                        result.put(fileName, "❌ Arquivo não encontrado");
-                        continue;
-                    }
-                }
-                Object content = objectMapper.readValue(resource.getInputStream(), Object.class);
+                Object content = loadConfigFile(fileName);
                 result.put(fileName, content);
-            } catch (Exception e) {
-                log.error("Erro ao carregar arquivo: {}", fileName, e);
-                result.put(fileName, "❌ Erro ao ler: " + e.getMessage());
+            } catch (JsonProcessingException e) {
+                log.error("Erro ao parsear JSON do arquivo: {}", fileName, e);
+                result.put(fileName, "❌ Erro ao parsear JSON");
+            } catch (IOException e) {
+                log.warn("Arquivo de configuração não encontrado ou ilegível: {}", fileName);
+                result.put(fileName, "❌ Arquivo não encontrado");
             }
         }
         return ResponseEntity.ok(result);
     }
+
+    // ========================= DAILY RELEASES =========================
 
     @PostMapping("/test-daily-releases")
     public ResponseEntity<String> testDailyReleases() {
@@ -394,6 +425,10 @@ public class AdminController {
             @RequestParam(required = false) Long chatId,
             @RequestParam(required = false) String time) {
 
+        if (message == null || message.isBlank()) {
+            return ResponseEntity.badRequest().body("Parâmetro 'message' é obrigatório.");
+        }
+
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         LocalTime simulatedTime = parseTime(time);
 
@@ -406,29 +441,9 @@ public class AdminController {
         }
 
         AutoResponseOverride response = responseOpt.get();
-        String finalMsg =
-                "🧪 *Teste de Auto-Response*\n\n"
-                        + "👤 Usuário: "
-                        + (userId != null ? userId : "NÃO DEFINIDO")
-                        + "\n"
-                        + "📝 Mensagem: "
-                        + message
-                        + "\n"
-                        + "🕒 Horário simulado: "
-                        + (simulatedTime != null ? simulatedTime : "atual")
-                        + "\n\n"
-                        + "✅ Resposta: "
-                        + response.response();
+        String finalMsg = buildTestResponseMessage(userId, message, simulatedTime, response);
 
-        if (response.animation() != null && !response.animation().isBlank()) {
-            if (isValidUrl(response.animation())) {
-                telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
-            } else {
-                telegramFacade.enviarMensagemHtml(targetChatId, finalMsg);
-            }
-        } else {
-            telegramFacade.enviarMensagemHtml(targetChatId, finalMsg);
-        }
+        sendTestResponse(targetChatId, response, finalMsg);
 
         return ResponseEntity.ok("✅ Resposta enviada para o chat " + targetChatId);
     }
@@ -438,6 +453,11 @@ public class AdminController {
             @RequestParam(required = false) Long userId,
             @RequestParam String message,
             @RequestParam(required = false) String time) {
+
+        if (message == null || message.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Parâmetro 'message' é obrigatório."));
+        }
 
         LocalTime simulatedTime = parseTime(time);
         Optional<AutoResponseOverride> responseOpt =
@@ -466,19 +486,124 @@ public class AdminController {
                         "rules", autoResponseService.getRulesSummary()));
     }
 
-    // ========================= MÉTODOS AUXILIARES =========================
+    // ========================= MÉTODOS AUXILIARES PRIVADOS =========================
+
+    /** Carrega e parseia um arquivo de configuração do classpath ou do diretório /app/config/. */
+    private Object loadConfigFile(String fileName) throws IOException {
+        Resource resource = resourceLoader.getResource("classpath:" + fileName);
+        if (!resource.exists()) {
+            resource = resourceLoader.getResource("file:/app/config/" + fileName);
+            if (!resource.exists()) {
+                throw new IOException("Arquivo não encontrado: " + fileName);
+            }
+        }
+        return objectMapper.readValue(resource.getInputStream(), Object.class);
+    }
+
+    private String buildTestResponseMessage(
+            Long userId, String message, LocalTime simulatedTime, AutoResponseOverride response) {
+        return "🧪 *Teste de Auto-Response*\n\n"
+                + "👤 Usuário: "
+                + (userId != null ? userId : "NÃO DEFINIDO")
+                + "\n"
+                + "📝 Mensagem: "
+                + message
+                + "\n"
+                + "🕒 Horário simulado: "
+                + (simulatedTime != null ? simulatedTime : "atual")
+                + "\n\n"
+                + "✅ Resposta: "
+                + response.response();
+    }
+
+    private void sendTestResponse(
+            long targetChatId, AutoResponseOverride response, String finalMsg) {
+        if (response.animation() != null
+                && !response.animation().isBlank()
+                && isValidUrl(response.animation())) {
+            try {
+                telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
+            } catch (HttpClientErrorException e) {
+                log.warn(
+                        "Erro HTTP ao enviar mídia para chatId={}: {}",
+                        targetChatId,
+                        e.getStatusCode());
+                fallbackToText(targetChatId, finalMsg);
+            } catch (ResourceAccessException e) {
+                log.warn("Falha de conectividade ao enviar mídia para chatId={}", targetChatId);
+                fallbackToText(targetChatId, finalMsg);
+            }
+        } else {
+            fallbackToText(targetChatId, finalMsg);
+        }
+    }
+
+    private void fallbackToText(long chatId, String message) {
+        try {
+            telegramFacade.enviarMensagemHtml(chatId, message);
+        } catch (HttpClientErrorException e) {
+            log.warn(
+                    "Erro HTTP ao enviar mensagem de fallback para chatId={}: {}",
+                    chatId,
+                    e.getStatusCode());
+        } catch (ResourceAccessException e) {
+            log.warn("Falha de conectividade ao enviar fallback para chatId={}", chatId);
+        }
+    }
+
+    private LocalDate parseDateParam(String param) {
+        if (param == null || param.isBlank()) {
+            return null;
+        }
+        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        if (param.equalsIgnoreCase("ontem")) {
+            return today.minusDays(1);
+        } else if (param.equalsIgnoreCase("hoje")) {
+            return today;
+        }
+        try {
+            return LocalDate.parse(param);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private LocalDate[] parseDateRange(String startDate, String endDate) {
+        for (String pattern : new String[] {FMT_YYYY_MM_DD, FMT_DD_MM_YYYY_HYPHEN}) {
+            try {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
+                LocalDate start = LocalDate.parse(startDate, formatter);
+                LocalDate end = LocalDate.parse(endDate, formatter);
+                return new LocalDate[] {start, end};
+            } catch (DateTimeParseException ignored) {
+                // tenta próximo padrão
+            }
+        }
+        return new LocalDate[0];
+    }
+
+    private String maskToken(String token) {
+        if (token == null || token.length() < 8) {
+            return "***";
+        }
+        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
+    }
 
     private LocalTime parseTime(String timeStr) {
-        if (timeStr == null || timeStr.isBlank()) return null;
+        if (timeStr == null || timeStr.isBlank()) {
+            return null;
+        }
         try {
-            return LocalTime.parse(timeStr, DateTimeFormatter.ofPattern("HH:mm"));
+            return LocalTime.parse(timeStr, DateTimeFormatter.ofPattern(FMT_HH_MM));
         } catch (DateTimeParseException e) {
             return null;
         }
     }
 
     private boolean isValidUrl(String url) {
-        if (url == null || url.isBlank()) return false;
+        if (url == null || url.isBlank()) {
+            return false;
+        }
         try {
             URI uri = new URI(url);
             String scheme = uri.getScheme();

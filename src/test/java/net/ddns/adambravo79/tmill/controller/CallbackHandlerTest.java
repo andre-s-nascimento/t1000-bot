@@ -1,3 +1,4 @@
+/* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.*;
@@ -60,7 +61,8 @@ class CallbackHandlerTest {
         when(update.callbackQuery()).thenReturn(callback);
         when(callback.from()).thenReturn(user);
         when(callback.id()).thenReturn("cb123");
-        when(callback.message()).thenReturn(message);
+        // Usa maybeInaccessibleMessage em vez de message()
+        when(callback.maybeInaccessibleMessage()).thenReturn(message);
         when(message.chat()).thenReturn(chat);
         when(chat.id()).thenReturn(CHAT_ID);
         when(message.messageId()).thenReturn(MESSAGE_ID);
@@ -74,6 +76,7 @@ class CallbackHandlerTest {
     // =========================
 
     @Test
+    @SuppressWarnings("java:S6068")
     void deveSelecionarFilmeComSucesso() {
         when(callback.data()).thenReturn("id:123");
         MovieOrchestrationResponse response =
@@ -83,7 +86,7 @@ class CallbackHandlerTest {
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(telegramFacade).answerCallbackQuery(eq("cb123"), eq("Buscando filme..."), eq(false));
+        verify(telegramFacade).answerCallbackQuery("cb123", "Buscando filme...", false);
         verify(telegramFacade)
                 .editarMensagemHtml(eq(CHAT_ID), eq(MESSAGE_ID), contains("✅ Filme selecionado"));
         verify(telegramFacade)
@@ -102,18 +105,18 @@ class CallbackHandlerTest {
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(telegramFacade).answerCallbackQuery(eq("cb123"), eq("Buscando filme..."), eq(false));
+        verify(telegramFacade).answerCallbackQuery("cb123", "Buscando filme...", false);
         verify(telegramFacade)
                 .editarMensagemHtml(eq(CHAT_ID), eq(MESSAGE_ID), contains("✅ Filme selecionado"));
 
-        // Captura a mensagem enviada
         ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
         verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), messageCaptor.capture());
 
         String mensagem = messageCaptor.getValue();
-        assertThat(mensagem).contains("Título do Filme");
-        assertThat(mensagem).contains("Descrição");
-        assertThat(mensagem).contains("_(sem imagem)_");
+        assertThat(mensagem)
+                .contains("Título do Filme")
+                .contains("Descrição")
+                .contains("_(sem imagem)_");
     }
 
     @Test
@@ -124,21 +127,19 @@ class CallbackHandlerTest {
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(telegramFacade).answerCallbackQuery(eq("cb123"), eq("Buscando filme..."), eq(false));
-        verify(telegramFacade)
-                .answerCallbackQuery(eq("cb123"), eq("Filme não encontrado"), eq(true));
-        verify(telegramFacade)
-                .editarMensagem(eq(CHAT_ID), eq(MESSAGE_ID), contains("❌ Filme não encontrado"));
+        verify(telegramFacade).answerCallbackQuery("cb123", "Buscando filme...", false);
+        verify(telegramFacade).answerCallbackQuery("cb123", "Filme não encontrado", true);
+        verify(telegramFacade).editarMensagem(CHAT_ID, MESSAGE_ID, "❌ Filme não encontrado.");
         verify(telegramFacade, never()).enviarFotoHtml(anyLong(), anyString(), anyString());
     }
 
     @Test
     void deveLidarComIdInvalido() {
-        when(callback.data()).thenReturn("id:abc"); // ID não numérico
+        when(callback.data()).thenReturn("id:abc");
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(telegramFacade).answerCallbackQuery(eq("cb123"), eq("ID inválido"), eq(true));
+        verify(telegramFacade).answerCallbackQuery("cb123", "ID inválido", true);
         verify(movieService, never()).buscarPorId(anyLong());
         verify(telegramFacade, never()).editarMensagemHtml(anyLong(), anyInt(), anyString());
         verify(telegramFacade, never()).enviarFotoHtml(anyLong(), anyString(), anyString());
@@ -151,8 +152,8 @@ class CallbackHandlerTest {
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(telegramFacade).answerCallbackQuery(eq("cb123"), eq("Buscando filme..."), eq(false));
-        verify(telegramFacade).answerCallbackQuery(eq("cb123"), eq("Erro interno"), eq(true));
+        verify(telegramFacade).answerCallbackQuery("cb123", "Buscando filme...", false);
+        verify(telegramFacade).answerCallbackQuery("cb123", "Erro interno", true);
         verify(telegramFacade, never()).editarMensagemHtml(anyLong(), anyInt(), anyString());
         verify(telegramFacade, never()).enviarFotoHtml(anyLong(), anyString(), anyString());
     }
@@ -167,7 +168,7 @@ class CallbackHandlerTest {
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(audioHandler).handleTranscriptionCallback(eq(callback), eq("trans_bruto|token123"));
+        verify(audioHandler).handleTranscriptionCallback(callback, "trans_bruto|token123");
         verifyNoInteractions(movieService);
     }
 
@@ -177,8 +178,7 @@ class CallbackHandlerTest {
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(audioHandler)
-                .handleTranscriptionCallback(eq(callback), eq("trans_refinado|token456"));
+        verify(audioHandler).handleTranscriptionCallback(callback, "trans_refinado|token456");
         verifyNoInteractions(movieService);
     }
 
@@ -192,8 +192,7 @@ class CallbackHandlerTest {
 
         callbackHandler.handleCallbackUpdate(update);
 
-        verify(telegramFacade)
-                .answerCallbackQuery(eq("cb123"), eq("Ação não reconhecida"), eq(false));
+        verify(telegramFacade).answerCallbackQuery("cb123", "Ação não reconhecida", false);
         verifyNoInteractions(movieService, audioHandler);
     }
 
@@ -207,16 +206,14 @@ class CallbackHandlerTest {
                 new MovieRecord(1L, "Filme A", "", "2021-01-01", "", 0.0, 0.0, "", List.of());
         MovieRecord filme2 =
                 new MovieRecord(2L, "Filme B", "", "2022-02-02", "", 0.0, 0.0, "", List.of());
-        MovieRecord filme3 =
-                new MovieRecord(3L, "Filme C", "", "", "", 0.0, 0.0, "", List.of()); // sem data
+        MovieRecord filme3 = new MovieRecord(3L, "Filme C", "", "", "", 0.0, 0.0, "", List.of());
 
         List<MovieRecord> resultados = List.of(filme1, filme2, filme3);
 
         InlineKeyboardMarkup markup = callbackHandler.criarBotoesDesambiguacao(resultados);
 
         assertThat(markup).isNotNull();
-        // Não podemos verificar facilmente o conteúdo, mas podemos verificar que o método não lança
-        // exceção.
-        // Opcional: verificar que o markup tem a estrutura esperada (arrays de botões).
+        // Verifica que há pelo menos um botão (não testamos a estrutura exata, mas que não falha)
+        // Poderíamos verificar que o método não lança exceção e que retorna algo não nulo.
     }
 }
