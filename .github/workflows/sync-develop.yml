@@ -17,4 +17,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          gh pr create --base develop --head main --title "chore: sync main into develop after release" --body "Sincronização automática" --label "sync" || echo "PR already exists"
+          gh pr create --base develop --head main \
+            --title "chore: sync main into develop after release" \
+            --body "Sincronização automática" \
+            --label "sync" || echo "PR already exists"
+
+      - name: Create sync label if missing
+        run: gh label create sync --description "Sync PR" --color "0E8A16" || true
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}

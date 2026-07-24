@@ -280,7 +280,7 @@ A documentação completa de desenvolvimento está em [`./docs/dev-guide/README.
 
 ## 📝 Licença
 
-MIT © 2024-2026 André S. Nascimento
+MIT © 2024-2026 André Nascimento
 
 ---
 
