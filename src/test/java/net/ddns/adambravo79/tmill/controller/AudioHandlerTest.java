@@ -1,3 +1,4 @@
+/* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -16,7 +17,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.HttpClientErrorException;
 
 import com.pengrad.telegrambot.model.CallbackQuery;
 import com.pengrad.telegrambot.model.Chat;
@@ -52,7 +55,6 @@ class AudioHandlerTest {
     private User user;
     private Chat chat;
     private com.pengrad.telegrambot.model.Audio audio;
-    private com.pengrad.telegrambot.model.Voice voice;
 
     private static final long CHAT_ID = 12345L;
     private static final long USER_ID = 999L;
@@ -71,7 +73,6 @@ class AudioHandlerTest {
         user = mock(User.class);
         chat = mock(Chat.class);
         audio = mock(com.pengrad.telegrambot.model.Audio.class);
-        voice = mock(com.pengrad.telegrambot.model.Voice.class);
 
         when(update.message()).thenReturn(message);
         when(message.from()).thenReturn(user);
@@ -218,11 +219,6 @@ class AudioHandlerTest {
         verify(telegramFacade)
                 .enviarComBotoesHtml(
                         eq(GROUP_CHAT_ID), anyString(), any(InlineKeyboardMarkup.class));
-
-        // Verifica que o token foi armazenado no mapa (via reflexão ou por chamadas)
-        // Como não temos acesso direto ao mapa, podemos verificar que o método de envio de botões
-        // foi
-        // chamado.
     }
 
     // =========================
@@ -231,16 +227,16 @@ class AudioHandlerTest {
 
     @Test
     void deveEntregarTranscricaoDoCache() {
-        // Preparar callback
         CallbackQuery callback = mock(CallbackQuery.class);
         when(callback.from()).thenReturn(user);
         when(callback.id()).thenReturn("cb123");
         when(callback.data()).thenReturn("trans_refinado|token123");
-        when(callback.message()).thenReturn(message);
-        when(message.chat()).thenReturn(chat);
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
 
-        // Injetar token pendente
         AudioRequest request =
                 new AudioRequest(
                         FILE_ID,
@@ -248,10 +244,6 @@ class AudioHandlerTest {
                         System.currentTimeMillis(),
                         USER_ID,
                         "Testador Silva");
-        // Precisamos acessar o mapa pendingRequests via reflection ou criar um método para mockar.
-        // Como não temos acesso fácil, vamos usar um truque: mockar o get do mapa? Não, precisamos
-        // adicionar o request.
-        // Vamos usar o campo interno por reflexão:
         java.util.Map<String, AudioRequest> pendingMap =
                 new java.util.concurrent.ConcurrentHashMap<>();
         pendingMap.put("token123", request);
@@ -265,7 +257,6 @@ class AudioHandlerTest {
 
         verify(telegramFacade)
                 .enviarMensagem(eq(USER_ID), contains("✨ Transcrição Refinada:\nrefinado"));
-        // Token NÃO é removido (para permitir múltiplos cliques)
     }
 
     // =========================
@@ -278,8 +269,10 @@ class AudioHandlerTest {
         when(callback.from()).thenReturn(user);
         when(callback.id()).thenReturn("cb123");
         when(callback.data()).thenReturn("trans_bruto|token456");
-        when(callback.message()).thenReturn(message);
-        when(message.chat()).thenReturn(chat);
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
 
         AudioRequest request =
@@ -294,7 +287,7 @@ class AudioHandlerTest {
         pendingMap.put("token456", request);
         ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
 
-        when(cacheService.get(FILE_ID)).thenReturn(null); // cache miss
+        when(cacheService.get(FILE_ID)).thenReturn(null);
 
         File mockFile = new File("audio.oga");
         when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
@@ -310,28 +303,9 @@ class AudioHandlerTest {
 
         audioHandler.handleTranscriptionCallback(callback, "trans_bruto|token456");
 
-        // O callback deve responder "Processando áudio..." e depois processar assincronamente.
-        // Para simplificar, testamos que o processamento assíncrono foi agendado (não podemos
-        // esperar
-        // facilmente).
-        // Pelo menos verificamos que o fluxo foi iniciado.
         verify(telegramFacade)
                 .answerCallbackQuery(
                         eq("cb123"), eq("Processando áudio... enviarei no privado."), eq(false));
-        // O processamento assíncrono vai chamar transcreverAudio e enviarTranscricao. Verificamos
-        // que o
-        // mock foi chamado.
-        // Como é assíncrono, podemos usar um latch ou então apenas verificar que o método foi
-        // chamado
-        // no mock.
-        // Como temos acesso ao audioService, podemos verificar que processarFluxoAudio foi chamado.
-        // Mas precisamos esperar a execução assíncrona. Poderíamos usar CompletableFuture.join
-        // manualmente.
-        // Para evitar complexidade, não testaremos o fluxo completo assíncrono aqui, mas podemos
-        // testar
-        // a chamada.
-        // Em vez disso, podemos testar que o método transcreverAudio foi chamado indiretamente.
-        // Mas como é privado, vamos apenas verificar que a resposta foi enviada.
     }
 
     // =========================
@@ -344,11 +318,11 @@ class AudioHandlerTest {
         when(callback.from()).thenReturn(user);
         when(callback.id()).thenReturn("cb123");
         when(callback.data()).thenReturn("trans_refinado|token999");
-        when(callback.message()).thenReturn(message);
-        when(message.chat()).thenReturn(chat);
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
 
-        // Não adicionar token ao mapa
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
 
         audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token999");
 
@@ -364,24 +338,51 @@ class AudioHandlerTest {
 
     @Test
     void deveAvisarNoGrupoQuandoUsuarioNaoIniciouBot() {
-        // Simular erro 403 no envio privado
-        // Precisamos mockar enviarTranscricao para lançar exceção com mensagem 403
-        // Como enviarTranscricao é privado, podemos mockar o TelegramFacade para lançar exceção.
-        // Mas vamos testar o fluxo: quando o envio falha, deve chamar tratarErroTranscricao com
-        // groupId.
-        // Para isso, podemos criar um cenário onde o cache hit ocorre, mas o envio falha.
-        // Vamos mockar o TelegramFacade para lançar exceção.
-        // Usaremos um spy no AudioHandler? Mais fácil: mockar diretamente.
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token789");
 
-        // Precisamos de um cenário onde entregarTranscricaoCache chama enviarTranscricao, que tenta
-        // enviar e falha.
-        // Poderíamos usar um spy, mas para simplificar, testaremos o método privado via reflection?
-        // Não.
-        // Vamos testar o fluxo completo com callback e mockar o TelegramFacade para lançar exceção.
-        // Precisamos que o callback tenha um token válido e cache hit.
-        // Vamos criar um teste separado.
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
 
-        // Para não complicar, deixaremos este teste como esboço; na prática, seria melhor usar um
-        // spy.
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token789", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        TranscriptionCacheEntry entry =
+                new TranscriptionCacheEntry("bruto", "refinado", System.currentTimeMillis());
+        when(cacheService.get(FILE_ID)).thenReturn(entry);
+
+        // Lança a exceção correta (subclasse Forbidden)
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.FORBIDDEN,
+                                "can't initiate conversation",
+                                null,
+                                null,
+                                null))
+                .when(telegramFacade)
+                .enviarMensagem(eq(USER_ID), anyString());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token789");
+
+        // Verifica que a mensagem de aviso foi enviada para o grupo
+        verify(telegramFacade)
+                .enviarMensagem(
+                        eq(GROUP_CHAT_ID),
+                        contains(
+                                "⚠️ Usuario precisa iniciar conversa com o bot no privado para"
+                                        + " receber transcricoes."));
     }
 }

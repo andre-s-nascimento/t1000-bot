@@ -2,7 +2,6 @@ package net.ddns.adambravo79.tmill.telegram.core;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -20,7 +19,6 @@ public class GroupAuthorizationService {
     private String allowedChatsStr;
 
     private final Set<Long> allowedGroups = new HashSet<>();
-    private final Set<Long> warnedGroups = ConcurrentHashMap.newKeySet();
 
     @PostConstruct
     public void init() {
@@ -46,11 +44,6 @@ public class GroupAuthorizationService {
         }
     }
 
-    /**
-     * Verifica se um update é autorizado. - Chats privados (ID > 0) sempre são permitidos. - Grupos
-     * só são permitidos se estiverem na lista allowedGroups. - Se a lista estiver vazia, todos os
-     * grupos são permitidos.
-     */
     public boolean isAuthorized(Update update) {
         Long chatId = extractChatId(update);
         if (chatId == null) return true;
@@ -72,7 +65,10 @@ public class GroupAuthorizationService {
             return update.message().chat().id();
         }
         if (update.callbackQuery() != null) {
-            return update.callbackQuery().message().chat().id();
+            var message = update.callbackQuery().maybeInaccessibleMessage();
+            if (message != null) {
+                return message.chat().id();
+            }
         }
         return null;
     }

@@ -109,4 +109,17 @@ public class FileTranscriptionCacheService {
         misses.set(0);
         log.info("Cache de transcrições limpo manualmente");
     }
+
+    public void cleanExpired() {
+        long now = System.currentTimeMillis();
+        int before = cache.size();
+        cache.entrySet().removeIf(entry -> now - entry.getValue().timestamp() > ttlSeconds * 1000);
+        int after = cache.size();
+        if (before != after) {
+            log.info(
+                    "Cache de transcrições limpo: {} entradas removidas, {} restantes",
+                    before - after,
+                    after);
+        }
+    }
 }

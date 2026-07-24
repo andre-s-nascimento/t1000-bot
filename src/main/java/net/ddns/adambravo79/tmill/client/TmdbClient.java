@@ -3,6 +3,7 @@ package net.ddns.adambravo79.tmill.client;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -184,11 +185,15 @@ public class TmdbClient {
             log.warn("TMDB: Créditos não encontrados para movieId={}", movieId);
             return null;
         }
-        return response.crew().stream()
-                .filter(member -> "Director".equals(member.job()))
-                .map(CrewRecord::name)
-                .findFirst()
-                .orElse(null);
+        @SuppressWarnings("null")
+        String diretor =
+                response.crew().stream()
+                        .filter(member -> "Director".equals(member.job()))
+                        .map(CrewRecord::name)
+                        .filter(Objects::nonNull)
+                        .findFirst()
+                        .orElse(null);
+        return diretor;
     }
 
     // ------------------------------------------------------------------------
@@ -283,9 +288,11 @@ public class TmdbClient {
             if (response.results().containsKey("BR")) {
                 var brProviders = response.results().get("BR").flatrate();
                 if (brProviders != null && !brProviders.isEmpty()) {
+                    @SuppressWarnings("null")
                     String providers =
                             brProviders.stream()
                                     .map(Provider::name)
+                                    .filter(Objects::nonNull)
                                     .reduce((a, b) -> a + ", " + b)
                                     .orElse("");
                     log.info("✅ Provedores encontrados id={} providers={}", id, providers);
@@ -301,18 +308,6 @@ public class TmdbClient {
             log.error("Erro ao buscar provedores para {} id={}", path, id, e);
             return INDISPONIVEL_NO_MOMENTO;
         }
-    }
-
-    // ------------------------------------------------------------------------
-    // MÉTODO LEGADO (para compatibilidade)
-    // ------------------------------------------------------------------------
-    /**
-     * @deprecated Use {@link #buscarOndeAssistirFilme(Long)} ou {@link
-     *     #buscarOndeAssistirSerie(Long)}. Este método será removido na v2.0.
-     */
-    @Deprecated(since = "1.3.1", forRemoval = true)
-    public String buscarOndeAssistir(Long movieId) {
-        return buscarOndeAssistirFilme(movieId);
     }
 
     // ------------------------------------------------------------------------

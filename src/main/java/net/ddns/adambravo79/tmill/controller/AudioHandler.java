@@ -237,7 +237,14 @@ public class AudioHandler {
         String tipo = parts[0];
         String token = parts[1];
         long userId = callback.from().id();
-        long chatId = callback.message().chat().id();
+
+        var msg = callback.maybeInaccessibleMessage();
+        if (msg == null) {
+            log.warn("Callback sem mensagem acessível (message may have been deleted)");
+            safeAnswerCallback(callback.id(), "Mensagem original não disponível", true);
+            return;
+        }
+        long chatId = msg.chat().id();
 
         log.info(
                 "📊 Clique no botão {} | userId={} | chatId={} | token={}",
@@ -399,19 +406,19 @@ public class AudioHandler {
             String hint = duration > 300 ? ", praticamente um SilasCast 🗣" : "";
 
             String mensagem =
-                    String.format(
-                            "🎧 Áudio de <b>%s</b> (%s%s) processado!\n\n"
-                                    + "Clique num botão para receber a transcrição no seu privado:",
-                            utils.escapeHtml(senderName), duracao, hint);
+                    """
+          🎧 Áudio de <b>%s</b> (%s%s) processado!
+
+          Clique num botão para receber a transcrição no seu privado:
+          """
+                            .formatted(utils.escapeHtml(senderName), duracao, hint);
 
             InlineKeyboardMarkup markup =
                     new InlineKeyboardMarkup(
-                            new InlineKeyboardButton[] {
-                                new InlineKeyboardButton("🎙️ Transcrição Bruta")
-                                        .callbackData(TRANS_BRUTO + "|" + token),
-                                new InlineKeyboardButton("✨ Transcrição Refinada")
-                                        .callbackData(TRANS_REFINADO + "|" + token)
-                            });
+                            new InlineKeyboardButton("🎙️ Transcrição Bruta")
+                                    .callbackData(TRANS_BRUTO + "|" + token),
+                            new InlineKeyboardButton("✨ Transcrição Refinada")
+                                    .callbackData(TRANS_REFINADO + "|" + token));
 
             telegramFacade.enviarComBotoesHtml(chatId, mensagem, markup);
         } catch (HttpClientErrorException e) {
@@ -486,12 +493,12 @@ public class AudioHandler {
 
     /** Repropaga erros fatais (Error, InterruptedException) sem engoli-los. */
     private void rethrowIfFatal(Throwable t) {
-        if (t instanceof Error) {
-            throw (Error) t;
+        if (t instanceof Error error) {
+            throw error;
         }
-        if (t instanceof InterruptedException) {
+        if (t instanceof InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Thread interrompida", t);
+            throw new RuntimeException("Thread interrompida", ie);
         }
     }
 }

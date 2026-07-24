@@ -96,7 +96,6 @@ class MovieServiceTest {
         when(easterEggService.getEasterEgg(anyLong())).thenReturn(Optional.empty());
     }
 
-    @SuppressWarnings("removal")
     @Test
     void deveFormatarRespostaCompleta() {
         stubEmptyEasterEgg();
@@ -119,7 +118,7 @@ class MovieServiceTest {
                 .thenReturn(List.of(new CastRecord("Wagner Moura", "Marcelo")));
 
         when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor Teste");
-        when(tmdbClient.buscarOndeAssistir(id)).thenReturn("Netflix");
+        when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Netflix");
 
         MovieOrchestrationResponse result = movieService.buscarPorId(id);
 
@@ -133,7 +132,6 @@ class MovieServiceTest {
         assertThat(result.urlFoto()).contains("image.tmdb.org");
     }
 
-    @SuppressWarnings("removal")
     @Test
     void deveUsarGloboQuandoNaoHouverPais() {
         stubEmptyEasterEgg();
@@ -151,13 +149,12 @@ class MovieServiceTest {
         when(tmdbClient.buscarDetalhes(1L)).thenReturn(movie);
         when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
         when(tmdbClient.buscarDiretor(1L)).thenReturn(null);
-        when(tmdbClient.buscarOndeAssistir(1L)).thenReturn("N/A");
+        when(tmdbClient.buscarOndeAssistirFilme(1L)).thenReturn("N/A");
 
         MovieOrchestrationResponse result = movieService.buscarPorId(1L);
         assertThat(result.textoFormatado()).contains("🌐");
     }
 
-    @SuppressWarnings("removal")
     @Test
     void deveUsarTBAQuandoSemData() {
         stubEmptyEasterEgg();
@@ -167,13 +164,12 @@ class MovieServiceTest {
         when(tmdbClient.buscarDetalhes(id)).thenReturn(movie);
         when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
         when(tmdbClient.buscarDiretor(id)).thenReturn(null);
-        when(tmdbClient.buscarOndeAssistir(id)).thenReturn("N/A");
+        when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("N/A");
 
         MovieOrchestrationResponse result = movieService.buscarPorId(id);
         assertThat(result.textoFormatado()).contains("TBA");
     }
 
-    @SuppressWarnings("removal")
     @Test
     void deveUsarGloboQuandoPaisInvalido() {
         stubEmptyEasterEgg();
@@ -183,7 +179,7 @@ class MovieServiceTest {
         when(tmdbClient.buscarDetalhes(1L)).thenReturn(movie);
         when(tmdbClient.buscarElenco(1L)).thenReturn(List.of());
         when(tmdbClient.buscarDiretor(1L)).thenReturn(null);
-        when(tmdbClient.buscarOndeAssistir(1L)).thenReturn("N/A");
+        when(tmdbClient.buscarOndeAssistirFilme(1L)).thenReturn("N/A");
 
         MovieOrchestrationResponse result = movieService.buscarPorId(1L);
         assertThat(result.textoFormatado()).contains("🌐");
@@ -198,7 +194,6 @@ class MovieServiceTest {
                 .hasMessageContaining("Falha ao buscar detalhes do filme para ID");
     }
 
-    @SuppressWarnings("removal")
     @Test
     void deveIncluirEasterEggQuandoPresente() {
         when(easterEggService.getEasterEgg(anyLong()))
@@ -220,7 +215,7 @@ class MovieServiceTest {
 
         when(tmdbClient.buscarElenco(id)).thenReturn(List.of());
         when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor");
-        when(tmdbClient.buscarOndeAssistir(id)).thenReturn("Prime Video");
+        when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Prime Video");
 
         MovieOrchestrationResponse result = movieService.buscarPorId(id);
 

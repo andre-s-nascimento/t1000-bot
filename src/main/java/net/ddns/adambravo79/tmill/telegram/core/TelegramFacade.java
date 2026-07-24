@@ -3,7 +3,7 @@ package net.ddns.adambravo79.tmill.telegram.core;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -104,7 +104,7 @@ public class TelegramFacade {
     public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
         safeExecutor.run(
                 chatId,
-                (id, msg) -> enviarMensagem(id, msg),
+                this::enviarMensagem, // method reference
                 () -> {
                     try {
                         String lower = filePathOrUrl.toLowerCase();
@@ -128,7 +128,6 @@ public class TelegramFacade {
                                             .caption(caption)
                                             .parseMode(ParseMode.HTML));
                         } else {
-                            // Se não reconhecer, tenta como foto (fallback)
                             executor.execute(
                                     new SendPhoto(chatId, filePathOrUrl)
                                             .caption(caption)
@@ -173,18 +172,16 @@ public class TelegramFacade {
         String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
         HttpURLConnection conn = null;
         try {
-            conn = (HttpURLConnection) new URL(url).openConnection();
-            conn.setConnectTimeout(30_000); // 30s para conectar
-            conn.setReadTimeout(120_000); // 120s para ler (arquivos grandes)
+            conn = (HttpURLConnection) URI.create(url).toURL().openConnection(); // corrigido
+            conn.setConnectTimeout(30_000);
+            conn.setReadTimeout(120_000);
             try (InputStream is = conn.getInputStream()) {
                 return is.readAllBytes();
             }
         } catch (IOException e) {
             throw new TelegramFileException("Erro ao baixar arquivo: " + filePath, e);
         } finally {
-            if (conn != null) {
-                conn.disconnect();
-            }
+            if (conn != null) conn.disconnect();
         }
     }
 

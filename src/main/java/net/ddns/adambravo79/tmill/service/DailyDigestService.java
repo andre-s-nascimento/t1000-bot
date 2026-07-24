@@ -217,6 +217,7 @@ public class DailyDigestService {
 
     // ======================== FETCH & BUILD ========================
 
+    @SuppressWarnings("null")
     private List<ChatMessage> fetchMessages(LocalDateTime from, LocalDateTime to) {
         String fromStr = from.format(SQL_DTF);
         String toStr = to.format(SQL_DTF);
@@ -268,6 +269,9 @@ public class DailyDigestService {
                 .build();
     }
 
+    // ======================== FETCH & BUILD ========================
+
+    @SuppressWarnings({"null", "TimeZone"})
     private String buildMessagesBlock(List<ChatMessage> messages) {
         StringBuilder sb = new StringBuilder();
         LocalDateTime previous = null;
@@ -280,7 +284,9 @@ public class DailyDigestService {
             }
 
             if (previous != null) {
-                long diff = Duration.between(previous, current).toMinutes();
+                ZoneId zone = ZoneId.of(BRAZIL_ZONE);
+                long diff =
+                        Duration.between(previous.atZone(zone), current.atZone(zone)).toMinutes();
                 if (diff >= 20) {
                     sb.append("\n==============================\n");
                     sb.append("NOVO BLOCO DE CONVERSA\n");
@@ -340,9 +346,11 @@ public class DailyDigestService {
         return start + "\n\n[...]\n\n" + middle + "\n\n[...]\n\n" + end;
     }
 
+    // ======================== TRUNCATE ========================
+
     private String safeSubstring(String str, int begin, int end) {
-        int safeBegin = Math.max(0, Math.min(begin, str.length()));
-        int safeEnd = Math.max(safeBegin, Math.min(end, str.length()));
+        int safeBegin = Math.clamp(begin, 0, str.length());
+        int safeEnd = Math.clamp(end, safeBegin, str.length());
         return str.substring(safeBegin, safeEnd);
     }
 
@@ -379,14 +387,14 @@ public class DailyDigestService {
             return "";
         }
 
-        // 1. Converte quebras de linha
+        // Converte quebras de linha
         String sanitized =
                 text.replaceAll("(?i)<br\\s*/?>", "\n")
                         .replaceAll("(?i)</?ul\\s*>", "")
                         .replaceAll("(?i)<li\\s*>", "• ")
                         .replaceAll("(?i)</li\\s*>", "\n");
 
-        // 2. Protege tags permitidas temporariamente
+        // Protege tags permitidas (usando regex mais simples para <a>)
         String protectedText =
                 sanitized
                         .replace("<b>", "##B_OPEN##")
@@ -401,13 +409,13 @@ public class DailyDigestService {
                         .replace("</code>", "##C_CLOSE##")
                         .replace("<pre>", "##P_OPEN##")
                         .replace("</pre>", "##P_CLOSE##")
-                        .replaceAll("<a\\s+[^>]*>", "##A_OPEN##")
+                        .replaceAll("(?i)<a[^>]*>", "##A_OPEN##") // regex simplificada
                         .replace("</a>", "##A_CLOSE##");
 
-        // 3. Escapa caracteres < e > restantes
+        // Escapa caracteres < e > restantes
         String escaped = protectedText.replace("<", "&lt;").replace(">", "&gt;");
 
-        // 4. Restaura tags permitidas
+        // Restaura tags permitidas
         String restored =
                 escaped.replace("##B_OPEN##", "<b>")
                         .replace("##B_CLOSE##", "</b>")

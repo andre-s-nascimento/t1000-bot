@@ -31,6 +31,7 @@ public class AdminIpFilter extends OncePerRequestFilter {
     private List<String> allowedIps;
 
     @Override
+    @SuppressWarnings("null")
     protected void initFilterBean() {
         if (allowedIpsStr != null && !allowedIpsStr.isBlank()) {
             allowedIps = Arrays.stream(allowedIpsStr.split(",")).map(String::trim).toList();

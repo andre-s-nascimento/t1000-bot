@@ -76,7 +76,7 @@ public class MovieService {
         CompletableFuture<String> diretorFuture =
                 CompletableFuture.supplyAsync(() -> tmdbClient.buscarDiretor(id));
         CompletableFuture<String> streamingsFuture =
-                CompletableFuture.supplyAsync(() -> tmdbClient.buscarOndeAssistir(id));
+                CompletableFuture.supplyAsync(() -> tmdbClient.buscarOndeAssistirFilme(id));
 
         CompletableFuture.allOf(detalhesFuture, elencoFuture, diretorFuture, streamingsFuture)
                 .join();
@@ -93,7 +93,7 @@ public class MovieService {
         String elenco =
                 elencoCompleto.stream()
                         .limit(5)
-                        .map(CastRecord::name)
+                        .map(c -> c.name() != null ? c.name() : "")
                         .collect(Collectors.joining(", "));
         if (totalCast > 5) {
             elenco += " e mais " + (totalCast - 5) + " atores";
