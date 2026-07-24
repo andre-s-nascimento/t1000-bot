@@ -12,26 +12,26 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
+import lombok.SneakyThrows;
+import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import tools.jackson.databind.ObjectMapper;
 
 class AdminControllerTest {
 
     private MockMvc mockMvc;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
@@ -43,16 +43,60 @@ class AdminControllerTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private Environment environment;
     @Mock private ResourceLoader resourceLoader;
-    @Mock private Resource resource;
+    @Mock private DailyReleasesService dailyReleasesService;
+    @Mock private ReleaseNotifiedRepository releaseNotifiedRepository;
 
-    @InjectMocks private AdminController adminController;
+    private AdminController adminController;
 
     private static final long SHOWCASE_CHAT_ID = -5283244164L;
 
     @BeforeEach
+    @SneakyThrows
     void setup() {
         MockitoAnnotations.openMocks(this);
+
+        // Cria o controller manualmente com todos os mocks e ObjectMapper real
+        adminController =
+                new AdminController(
+                        easterEggService,
+                        dailyDigestService,
+                        fileTranscriptionCacheService,
+                        weeklyReminderService,
+                        autoResponseService,
+                        worldCupSchedulerService,
+                        staticWorldCupService,
+                        telegramFacade,
+                        environment,
+                        resourceLoader,
+                        new ObjectMapper(), // agora do pacote tools.jackson.databind
+                        dailyReleasesService,
+                        releaseNotifiedRepository);
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
+
+        // Configura o ResourceLoader para usar os arquivos -test.json
+        when(resourceLoader.getResource(anyString()))
+                .thenAnswer(
+                        invocation -> {
+                            String path = invocation.getArgument(0);
+                            String fileName = path.replace("classpath:", "");
+                            Resource res;
+                            switch (fileName) {
+                                case "easter-eggs.json":
+                                    res = new ClassPathResource("easter-eggs-test.json");
+                                    break;
+                                case "auto-responses.json":
+                                    res = new ClassPathResource("auto-responses-test.json");
+                                    break;
+                                case "worldcup2026.json":
+                                    res = new ClassPathResource("worldcup2026-test.json");
+                                    break;
+                                default:
+                                    res = mock(Resource.class);
+                                    when(res.exists()).thenReturn(false);
+                            }
+                            return res;
+                        });
+
         this.mockMvc = MockMvcBuilders.standaloneSetup(adminController).build();
     }
 
@@ -262,7 +306,7 @@ class AdminControllerTest {
                         post("/admin/test-worldcup-results-showcase")
                                 .param("dateParam", "invalido"))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string(containsString("Data inválida")));
+                .andExpect(content().string(containsString("Data invalida")));
         verifyNoInteractions(worldCupSchedulerService);
     }
 

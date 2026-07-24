@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.controller.AudioHandler;
 import net.ddns.adambravo79.tmill.controller.CommandHandler;
 import net.ddns.adambravo79.tmill.telegram.core.GroupAuthorizationService;
+import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
 @Slf4j
 @Component
@@ -45,17 +46,26 @@ public class MessageUpdateRuleHandler implements UpdateHandler, MessageUpdateRul
             if (update.message().audio() != null || update.message().voice() != null) {
                 log.info(
                         "🎙️ Mídia de áudio detectada no chat {}. Enviando para AudioHandler.",
-                        chatId);
+                        LogSanitizer.sanitizeId(chatId));
                 audioHandler.handleAudioUpdate(update);
             } else if (update.message().text() != null) {
                 String text = update.message().text();
                 // Log apenas se for comando (inicia com /, t1000, t-1000) ou contém link
                 if (text.startsWith("/") || text.toLowerCase().matches("t-?1000.*")) {
-                    log.info("📝 Comando detectado no chat {}: '{}'", chatId, text);
+                    log.info(
+                            "📝 Comando detectado no chat {}: '{}'",
+                            LogSanitizer.sanitizeId(chatId),
+                            LogSanitizer.sanitizeMessageText(text));
                 } else if (text.contains("http://") || text.contains("https://")) {
-                    log.info("🔗 Link detectado no chat {}: '{}'", chatId, text);
+                    log.info(
+                            "🔗 Link detectado no chat {}: '{}'",
+                            LogSanitizer.sanitizeId(chatId),
+                            LogSanitizer.sanitizeMessageText(text));
                 } else {
-                    log.debug("📝 Texto ignorado no chat {}: '{}'", chatId, text);
+                    log.debug(
+                            "📝 Texto ignorado no chat {}: '{}'",
+                            LogSanitizer.sanitizeId(chatId),
+                            LogSanitizer.sanitizeMessageText(text));
                 }
                 commandHandler.handleTextUpdate(update);
             }

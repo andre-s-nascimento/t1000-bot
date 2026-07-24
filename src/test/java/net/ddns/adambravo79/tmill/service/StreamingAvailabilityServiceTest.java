@@ -1,7 +1,6 @@
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
@@ -21,8 +20,8 @@ import net.ddns.adambravo79.tmill.dto.StreamingAvailabilityResponse;
 class StreamingAvailabilityServiceTest {
 
     @Mock private RestClient restClient;
-    @Mock private RestClient.RequestHeadersUriSpec requestHeadersUriSpec;
-    @Mock private RestClient.RequestHeadersSpec requestHeadersSpec;
+    @Mock private RestClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
+    @Mock private RestClient.RequestHeadersSpec<?> requestHeadersSpec;
     @Mock private RestClient.ResponseSpec responseSpec;
 
     private StreamingAvailabilityService service;
@@ -38,13 +37,13 @@ class StreamingAvailabilityServiceTest {
         long tmdbId = 123L;
         String type = "movie";
 
-        when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri("/movie/123")).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        doReturn(requestHeadersUriSpec).when(restClient).get();
+        doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri("/movie/123");
+        doReturn(responseSpec).when(requestHeadersSpec).retrieve();
 
         StreamingAvailabilityResponse response =
                 criarRespostaComStreaming("Netflix", "Prime Video");
-        when(responseSpec.body(StreamingAvailabilityResponse.class)).thenReturn(response);
+        doReturn(response).when(responseSpec).body(StreamingAvailabilityResponse.class);
 
         List<String> result = service.getStreamingServicesForTitle(tmdbId, type);
 
@@ -60,10 +59,10 @@ class StreamingAvailabilityServiceTest {
         long tmdbId = 123L;
         String type = "tv";
 
-        when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri("/tv/123")).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.body(StreamingAvailabilityResponse.class)).thenReturn(null);
+        doReturn(requestHeadersUriSpec).when(restClient).get();
+        doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri("/tv/123");
+        doReturn(responseSpec).when(requestHeadersSpec).retrieve();
+        doReturn(null).when(responseSpec).body(StreamingAvailabilityResponse.class);
 
         List<String> result = service.getStreamingServicesForTitle(tmdbId, type);
 
@@ -75,12 +74,12 @@ class StreamingAvailabilityServiceTest {
         long tmdbId = 123L;
         String type = "movie";
 
-        when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri("/movie/123")).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        doReturn(requestHeadersUriSpec).when(restClient).get();
+        doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri("/movie/123");
+        doReturn(responseSpec).when(requestHeadersSpec).retrieve();
 
         StreamingAvailabilityResponse response = new StreamingAvailabilityResponse(null);
-        when(responseSpec.body(StreamingAvailabilityResponse.class)).thenReturn(response);
+        doReturn(response).when(responseSpec).body(StreamingAvailabilityResponse.class);
 
         List<String> result = service.getStreamingServicesForTitle(tmdbId, type);
 
@@ -92,12 +91,12 @@ class StreamingAvailabilityServiceTest {
         long tmdbId = 123L;
         String type = "movie";
 
-        when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri("/movie/123")).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        doReturn(requestHeadersUriSpec).when(restClient).get();
+        doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri("/movie/123");
+        doReturn(responseSpec).when(requestHeadersSpec).retrieve();
 
         StreamingAvailabilityResponse response = new StreamingAvailabilityResponse(Map.of());
-        when(responseSpec.body(StreamingAvailabilityResponse.class)).thenReturn(response);
+        doReturn(response).when(responseSpec).body(StreamingAvailabilityResponse.class);
 
         List<String> result = service.getStreamingServicesForTitle(tmdbId, type);
 
@@ -109,15 +108,15 @@ class StreamingAvailabilityServiceTest {
         long tmdbId = 123L;
         String type = "movie";
 
-        when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri("/movie/123")).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        doReturn(requestHeadersUriSpec).when(restClient).get();
+        doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri("/movie/123");
+        doReturn(responseSpec).when(requestHeadersSpec).retrieve();
 
         StreamingAvailabilityResponse.CountryStreamingInfo countryInfo =
                 new StreamingAvailabilityResponse.CountryStreamingInfo(List.of());
         StreamingAvailabilityResponse response =
                 new StreamingAvailabilityResponse(Map.of("br", countryInfo));
-        when(responseSpec.body(StreamingAvailabilityResponse.class)).thenReturn(response);
+        doReturn(response).when(responseSpec).body(StreamingAvailabilityResponse.class);
 
         List<String> result = service.getStreamingServicesForTitle(tmdbId, type);
 
@@ -129,9 +128,9 @@ class StreamingAvailabilityServiceTest {
         long tmdbId = 123L;
         String type = "movie";
 
-        when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri("/movie/123")).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenThrow(new RuntimeException("Erro de rede"));
+        doReturn(requestHeadersUriSpec).when(restClient).get();
+        doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri("/movie/123");
+        doThrow(new RuntimeException("Erro de rede")).when(requestHeadersSpec).retrieve();
 
         List<String> result = service.getStreamingServicesForTitle(tmdbId, type);
 

@@ -1,6 +1,7 @@
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -26,8 +27,8 @@ class WorldCupUpdaterServiceTest {
 
     @Mock private StaticWorldCupService worldCupService;
     @Mock private RestClient restClient;
-    @Mock private RestClient.RequestHeadersUriSpec requestHeadersUriSpec;
-    @Mock private RestClient.RequestHeadersSpec requestHeadersSpec;
+    @Mock private RestClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
+    @Mock private RestClient.RequestHeadersSpec<?> requestHeadersSpec;
     @Mock private RestClient.ResponseSpec responseSpec;
 
     private WorldCupUpdaterService service;
@@ -43,9 +44,9 @@ class WorldCupUpdaterServiceTest {
         ReflectionTestUtils.setField(
                 service, "destinationPath", tempDir.resolve("worldcup.json").toString());
 
-        when(restClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        doReturn(requestHeadersUriSpec).when(restClient).get();
+        doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri(anyString());
+        doReturn(responseSpec).when(requestHeadersSpec).retrieve();
     }
 
     // =========================
@@ -54,15 +55,13 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void init_deveLogarQuandoUpdateEnabledTrue() {
-        service.init();
-        // Não lança exceção
+        assertThatCode(() -> service.init()).doesNotThrowAnyException();
     }
 
     @Test
     void init_deveLogarQuandoUpdateEnabledFalse() {
         ReflectionTestUtils.setField(service, "updateEnabled", false);
-        service.init();
-        // Não lança exceção
+        assertThatCode(() -> service.init()).doesNotThrowAnyException();
     }
 
     // =========================
@@ -72,7 +71,7 @@ class WorldCupUpdaterServiceTest {
     @Test
     void updateWorldCupData_deveBaixarSalvarERecarregar() throws Exception {
         byte[] dados = "{\"matches\":[{\"id\":1}]}".getBytes();
-        when(responseSpec.body(byte[].class)).thenReturn(dados);
+        doReturn(dados).when(responseSpec).body(byte[].class);
 
         service.updateWorldCupData();
 
@@ -101,7 +100,7 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void updateWorldCupData_deveIgnorarQuandoDadosNulos() {
-        when(responseSpec.body(byte[].class)).thenReturn(null);
+        doReturn(null).when(responseSpec).body(byte[].class);
 
         service.updateWorldCupData();
 
@@ -113,7 +112,7 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void updateWorldCupData_deveIgnorarQuandoDadosVazios() {
-        when(responseSpec.body(byte[].class)).thenReturn(new byte[0]);
+        doReturn(new byte[0]).when(responseSpec).body(byte[].class);
 
         service.updateWorldCupData();
 
@@ -129,7 +128,7 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void updateWorldCupData_deveCapturarRestClientException() {
-        when(responseSpec.body(byte[].class)).thenThrow(new RestClientException("Erro de rede"));
+        doThrow(new RestClientException("Erro de rede")).when(responseSpec).body(byte[].class);
 
         service.updateWorldCupData();
 
@@ -141,7 +140,7 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void updateWorldCupData_deveCapturarExceptionGenerica() {
-        when(responseSpec.body(byte[].class)).thenThrow(new RuntimeException("Erro inesperado"));
+        doThrow(new RuntimeException("Erro inesperado")).when(responseSpec).body(byte[].class);
 
         service.updateWorldCupData();
 

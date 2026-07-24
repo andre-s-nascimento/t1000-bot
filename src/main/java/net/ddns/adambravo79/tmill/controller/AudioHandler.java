@@ -1,4 +1,12 @@
+/* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.controller;
+
+import static net.ddns.adambravo79.tmill.constant.BotMessages.AUDIO_TOO_LARGE;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_PROCESSAR_AUDIO;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_PROCESSAR_AUDIO_CALLBACK;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.TOKEN_EXPIRADO;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.TRANSCRIPTION_DISABLED;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.USUARIO_PRECISA_INICIAR_BOT;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
@@ -9,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 import com.pengrad.telegrambot.model.CallbackQuery;
 import com.pengrad.telegrambot.model.Message;
@@ -20,6 +30,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
+import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
@@ -28,6 +39,20 @@ import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
+/**
+ * Handler de áudio para o bot Telegram. Processa áudios em chats privados e grupos, com cache e
+ * botões de callback.
+ *
+ * <p>Exception handling strategy:
+ *
+ * <ul>
+ *   <li>{@link AudioProcessingException} — erro no pipeline de áudio; notifica usuário.
+ *   <li>{@link HttpClientErrorException.Forbidden} — usuário não iniciou bot; notifica no grupo.
+ *   <li>{@link HttpClientErrorException} — outros erros HTTP do Telegram.
+ *   <li>{@link ResourceAccessException} — falha de conectividade.
+ *   <li>Erros fatais (Error, InterruptedException) — NUNCA engolidos.
+ * </ul>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -35,6 +60,8 @@ public class AudioHandler {
 
     private static final String TRANS_BRUTO = "trans_bruto";
     private static final String TRANS_REFINADO = "trans_refinado";
+    private static final long TOKEN_EXPIRATION_MS = 604800000L; // 7 dias
+    private static final int TOKEN_MAX_LENGTH = 20;
 
     private final TelegramFileService fileService;
     private final AudioPipelineService audioService;
@@ -62,10 +89,11 @@ public class AudioHandler {
         log.info("🧹 AudioHandler: cleaner agendado para remover tokens expirados.");
     }
 
+    // ========================= HANDLER PRINCIPAL =========================
+
     public void handleAudioUpdate(Update update) {
         if (!transcriptionEnabled) {
-            telegramFacade.enviarMensagem(
-                    update.message().chat().id(), "🔇 Transcrição desativada.");
+            safeSendMessage(update.message().chat().id(), TRANSCRIPTION_DISABLED);
             return;
         }
 
@@ -95,16 +123,11 @@ public class AudioHandler {
                     chatId,
                     fileSize,
                     maxSizeMb);
-            telegramFacade.enviarMensagem(
-                    chatId,
-                    "📂 O arquivo de áudio excede " + maxSizeMb + " MB. Envie um arquivo menor.");
+            safeSendMessage(chatId, String.format(AUDIO_TOO_LARGE, maxSizeMb));
             return;
         }
 
-        boolean isGroup =
-                message.chat().type() == com.pengrad.telegrambot.model.Chat.Type.group
-                        || message.chat().type()
-                                == com.pengrad.telegrambot.model.Chat.Type.supergroup;
+        boolean isGroup = isGroupChat(message);
 
         if (isGroup) {
             processGroupAudio(message, chatId, fileId, duration);
@@ -112,6 +135,8 @@ public class AudioHandler {
             processPrivateAudio(message, chatId, fileId);
         }
     }
+
+    // ========================= PRIVADO =========================
 
     private void processPrivateAudio(Message message, long chatId, String fileId) {
         long userId = message.from().id();
@@ -125,19 +150,12 @@ public class AudioHandler {
                 userName,
                 (texto, isUltima) -> {
                     if (Boolean.TRUE.equals(isUltima)) {
-                        handleRespostaPrivado(chatId, texto);
+                        safeSendMessage(chatId, texto);
                     }
                 });
     }
 
-    private void handleRespostaPrivado(long chatId, String texto) {
-        if (texto.length() > telegramMessageLimit) {
-            utils.splitMessage(texto, telegramMessageLimit)
-                    .forEach(parte -> telegramFacade.enviarMensagem(chatId, parte));
-        } else {
-            telegramFacade.enviarMensagem(chatId, texto);
-        }
-    }
+    // ========================= GRUPO =========================
 
     private void processGroupAudio(Message message, long chatId, String fileId, int duration) {
         long senderId = message.from().id();
@@ -157,10 +175,15 @@ public class AudioHandler {
                                         audio, chatId, senderId, senderName))
                 .whenComplete(
                         (result, ex) -> {
-                            if (ex != null || result == null) {
-                                log.error("Falha no pré-processamento do áudio", ex);
-                                telegramFacade.enviarMensagem(
-                                        chatId, "❌ Erro ao processar o áudio. Tente novamente.");
+                            if (ex != null) {
+                                handleGroupAudioFailure(chatId, ex);
+                                return;
+                            }
+                            if (result == null) {
+                                log.error(
+                                        "Resultado nulo do processamento de áudio chatId={}",
+                                        chatId);
+                                safeSendMessage(chatId, ERRO_PROCESSAR_AUDIO);
                                 return;
                             }
 
@@ -186,34 +209,23 @@ public class AudioHandler {
                                             senderId,
                                             senderName));
 
-                            enviarBotoesGrupo(chatId, senderName, duration, token);
+                            safeSendButtons(chatId, senderName, duration, token);
                         });
     }
 
-    @SuppressWarnings("unused")
-    private void enviarBotoesGrupo(long chatId, String senderName, int duration, String token) {
-        long minutos = duration / 60;
-        long segundos = duration % 60;
-        String duracao = String.format("%dmin e %ds", minutos, segundos);
-        String hint = duration > 300 ? ", praticamente um SilasCast 🗣" : "";
+    private void handleGroupAudioFailure(long chatId, Throwable ex) {
+        Throwable causa = unwrapCause(ex);
+        rethrowIfFatal(causa);
 
-        String mensagem =
-                String.format(
-                        "🎧 Áudio de <b>%s</b> (%s%s) processado!\n\n"
-                                + "Clique num botão para receber a transcrição no seu privado:",
-                        utils.escapeHtml(senderName), duracao, hint);
-
-        InlineKeyboardMarkup markup =
-                new InlineKeyboardMarkup(
-                        new InlineKeyboardButton[] {
-                            new InlineKeyboardButton("🎙️ Transcrição Bruta")
-                                    .callbackData(TRANS_BRUTO + "|" + token),
-                            new InlineKeyboardButton("✨ Transcrição Refinada")
-                                    .callbackData(TRANS_REFINADO + "|" + token)
-                        });
-
-        telegramFacade.enviarComBotoesHtml(chatId, mensagem, markup);
+        if (causa instanceof AudioProcessingException) {
+            log.error("Falha no pipeline de áudio para chatId={}", chatId, causa);
+        } else {
+            log.error("Erro inesperado no pré-processamento do áudio chatId={}", chatId, causa);
+        }
+        safeSendMessage(chatId, ERRO_PROCESSAR_AUDIO);
     }
+
+    // ========================= CALLBACK =========================
 
     public void handleTranscriptionCallback(CallbackQuery callback, String data) {
         String[] parts = data.split("\\|", 2);
@@ -225,7 +237,14 @@ public class AudioHandler {
         String tipo = parts[0];
         String token = parts[1];
         long userId = callback.from().id();
-        long chatId = callback.message().chat().id();
+
+        var msg = callback.maybeInaccessibleMessage();
+        if (msg == null) {
+            log.warn("Callback sem mensagem acessível (message may have been deleted)");
+            safeAnswerCallback(callback.id(), "Mensagem original não disponível", true);
+            return;
+        }
+        long chatId = msg.chat().id();
 
         log.info(
                 "📊 Clique no botão {} | userId={} | chatId={} | token={}",
@@ -238,8 +257,7 @@ public class AudioHandler {
         if (request == null) {
             log.warn(
                     "Token inválido ou expirado: {} (userId={}, chatId={})", token, userId, chatId);
-            telegramFacade.answerCallbackQuery(
-                    callback.id(), "Pedido expirado. Envie o áudio novamente.", true);
+            safeAnswerCallback(callback.id(), TOKEN_EXPIRADO, true);
             return;
         }
 
@@ -247,14 +265,12 @@ public class AudioHandler {
         long groupId = request.groupId();
         TranscriptionCacheEntry cached = cacheService.get(fileId);
         if (cached != null) {
-            entregarTranscricaoCache(userId, tipo, cached, groupId); // <-- passa groupId
-            // pendingRequests.remove(token);
+            entregarTranscricaoCache(userId, tipo, cached, groupId);
             return;
         }
 
         log.info("Cache miss para fileId={}, processando novamente.", fileId);
-        telegramFacade.answerCallbackQuery(
-                callback.id(), "Processando áudio... enviarei no privado.", false);
+        safeAnswerCallback(callback.id(), "Processando áudio... enviarei no privado.", false);
         CompletableFuture.runAsync(
                 () -> processarAudioCallback(userId, tipo, fileId, request, groupId));
     }
@@ -264,7 +280,7 @@ public class AudioHandler {
         String texto = tipo.equals(TRANS_BRUTO) ? cached.textoBruto() : cached.textoRefinado();
         String prefixo =
                 tipo.equals(TRANS_BRUTO) ? "🎙️ Transcrição Bruta:\n" : "✨ Transcrição Refinada:\n";
-        enviarTranscricao(userId, prefixo + texto, groupId); // <-- passa groupId
+        safeSendTranscription(userId, prefixo + texto, groupId);
         log.info("✅ Transcrição entregue via cache para userId={} tipo={}", userId, tipo);
     }
 
@@ -272,10 +288,28 @@ public class AudioHandler {
             long userId, String tipo, String fileId, AudioRequest request, long groupId) {
         try {
             String mensagem = transcreverAudio(fileId, tipo, request);
-            enviarTranscricao(userId, mensagem, groupId); // <-- passa groupId
+            safeSendTranscription(userId, mensagem, groupId);
             log.info("✅ Transcrição enviada para userId={} tipo={}", userId, tipo);
-        } catch (Exception e) {
-            log.error("Erro ao processar áudio para userId={} fileId={}", userId, fileId, e);
+        } catch (AudioProcessingException e) {
+            log.error("Erro no pipeline de áudio para userId={} fileId={}", userId, fileId, e);
+            tratarErroTranscricao(e, userId, groupId);
+        } catch (HttpClientErrorException e) {
+            log.error(
+                    "Erro HTTP do Telegram para userId={} fileId={}: {}",
+                    userId,
+                    fileId,
+                    e.getStatusCode(),
+                    e);
+            tratarErroTranscricao(e, userId, groupId);
+        } catch (ResourceAccessException e) {
+            log.error("Falha de conectividade para userId={} fileId={}", userId, fileId, e);
+            safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Falha de conectividade.");
+        } catch (RuntimeException e) {
+            log.error(
+                    "Erro inesperado ao processar áudio para userId={} fileId={}",
+                    userId,
+                    fileId,
+                    e);
             tratarErroTranscricao(e, userId, groupId);
         } finally {
             pendingRequests.entrySet().removeIf(entry -> entry.getValue().fileId().equals(fileId));
@@ -300,7 +334,7 @@ public class AudioHandler {
                 });
 
         if (resultado[0] == null) {
-            throw new IllegalStateException("Nenhum texto produzido");
+            throw new IllegalStateException("Nenhum texto produzido pelo pipeline de áudio");
         }
 
         String prefixo =
@@ -308,7 +342,32 @@ public class AudioHandler {
         return prefixo + resultado[0];
     }
 
-    private void enviarTranscricao(long userId, String mensagem, long groupId) {
+    // ========================= ENVIO SEGURO =========================
+
+    /** Envia mensagem para o usuário, tratando erros HTTP e de conectividade. */
+    private void safeSendMessage(long chatId, String mensagem) {
+        try {
+            if (mensagem.length() > telegramMessageLimit) {
+                utils.splitMessage(mensagem, telegramMessageLimit)
+                        .forEach(parte -> telegramFacade.enviarMensagem(chatId, parte));
+            } else {
+                telegramFacade.enviarMensagem(chatId, mensagem);
+            }
+        } catch (HttpClientErrorException.Forbidden e) {
+            log.warn("Usuário {} bloqueou o bot (Forbidden)", chatId);
+        } catch (HttpClientErrorException e) {
+            log.error(
+                    "Erro HTTP {} ao enviar mensagem para chatId={}", e.getStatusCode(), chatId, e);
+        } catch (ResourceAccessException e) {
+            log.error("Falha de conectividade ao enviar mensagem para chatId={}", chatId);
+        }
+    }
+
+    /**
+     * Envia transcrição para o usuário, com tratamento específico de Forbidden (usuário não iniciou
+     * bot).
+     */
+    private void safeSendTranscription(long userId, String mensagem, long groupId) {
         try {
             if (mensagem.length() > telegramMessageLimit) {
                 utils.splitMessage(mensagem, telegramMessageLimit)
@@ -317,11 +376,70 @@ public class AudioHandler {
                 telegramFacade.enviarMensagem(userId, mensagem);
             }
             log.info("📤 Transcrição enviada para userId={}", userId);
-        } catch (Exception e) {
-            log.error("❌ Falha ao enviar transcrição para userId={}", userId, e);
-            tratarErroTranscricao(e, userId, groupId);
+        } catch (HttpClientErrorException.Forbidden e) {
+            log.warn(
+                    "Usuário {} não iniciou o bot (Forbidden), notificando no grupo {}",
+                    userId,
+                    groupId);
+            if (groupId != 0) {
+                safeSendMessage(groupId, USUARIO_PRECISA_INICIAR_BOT);
+            }
+        } catch (HttpClientErrorException e) {
+            log.error(
+                    "Erro HTTP {} ao enviar transcrição para userId={}",
+                    e.getStatusCode(),
+                    userId,
+                    e);
+            safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Erro de comunicação.");
+        } catch (ResourceAccessException e) {
+            log.error("Falha de conectividade ao enviar transcrição para userId={}", userId);
+            safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Falha de conectividade.");
         }
     }
+
+    /** Envia botões de transcrição para o grupo. */
+    private void safeSendButtons(long chatId, String senderName, int duration, String token) {
+        try {
+            long minutos = duration / 60;
+            long segundos = duration % 60;
+            String duracao = String.format("%dmin e %ds", minutos, segundos);
+            String hint = duration > 300 ? ", praticamente um SilasCast 🗣" : "";
+
+            String mensagem =
+                    """
+          🎧 Áudio de <b>%s</b> (%s%s) processado!
+
+          Clique num botão para receber a transcrição no seu privado:
+          """
+                            .formatted(utils.escapeHtml(senderName), duracao, hint);
+
+            InlineKeyboardMarkup markup =
+                    new InlineKeyboardMarkup(
+                            new InlineKeyboardButton("🎙️ Transcrição Bruta")
+                                    .callbackData(TRANS_BRUTO + "|" + token),
+                            new InlineKeyboardButton("✨ Transcrição Refinada")
+                                    .callbackData(TRANS_REFINADO + "|" + token));
+
+            telegramFacade.enviarComBotoesHtml(chatId, mensagem, markup);
+        } catch (HttpClientErrorException e) {
+            log.error("Erro HTTP {} ao enviar botões para chatId={}", e.getStatusCode(), chatId, e);
+        } catch (ResourceAccessException e) {
+            log.error("Falha de conectividade ao enviar botões para chatId={}", chatId);
+        }
+    }
+
+    /** Responde a um callback query de forma segura. */
+    private void safeAnswerCallback(String callbackId, String text, boolean showAlert) {
+        try {
+            telegramFacade.answerCallbackQuery(callbackId, text, showAlert);
+        } catch (HttpClientErrorException e) {
+            log.warn("Erro HTTP {} ao responder callback {}", e.getStatusCode(), callbackId);
+        } catch (ResourceAccessException e) {
+            log.warn("Falha de conectividade ao responder callback {}", callbackId);
+        }
+    }
+
+    // ========================= ERROS =========================
 
     private void tratarErroTranscricao(Exception e, long userId, long groupId) {
         String errorMsg = e.getMessage();
@@ -331,24 +449,24 @@ public class AudioHandler {
                         && errorMsg.contains("can't initiate conversation");
 
         if (isForbidden && groupId != 0) {
-            telegramFacade.enviarMensagem(
-                    groupId,
-                    "⚠️ Usuário precisa iniciar conversa com o bot no privado para receber"
-                            + " transcrições.");
+            safeSendMessage(groupId, USUARIO_PRECISA_INICIAR_BOT);
         } else {
-            try {
-                telegramFacade.enviarMensagem(userId, "❌ Erro ao processar áudio: " + errorMsg);
-            } catch (Exception ex) {
-                log.error("Falha ao enviar mensagem de erro para userId {}", userId, ex);
-            }
+            safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Erro no processamento.");
         }
+    }
+
+    // ========================= UTILITÁRIOS =========================
+
+    private boolean isGroupChat(Message message) {
+        return message.chat().type() == com.pengrad.telegrambot.model.Chat.Type.group
+                || message.chat().type() == com.pengrad.telegrambot.model.Chat.Type.supergroup;
     }
 
     private String gerarToken(String fileId) {
         String token =
                 Long.toHexString(System.nanoTime())
                         + Integer.toHexString(fileId.hashCode() & 0xFFFF);
-        return token.length() > 20 ? token.substring(0, 20) : token;
+        return token.length() > TOKEN_MAX_LENGTH ? token.substring(0, TOKEN_MAX_LENGTH) : token;
     }
 
     private void cleanExpiredTokens() {
@@ -356,13 +474,31 @@ public class AudioHandler {
         int before = pendingRequests.size();
         pendingRequests
                 .entrySet()
-                .removeIf(entry -> now - entry.getValue().timestamp() > 604800000);
+                .removeIf(entry -> now - entry.getValue().timestamp() > TOKEN_EXPIRATION_MS);
         int after = pendingRequests.size();
         if (before != after) {
             log.info(
                     "🧹 Cache de tokens limpo: {} entradas removidas, {} restantes",
                     before - after,
                     after);
+        }
+    }
+
+    /** Desempacota CompletionException para obter a causa raiz. */
+    private Throwable unwrapCause(Throwable ex) {
+        return (ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null)
+                ? ex.getCause()
+                : ex;
+    }
+
+    /** Repropaga erros fatais (Error, InterruptedException) sem engoli-los. */
+    private void rethrowIfFatal(Throwable t) {
+        if (t instanceof Error error) {
+            throw error;
+        }
+        if (t instanceof InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Thread interrompida", ie);
         }
     }
 }

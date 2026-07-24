@@ -12,7 +12,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.Resource;
@@ -21,48 +20,54 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.AutoResponseRule;
+import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class AutoResponseServiceTest {
 
     @Mock private ResourceLoader resourceLoader;
     @Mock private Resource resource;
+    private ObjectMapper objectMapper = new ObjectMapper();
 
-    @InjectMocks private AutoResponseService service;
+    private AutoResponseService service;
 
     private static final String JSON_VALIDO =
             """
       {
-        "regra1": {
-          "triggers": ["bom dia", "boa tarde"],
-          "response": "Olá! Bom dia/tarde para você!",
-          "animation": "https://exemplo.com/gif.gif"
-        },
-        "regra2": {
-          "triggers": ["tchau"],
-          "response": "Até logo!",
-          "timeRange": { "start": "18:00", "end": "23:59" }
-        },
-        "regra3": {
-          "triggers": ["obrigado"],
-          "response": "De nada!",
-          "userResponse": {
-            "123": "Por nada, amigo!",
-            "456": "Disponha!"
+        "rules": {
+          "regra1": {
+            "triggers": ["bom dia", "boa tarde"],
+            "response": "Olá! Bom dia/tarde para você!",
+            "animation": "https://exemplo.com/gif.gif"
           },
-          "userAnimation": {
-            "123": "https://exemplo.com/amigo.gif"
+          "regra2": {
+            "triggers": ["tchau"],
+            "response": "Até logo!",
+            "timeRange": { "start": "18:00", "end": "23:59" }
+          },
+          "regra3": {
+            "triggers": ["obrigado"],
+            "response": "De nada!",
+            "userResponse": {
+              "123": "Por nada, amigo!",
+              "456": "Disponha!"
+            },
+            "userAnimation": {
+              "123": "https://exemplo.com/amigo.gif"
+            }
+          },
+          "regra4": {
+            "triggers": ["oi", "olá"],
+            "response": "Oi! Como posso ajudar?"
           }
-        },
-        "regra4": {
-          "triggers": ["oi", "olá"],
-          "response": "Oi! Como posso ajudar?"
         }
       }
       """;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
+        // Cria o service manualmente com o ObjectMapper real
+        service = new AutoResponseService(resourceLoader, objectMapper);
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "configFile", "classpath:auto-responses-test.json");
     }
@@ -87,7 +92,7 @@ class AutoResponseServiceTest {
     }
 
     @Test
-    void deveIgnorarArquivoInexistente() throws Exception {
+    void deveIgnorarArquivoInexistente() {
         when(resourceLoader.getResource(anyString())).thenReturn(resource);
         when(resource.exists()).thenReturn(false);
 
@@ -250,8 +255,9 @@ class AutoResponseServiceTest {
     }
 
     @Test
-    void responseRule_devePriorizarTriggerMaisEspecifico() throws Exception {
-        AutoResponseService service2 = new AutoResponseService(resourceLoader);
+    void responseRule_devePriorizarTriggerMaisEspecifico() {
+        // Este teste não usa o ObjectMapper, então pode usar mock ou criar novo
+        AutoResponseService service2 = new AutoResponseService(resourceLoader, objectMapper);
         ReflectionTestUtils.setField(service2, "enabled", true);
         AutoResponseRule rule1 = new AutoResponseRule("Resposta curta", null, null, null, null);
         AutoResponseRule rule2 = new AutoResponseRule("Resposta longa", null, null, null, null);

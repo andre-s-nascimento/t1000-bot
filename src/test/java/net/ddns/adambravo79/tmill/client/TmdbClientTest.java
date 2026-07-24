@@ -138,7 +138,7 @@ class TmdbClientTest {
                                         List.of(new Provider("Netflix", 1, "/logo.png")))));
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
-        assertThat(new TmdbClient(restClient).buscarOndeAssistir(1L)).contains("Netflix");
+        assertThat(new TmdbClient(restClient).buscarOndeAssistirFilme(1L)).contains("Netflix");
     }
 
     @Test
@@ -146,7 +146,7 @@ class TmdbClientTest {
         when(responseSpec.body(WatchProviderResponse.class))
                 .thenReturn(new WatchProviderResponse(Map.of()));
 
-        assertThat(new TmdbClient(restClient).buscarOndeAssistir(1L))
-                .contains("Indisponível no momento");
+        assertThat(new TmdbClient(restClient).buscarOndeAssistirFilme(1L))
+                .contains("Indisponivel no momento");
     }
 }

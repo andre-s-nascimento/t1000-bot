@@ -1,4 +1,3 @@
-/* (c) 2026 | 20/07/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.LocalTime;
@@ -14,9 +13,11 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.model.AutoResponseConfig;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.AutoResponseRule;
-import tools.jackson.core.type.TypeReference;
+import net.ddns.adambravo79.tmill.model.AutoResponseRuleEntry;
+import net.ddns.adambravo79.tmill.model.UserOverride;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -24,7 +25,8 @@ import tools.jackson.databind.ObjectMapper;
 public class AutoResponseService {
 
     private final Map<String, AutoResponseRule> triggerToRule = new HashMap<>();
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+    private final ResourceLoader resourceLoader;
     private static final ZoneId BRAZIL_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -34,10 +36,9 @@ public class AutoResponseService {
     @Value("${auto.response.file:classpath:auto-responses.json}")
     private String configFile;
 
-    private final ResourceLoader resourceLoader;
-
-    public AutoResponseService(ResourceLoader resourceLoader) {
+    public AutoResponseService(ResourceLoader resourceLoader, ObjectMapper objectMapper) {
         this.resourceLoader = resourceLoader;
+        this.objectMapper = objectMapper;
     }
 
     @PostConstruct
@@ -55,83 +56,90 @@ public class AutoResponseService {
                 return;
             }
 
-            Map<String, Map<String, Object>> config =
-                    mapper.readValue(resource.getInputStream(), new TypeReference<>() {});
+            AutoResponseConfig config =
+                    objectMapper.readValue(resource.getInputStream(), AutoResponseConfig.class);
+
             triggerToRule.clear();
-
-            for (Map.Entry<String, Map<String, Object>> entry : config.entrySet()) {
-                List<String> triggers = (List<String>) entry.getValue().get("triggers");
-                String response = (String) entry.getValue().get("response");
-                String animation = (String) entry.getValue().get("animation");
-
-                // Extrai timeRange
-                LocalTime startTime = null;
-                LocalTime endTime = null;
-                Map<String, String> timeRange =
-                        (Map<String, String>) entry.getValue().get("timeRange");
-                if (timeRange != null) {
-                    startTime = LocalTime.parse(timeRange.get("start"), TIME_FORMATTER);
-                    endTime = LocalTime.parse(timeRange.get("end"), TIME_FORMATTER);
-                }
-
-                // Extrai userOverrides
-                Map<String, AutoResponseOverride> userOverrides = new HashMap<>();
-
-                // 1) Tenta o formato "userOverrides" (recomendado)
-                Map<String, Map<String, Object>> overridesRaw =
-                        (Map<String, Map<String, Object>>) entry.getValue().get("userOverrides");
-                if (overridesRaw != null) {
-                    for (Map.Entry<String, Map<String, Object>> ov : overridesRaw.entrySet()) {
-                        String userId = ov.getKey();
-                        String ovResponse = (String) ov.getValue().get("response");
-                        String ovAnimation = (String) ov.getValue().get("animation");
-                        if (ovResponse != null) {
-                            userOverrides.put(
-                                    userId, new AutoResponseOverride(ovResponse, ovAnimation));
-                        }
-                    }
-                } else {
-                    // 2) Fallback: formato separado "userResponse" e "userAnimation"
-                    Map<String, String> userResponseRaw =
-                            (Map<String, String>) entry.getValue().get("userResponse");
-                    Map<String, String> userAnimationRaw =
-                            (Map<String, String>) entry.getValue().get("userAnimation");
-                    if (userResponseRaw != null) {
-                        for (Map.Entry<String, String> uv : userResponseRaw.entrySet()) {
-                            String userId = uv.getKey();
-                            String ovResponse = uv.getValue();
-                            String ovAnimation =
-                                    (userAnimationRaw != null)
-                                            ? userAnimationRaw.get(userId)
-                                            : null;
-                            userOverrides.put(
-                                    userId, new AutoResponseOverride(ovResponse, ovAnimation));
-                        }
-                    }
-                }
-
-                if (triggers != null && response != null) {
-                    for (String trigger : triggers) {
-                        if (trigger != null && !trigger.isBlank()) {
-                            triggerToRule.put(
-                                    trigger.toLowerCase(),
-                                    new AutoResponseRule(
-                                            response,
-                                            animation,
-                                            startTime,
-                                            endTime,
-                                            userOverrides));
-                        }
-                    }
-                }
+            for (Map.Entry<String, AutoResponseRuleEntry> entry : config.rules().entrySet()) {
+                String ruleName = entry.getKey();
+                AutoResponseRuleEntry ruleEntry = entry.getValue();
+                processRuleEntry(ruleName, ruleEntry);
             }
 
             log.info("✅ Carregadas {} regras de resposta automática", triggerToRule.size());
             log.debug("Triggers carregados: {}", triggerToRule.keySet());
+
         } catch (Exception e) {
             log.error("Falha ao carregar respostas automáticas", e);
         }
     }
+
+    private void processRuleEntry(String ruleName, AutoResponseRuleEntry entry) {
+        if (entry.triggers() == null || entry.response() == null) {
+            log.warn("Regra '{}' ignorada: triggers ou response nulos", ruleName);
+            return;
+        }
+
+        LocalTime startTime = parseTime(entry.timeRange(), "start");
+        LocalTime endTime = parseTime(entry.timeRange(), "end");
+        Map<String, AutoResponseOverride> overrides = buildOverrides(entry);
+
+        for (String trigger : entry.triggers()) {
+            if (trigger != null && !trigger.isBlank()) {
+                triggerToRule.put(
+                        trigger.toLowerCase(),
+                        new AutoResponseRule(
+                                entry.response(),
+                                entry.animation(),
+                                startTime,
+                                endTime,
+                                overrides));
+            }
+        }
+    }
+
+    private LocalTime parseTime(Map<String, String> timeRange, String key) {
+        if (timeRange == null) return null;
+        String value = timeRange.get(key);
+        if (value == null) return null;
+        try {
+            return LocalTime.parse(value, TIME_FORMATTER);
+        } catch (Exception e) {
+            log.warn("Formato de hora inválido para {}: {}", key, value);
+            return null;
+        }
+    }
+
+    private Map<String, AutoResponseOverride> buildOverrides(AutoResponseRuleEntry entry) {
+        Map<String, AutoResponseOverride> overrides = new HashMap<>();
+
+        // 1. Formato novo: userOverrides
+        if (entry.userOverrides() != null) {
+            for (Map.Entry<String, UserOverride> ov : entry.userOverrides().entrySet()) {
+                overrides.put(
+                        ov.getKey(),
+                        new AutoResponseOverride(
+                                ov.getValue().response(), ov.getValue().animation()));
+            }
+        }
+
+        // 2. Fallback: userResponse + userAnimation (legado)
+        if (entry.userResponse() != null) {
+            for (Map.Entry<String, String> uv : entry.userResponse().entrySet()) {
+                String userId = uv.getKey();
+                String response = uv.getValue();
+                String animation =
+                        entry.userAnimation() != null ? entry.userAnimation().get(userId) : null;
+                if (!overrides.containsKey(userId)) {
+                    overrides.put(userId, new AutoResponseOverride(response, animation));
+                }
+            }
+        }
+
+        return overrides;
+    }
+
+    // ========================= LÓGICA DE TRIGGER =========================
 
     private boolean containsExactWord(String text, String word) {
         Pattern pattern =
@@ -148,10 +156,6 @@ public class AutoResponseService {
         }
     }
 
-    /**
-     * Obtém a regra de resposta para um usuário e mensagem, com horário simulado. Útil para testes e
-     * simulações.
-     */
     public Optional<AutoResponseOverride> getResponseRule(
             Long userId, String message, LocalTime time) {
         if (!enabled || message == null || message.isBlank()) {
@@ -159,41 +163,36 @@ public class AutoResponseService {
         }
 
         String lowerMsg = message.toLowerCase();
-        List<Map.Entry<String, AutoResponseRule>> sorted =
-                new ArrayList<>(triggerToRule.entrySet());
-        sorted.sort((a, b) -> b.getKey().length() - a.getKey().length());
-
         LocalTime now = time != null ? time : LocalTime.now(BRAZIL_ZONE);
 
-        for (Map.Entry<String, AutoResponseRule> entry : sorted) {
-            String trigger = entry.getKey();
-            AutoResponseRule rule = entry.getValue();
+        return triggerToRule.entrySet().stream()
+                .sorted((a, b) -> b.getKey().length() - a.getKey().length())
+                .filter(entry -> entry.getKey().length() >= 3)
+                .filter(entry -> containsExactWord(lowerMsg, entry.getKey()))
+                .filter(
+                        entry ->
+                                isTimeInRange(
+                                        now,
+                                        entry.getValue().startTime(),
+                                        entry.getValue().endTime()))
+                .map(
+                        entry -> {
+                            String userIdKey = userId != null ? String.valueOf(userId) : null;
+                            AutoResponseRule rule = entry.getValue();
 
-            if (trigger.length() < 3) continue;
-            if (!containsExactWord(lowerMsg, trigger)) continue;
-            if (!isTimeInRange(now, rule.startTime(), rule.endTime())) continue;
+                            if (userIdKey != null
+                                    && rule.userOverrides() != null
+                                    && rule.userOverrides().containsKey(userIdKey)) {
+                                log.info("🎯 Usando resposta personalizada para userId={}", userId);
+                                return rule.userOverrides().get(userIdKey);
+                            }
 
-            String userIdKey = userId != null ? String.valueOf(userId) : null;
-            if (userIdKey != null
-                    && rule.userOverrides() != null
-                    && rule.userOverrides().containsKey(userIdKey)) {
-                AutoResponseOverride ov = rule.userOverrides().get(userIdKey);
-                log.info(
-                        "🎯 Usando resposta personalizada para userId={} via horário simulado",
-                        userId);
-                return Optional.of(ov);
-            }
-
-            log.info("✅ Trigger '{}' ativado (horário simulado: {})", trigger, now);
-            return Optional.of(new AutoResponseOverride(rule.response(), rule.animation()));
-        }
-        return Optional.empty();
+                            log.info("✅ Trigger '{}' ativado (horário: {})", entry.getKey(), now);
+                            return new AutoResponseOverride(rule.response(), rule.animation());
+                        })
+                .findFirst();
     }
 
-    /**
-     * Obtém a regra de resposta para um usuário e mensagem, usando o horário real atual. Mantido para
-     * compatibilidade com o código existente.
-     */
     public Optional<AutoResponseOverride> getResponseRule(Long userId, String message) {
         return getResponseRule(userId, message, LocalTime.now(BRAZIL_ZONE));
     }
@@ -202,9 +201,7 @@ public class AutoResponseService {
         loadResponses();
     }
 
-    // =========================
-    // MÉTODOS DE ESTATÍSTICA E DEBUG
-    // =========================
+    // ========================= MÉTODOS DE ESTATÍSTICA E DEBUG =========================
 
     public boolean isEnabled() {
         return enabled;
@@ -214,14 +211,12 @@ public class AutoResponseService {
         return triggerToRule.size();
     }
 
-    /** Retorna um resumo de todas as regras carregadas, útil para debug e listagem. */
     public Map<String, String> getRulesSummary() {
         Map<String, String> summary = new LinkedHashMap<>();
         for (Map.Entry<String, AutoResponseRule> entry : triggerToRule.entrySet()) {
-            String key = entry.getKey();
             AutoResponseRule rule = entry.getValue();
             summary.put(
-                    key,
+                    entry.getKey(),
                     String.format(
                             "response='%s', start=%s, end=%s, overrides=%d",
                             rule.response(),
