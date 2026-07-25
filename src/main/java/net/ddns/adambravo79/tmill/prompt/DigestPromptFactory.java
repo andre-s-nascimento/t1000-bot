@@ -199,9 +199,7 @@ public class DigestPromptFactory {
     }
 
     private String buildPeriodContext(String periodLabel) {
-
-        if (periodLabel.contains("MADRUGADA")) {
-
+        if (periodLabel != null && periodLabel.contains("MADRUGADA")) {
             return """
       CONTEXTO DO PERÍODO:
 

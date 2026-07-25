@@ -1,12 +1,15 @@
 package net.ddns.adambravo79.tmill.telegram.exception;
 
 import java.io.IOException;
+import java.util.Map;
+import java.util.function.Predicate;
 
 import org.springframework.stereotype.Component;
 
 import com.pengrad.telegrambot.TelegramException;
 
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramSender;
 
@@ -14,11 +17,25 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramSender;
 @Component
 public class TelegramExceptionHandler {
 
+    // Mapeamento de padrões de erro para mensagens amigáveis
+    private static final Map<Predicate<String>, String> ERROR_MESSAGES =
+            Map.of(
+                    msg -> msg.contains("429"),
+                            "⏳ Muitas requisições. Tente novamente em alguns segundos.",
+                    msg -> msg.contains("timeout"),
+                            "⏱️ O servidor demorou a responder. Tente novamente em instantes.",
+                    msg -> msg.contains("unauthorized"),
+                            "🔑 Token inválido ou expirado. Verifique suas credenciais.",
+                    msg -> msg.contains("chat not found"),
+                            "❌ Não consegui encontrar este chat. Verifique se o ID está correto.",
+                    msg -> msg.contains("file is too big"),
+                            "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.",
+                    msg -> msg.contains("wrong file type"),
+                            "🛑 Formato de arquivo não suportado. Envie em outro formato.");
+
     public void handle(Exception e, long chatId, TelegramSender sender) {
         log.error("Erro no fluxo Telegram - chatId={}", chatId, e);
-
         String mensagemUsuario = mapearMensagem(e);
-
         try {
             sender.enviar(chatId, mensagemUsuario);
         } catch (Exception sendError) {
@@ -27,7 +44,7 @@ public class TelegramExceptionHandler {
     }
 
     private String mapearMensagem(Exception e) {
-        // 1. Exceções customizadas do projeto (prioridade alta)
+        // Exceções customizadas do projeto
         if (e instanceof TelegramFileException) {
             return "⚠️ Não consegui baixar o áudio.";
         }
@@ -41,53 +58,26 @@ public class TelegramExceptionHandler {
             return "⏱️ Timeout na comunicação com o servidor. Tente novamente.";
         }
 
-        // 2. Exceções da biblioteca Pengrad
-        if (e instanceof TelegramException) {
-            return mapearTelegramException((TelegramException) e);
+        // Exceções do Telegram usando pattern matching
+        if (e instanceof TelegramException te) {
+            return mapearPorMensagem(te.getMessage());
         }
 
-        // 3. Fallback por análise de mensagem
+        // Fallback genérico
         return mapearPorMensagem(e.getMessage());
     }
 
-    private String mapearTelegramException(TelegramException e) {
-        String msg = e.getMessage();
-        if (msg == null) return "⚠️ Erro ao falar com o Telegram: erro desconhecido";
-
-        String lower = msg.toLowerCase();
-        if (lower.contains("429"))
-            return "⏳ Muitas requisições. Tente novamente em alguns segundos.";
-        if (lower.contains("chat not found"))
-            return "❌ Não consegui encontrar este chat. Verifique se o ID está correto.";
-        if (lower.contains("unauthorized"))
-            return "🔑 Token inválido ou expirado. Verifique suas credenciais.";
-        if (lower.contains("file is too big"))
-            return "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.";
-        if (lower.contains("wrong file type"))
-            return "🛑 Formato de arquivo não suportado. Envie em outro formato.";
-        if (lower.contains("timeout"))
-            return "⏱️ O servidor demorou a responder. Tente novamente em instantes.";
-
-        return "⚠️ Erro ao falar com o Telegram: " + msg;
-    }
-
     private String mapearPorMensagem(String msg) {
-        if (msg == null) return "⚠️ Ocorreu um erro inesperado.";
+        if (msg == null) {
+            return BotMessages.ERRO_GENERICO;
+        }
 
         String lower = msg.toLowerCase();
-        if (lower.contains("429"))
-            return "⏳ Muitas requisições. Tente novamente em alguns segundos.";
-        if (lower.contains("timeout"))
-            return "⏱️ O servidor demorou a responder. Tente novamente em instantes.";
-        if (lower.contains("unauthorized"))
-            return "🔑 Token inválido ou expirado. Verifique suas credenciais.";
-        if (lower.contains("chat not found"))
-            return "❌ Não consegui encontrar este chat. Verifique se o ID está correto.";
-        if (lower.contains("file is too big"))
-            return "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.";
-        if (lower.contains("wrong file type"))
-            return "🛑 Formato de arquivo não suportado. Envie em outro formato.";
-
-        return "⚠️ Ocorreu um erro inesperado.";
+        for (Map.Entry<Predicate<String>, String> entry : ERROR_MESSAGES.entrySet()) {
+            if (entry.getKey().test(lower)) {
+                return entry.getValue();
+            }
+        }
+        return "⚠️ Ocorreu um erro inesperado: " + msg;
     }
 }
