@@ -98,6 +98,8 @@ jacoco {
 
 test {
     useJUnitPlatform()
+    // Força o fuso horário dos testes para coincidir com a regra de negócio
+    systemProperty 'user.timezone', 'America/Sao_Paulo'
     finalizedBy jacocoTestReport
 }
 
