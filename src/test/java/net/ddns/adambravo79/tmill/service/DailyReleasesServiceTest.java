@@ -132,7 +132,7 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(1L), eq(MOVIE_TYPE), eq(TODAY))).thenReturn(true);
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(true);
 
         service.sendHourlyReleases();
 
@@ -161,7 +161,7 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(1L), eq(MOVIE_TYPE), eq(TODAY))).thenReturn(false);
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn(null);
 
         service.sendHourlyReleases();
@@ -192,10 +192,9 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(1L), eq(MOVIE_TYPE), eq(TODAY))).thenReturn(false);
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Indisponível");
 
-        // O código chama buscarDetalhes mesmo com provedor "Indisponível"
         MovieRecord details = mock(MovieRecord.class);
         when(details.overview()).thenReturn("Sinopse");
         when(details.voteAverage()).thenReturn(7.5);
@@ -204,9 +203,7 @@ class DailyReleasesServiceTest {
 
         service.sendHourlyReleases();
 
-        // Verifica que buscarDetalhes foi chamado (agora esperado)
         verify(tmdbClient, times(1)).buscarDetalhes(1L);
-        // Verifica que NÃO salvou nem enviou
         verify(releaseRepository, never())
                 .saveFullRelease(
                         anyLong(),
@@ -232,7 +229,7 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(1L), eq(MOVIE_TYPE), eq(TODAY))).thenReturn(false);
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Netflix, Prime Video");
 
         MovieRecord details = mock(MovieRecord.class);
@@ -245,19 +242,19 @@ class DailyReleasesServiceTest {
 
         verify(releaseRepository, times(1))
                 .saveFullRelease(
-                        eq(1L),
-                        eq(MOVIE_TYPE),
-                        eq(TODAY),
-                        eq("Filme Teste"),
-                        eq("Sinopse do filme"),
-                        eq(8.5),
-                        eq("Netflix, Prime Video"),
-                        eq("/poster.jpg"));
+                        1L,
+                        MOVIE_TYPE,
+                        TODAY,
+                        "Filme Teste",
+                        "Sinopse do filme",
+                        8.5,
+                        "Netflix, Prime Video",
+                        "/poster.jpg");
 
         verify(telegramFacade, times(1))
-                .enviarFotoHtml(eq(123L), anyString(), contains("Filme Teste"));
+                .enviarFotoHtml(eq(123L), anyString(), argThat(s -> s.contains("Filme Teste")));
         verify(telegramFacade, times(1))
-                .enviarFotoHtml(eq(456L), anyString(), contains("Filme Teste"));
+                .enviarFotoHtml(eq(456L), anyString(), argThat(s -> s.contains("Filme Teste")));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -272,7 +269,7 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(1L), eq(MOVIE_TYPE), eq(TODAY))).thenReturn(false);
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Netflix");
 
         MovieRecord details = mock(MovieRecord.class);
@@ -283,8 +280,10 @@ class DailyReleasesServiceTest {
 
         service.sendHourlyReleases();
 
-        verify(telegramFacade, times(1)).enviarMensagemHtml(eq(123L), contains("Filme Sem Poster"));
-        verify(telegramFacade, times(1)).enviarMensagemHtml(eq(456L), contains("Filme Sem Poster"));
+        verify(telegramFacade, times(1))
+                .enviarMensagemHtml(eq(123L), argThat(s -> s.contains("Filme Sem Poster")));
+        verify(telegramFacade, times(1))
+                .enviarMensagemHtml(eq(456L), argThat(s -> s.contains("Filme Sem Poster")));
         verify(telegramFacade, never()).enviarFotoHtml(anyLong(), anyString(), anyString());
     }
 
@@ -299,14 +298,13 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(1L), eq(MOVIE_TYPE), eq(TODAY))).thenReturn(false);
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Netflix");
         when(tmdbClient.buscarDetalhes(1L))
                 .thenThrow(new RuntimeException("Erro ao buscar detalhes"));
 
         service.sendHourlyReleases();
 
-        // O método não deve lançar exceção e deve continuar (não salva nem envia)
         verify(releaseRepository, never())
                 .saveFullRelease(
                         anyLong(),
@@ -357,7 +355,7 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(1L), eq(MOVIE_TYPE), eq(TODAY))).thenReturn(false);
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Netflix");
 
         MovieRecord details = mock(MovieRecord.class);
@@ -374,8 +372,6 @@ class DailyReleasesServiceTest {
 
     @Test
     void sendHourlyReleases_deveLimitarResultados() {
-        // Criar 20 filmes e 20 séries, mas apenas os 15 primeiros devem ser processados
-        // Primeiro, criar 20 filmes
         List<MovieResult> movies = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             movies.add(new MovieResult(i, "Filme " + i, TODAY.toString(), 7.5));
@@ -384,7 +380,6 @@ class DailyReleasesServiceTest {
         when(movieResponse.results()).thenReturn(movies);
         when(tmdbClient.discoverMoviesByDate(anyString(), anyString())).thenReturn(movieResponse);
 
-        // Criar 20 séries
         List<TvResult> tvs = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             tvs.add(new TvResult(i + 100, "Serie " + i, TODAY.toString(), 8.0));
@@ -393,11 +388,9 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(tvs);
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        // Mock para isNotified sempre false e provedor sempre válido
         when(releaseRepository.isNotified(anyLong(), anyString(), eq(TODAY))).thenReturn(false);
         when(providerCache.get(anyString(), any())).thenReturn("Netflix");
 
-        // Mock para buscarDetalhes (apenas para os filmes que serão processados)
         MovieRecord details = mock(MovieRecord.class);
         when(details.overview()).thenReturn("Sinopse");
         when(details.voteAverage()).thenReturn(8.0);
@@ -406,8 +399,6 @@ class DailyReleasesServiceTest {
 
         service.sendHourlyReleases();
 
-        // Deve ter salvo exatamente 15 lançamentos (os primeiros 15, já que a ordem é filmes +
-        // séries)
         verify(releaseRepository, times(15))
                 .saveFullRelease(
                         anyLong(),
@@ -419,7 +410,6 @@ class DailyReleasesServiceTest {
                         anyString(),
                         anyString());
 
-        // Deve ter enviado 15 mensagens (para cada chat, 15 vezes, total 30 invocações)
         verify(telegramFacade, times(30)).enviarFotoHtml(anyLong(), anyString(), anyString());
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
@@ -447,9 +437,9 @@ class DailyReleasesServiceTest {
         service.sendWeeklyDigest();
 
         verify(telegramFacade, times(1))
-                .enviarMensagemHtml(eq(123L), contains("Nenhum lançamento"));
+                .enviarMensagemHtml(eq(123L), argThat(s -> s.contains("Nenhum lançamento")));
         verify(telegramFacade, times(1))
-                .enviarMensagemHtml(eq(456L), contains("Nenhum lançamento"));
+                .enviarMensagemHtml(eq(456L), argThat(s -> s.contains("Nenhum lançamento")));
     }
 
     @Test
@@ -457,10 +447,10 @@ class DailyReleasesServiceTest {
         FullRelease release =
                 new FullRelease(
                         1L,
-                        "Filme Teste",
+                        "movie",
                         TODAY,
+                        "Filme Teste",
                         "Sinopse do filme",
-                        MOVIE_TYPE,
                         8.0,
                         "Netflix",
                         "/poster.jpg");
@@ -473,10 +463,11 @@ class DailyReleasesServiceTest {
         verify(telegramFacade, times(2)).enviarMensagemHtml(anyLong(), captor.capture());
 
         String mensagemEnviada = captor.getValue();
-        assertThat(mensagemEnviada).contains("Sinopse do filme");
-        assertThat(mensagemEnviada).contains("GIRO DOS STREAMINGS");
-        assertThat(mensagemEnviada).contains("Netflix");
-        assertThat(mensagemEnviada).contains("8,0/10");
+        assertThat(mensagemEnviada)
+                .contains("Filme Teste")
+                .contains("GIRO DOS STREAMINGS")
+                .contains("Netflix")
+                .contains("8,0/10");
     }
 
     @Test
@@ -500,8 +491,7 @@ class DailyReleasesServiceTest {
         verify(telegramFacade, times(2)).enviarMensagemHtml(anyLong(), captor.capture());
 
         String mensagemEnviada = captor.getValue();
-        assertThat(mensagemEnviada).doesNotContain("⭐");
-        assertThat(mensagemEnviada).contains("📺 Série");
+        assertThat(mensagemEnviada).doesNotContain("⭐").contains("📺 Série");
     }
 
     @Test
@@ -523,7 +513,7 @@ class DailyReleasesServiceTest {
         service.sendWeeklyDigest();
 
         verify(telegramFacade, times(2))
-                .enviarMensagemHtml(anyLong(), contains("GIRO DOS STREAMINGS"));
+                .enviarMensagemHtml(anyLong(), argThat(s -> s.contains("GIRO DOS STREAMINGS")));
         verify(telegramFacade, never()).enviarMensagemHtml(eq(0L), anyString());
     }
 
@@ -550,7 +540,7 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of(tvResult));
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(2L), eq(TV_TYPE), eq(TODAY))).thenReturn(false);
+        when(releaseRepository.isNotified(2L, TV_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("tv_2"), any())).thenReturn("Disney+");
 
         service.sendHourlyReleases();
@@ -566,8 +556,10 @@ class DailyReleasesServiceTest {
                         eq("Disney+"),
                         isNull());
 
-        verify(telegramFacade, times(1)).enviarMensagemHtml(eq(123L), contains("Serie Teste"));
-        verify(telegramFacade, times(1)).enviarMensagemHtml(eq(456L), contains("Serie Teste"));
+        verify(telegramFacade, times(1))
+                .enviarMensagemHtml(eq(123L), argThat(s -> s.contains("Serie Teste")));
+        verify(telegramFacade, times(1))
+                .enviarMensagemHtml(eq(456L), argThat(s -> s.contains("Serie Teste")));
     }
 
     @Test
@@ -581,7 +573,7 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of(tvResult));
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(eq(2L), eq(TV_TYPE), eq(TODAY))).thenReturn(true);
+        when(releaseRepository.isNotified(2L, TV_TYPE, TODAY)).thenReturn(true);
 
         service.sendHourlyReleases();
 
