@@ -1,5 +1,7 @@
 package net.ddns.adambravo79.tmill.service;
 
+import static net.ddns.adambravo79.tmill.constant.BotMessages.CHAT_ID_INVALIDO;
+
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -105,7 +107,7 @@ public class DailyReleasesService {
                     long chatId = Long.parseLong(idStr.trim());
                     telegramFacade.enviarMensagemHtml(chatId, msg);
                 } catch (NumberFormatException e) {
-                    log.warn("Chat ID inválido: {}", idStr);
+                    log.warn(CHAT_ID_INVALIDO, idStr);
                 }
             }
             return;

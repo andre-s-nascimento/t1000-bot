@@ -1,22 +1,26 @@
 package net.ddns.adambravo79.tmill.client;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import net.ddns.adambravo79.tmill.model.ChatCompletionResponse;
@@ -27,7 +31,6 @@ import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.prompt.DigestPromptFactory;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class GroqClientTest {
 
     @Mock private RestClient restClient;
@@ -41,30 +44,25 @@ class GroqClientTest {
     @BeforeEach
     void setUp() {
         promptFactory = new DigestPromptFactory();
-
-        // Cria uma instância do GroqClient usando o construtor de teste
         groqClient = new GroqClient(restClient, 5000, promptFactory);
 
-        // Injeta os valores dos modelos via Reflection
         ReflectionTestUtils.setField(groqClient, "transcriptionModel", "whisper-large-v3");
         ReflectionTestUtils.setField(groqClient, "refinementModel", "llama-3.1-8b-instant");
         ReflectionTestUtils.setField(
                 groqClient, "digestModel", "meta-llama/llama-4-scout-17b-16e-instruct");
+        ReflectionTestUtils.setField(groqClient, "refinementMaxTokens", 4000);
 
-        when(restClient.post()).thenReturn(uriSpec);
-        lenient().doReturn(bodySpec).when(bodySpec).body(any(MultiValueMap.class));
-        lenient().doReturn(bodySpec).when(bodySpec).body(any(Object.class));
-        lenient().doReturn(responseSpec).when(bodySpec).retrieve();
-    }
-
-    private void stubTranscricaoUri() {
-        when(uriSpec.uri("/openai/v1/audio/transcriptions")).thenReturn(bodySpec);
-        lenient().doReturn(bodySpec).when(bodySpec).contentType(MediaType.MULTIPART_FORM_DATA);
+        lenient().when(restClient.post()).thenReturn(uriSpec);
+        lenient().when(uriSpec.uri("/openai/v1/audio/transcriptions")).thenReturn(bodySpec);
+        lenient().when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
+        lenient().when(bodySpec.body(any(MultiValueMap.class))).thenReturn(bodySpec);
+        lenient().when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
+        lenient().when(bodySpec.retrieve()).thenReturn(responseSpec);
     }
 
     private void stubChatUri() {
         when(uriSpec.uri("/openai/v1/chat/completions")).thenReturn(bodySpec);
-        lenient().doReturn(bodySpec).when(bodySpec).contentType(MediaType.APPLICATION_JSON);
+        when(bodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(bodySpec);
     }
 
     // =========================
@@ -72,25 +70,78 @@ class GroqClientTest {
     // =========================
 
     @Test
-    void deveTranscreverComSucesso() {
-        stubTranscricaoUri();
+    void transcrever_deveRetornarTexto() {
+        TranscriptionResponse mockResponse = mock(TranscriptionResponse.class);
+        when(mockResponse.text()).thenReturn("Texto transcrito");
+        when(responseSpec.body(TranscriptionResponse.class)).thenReturn(mockResponse);
 
-        TranscriptionResponse resp = mock(TranscriptionResponse.class);
-        when(resp.text()).thenReturn("Texto transcrito");
-        when(responseSpec.body(TranscriptionResponse.class)).thenReturn(resp);
-
-        String resultado = groqClient.transcrever(new File("teste.wav"));
-        assertThat(resultado).isEqualTo("Texto transcrito");
+        String result = groqClient.transcrever(new File("audio.wav"));
+        assertThat(result).isEqualTo("Texto transcrito");
     }
 
     @Test
-    void deveFalharQuandoTranscricaoInvalida() {
-        stubTranscricaoUri();
+    void transcrever_deveLancarExcecaoQuandoRespostaNula() {
         when(responseSpec.body(TranscriptionResponse.class)).thenReturn(null);
 
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> groqClient.transcrever(new File("teste.wav")))
-                .withMessageContaining("Falha na transcrição");
+        assertThatThrownBy(() -> groqClient.transcrever(new File("audio.wav")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Falha na transcrição");
+    }
+
+    @Test
+    void transcrever_deveLancarExcecaoQuandoTextNulo() {
+        TranscriptionResponse mockResponse = mock(TranscriptionResponse.class);
+        when(mockResponse.text()).thenReturn(null);
+        when(responseSpec.body(TranscriptionResponse.class)).thenReturn(mockResponse);
+
+        assertThatThrownBy(() -> groqClient.transcrever(new File("audio.wav")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Falha na transcrição");
+    }
+
+    // =========================
+    // 🧪 REFINAMENTO
+    // =========================
+
+    @Test
+    void refinarTexto_deveRetornarTextoRefinado() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "Texto refinado"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String result = groqClient.refinarTexto("texto bruto");
+        assertThat(result).isEqualTo("Texto refinado");
+    }
+
+    @Test
+    void refinarTexto_comTextoNuloOuVazio_retornaVazio() {
+        assertThat(groqClient.refinarTexto(null)).isEmpty();
+        assertThat(groqClient.refinarTexto("")).isEmpty();
+        assertThat(groqClient.refinarTexto("   ")).isEmpty();
+        verify(restClient, never()).post();
+    }
+
+    @Test
+    void refinarTexto_comTextoValido_deveChamarGroqComParametrosCorretos() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "Texto refinado"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        groqClient.refinarTexto("texto bruto");
+
+        verify(bodySpec)
+                .body(
+                        argThat(
+                                (ArgumentMatcher<Map<String, Object>>)
+                                        payload ->
+                                                "llama-3.1-8b-instant".equals(payload.get("model"))
+                                                        && 4000
+                                                                == (int)
+                                                                        payload.get("max_tokens")));
     }
 
     // =========================
@@ -98,38 +149,150 @@ class GroqClientTest {
     // =========================
 
     @Test
-    void deveExecutarChatCompletionComSucesso() {
+    void chatCompletion_deveRetornarResposta() {
         stubChatUri();
-
         ChatCompletionResponse response =
                 new ChatCompletionResponse(
                         List.of(new Choice(new Message("assistant", "Resposta gerada"))));
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
-        String resultado = groqClient.chatCompletion("system", "user", "llama", 0.2, 100);
-        assertThat(resultado).isEqualTo("Resposta gerada");
+        String result = groqClient.chatCompletion("system", "user", "llama", 0.5, 100);
+        assertThat(result).isEqualTo("Resposta gerada");
     }
 
     @Test
-    void deveFalharQuandoChatCompletionRetornaVazio() {
+    void chatCompletion_deveLancarExcecaoQuandoRespostaNula() {
         stubChatUri();
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(null);
 
-        assertThatExceptionOfType(IllegalStateException.class)
-                .isThrownBy(() -> groqClient.chatCompletion("system", "user", "llama", 0.2, 100))
-                .withMessageContaining("Resposta inválida");
+        assertThatThrownBy(() -> groqClient.chatCompletion("system", "user", "llama", 0.5, 100))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Resposta inválida");
     }
 
     @Test
-    void deveGerarResumoDigestComPersona() {
+    void chatCompletion_deveLancarExcecaoQuandoChoicesVazio() {
         stubChatUri();
-
-        ChatCompletionResponse response =
-                new ChatCompletionResponse(
-                        List.of(new Choice(new Message("assistant", "Digest gerado"))));
+        ChatCompletionResponse response = new ChatCompletionResponse(List.of());
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
-        String resultado = groqClient.gerarResumoDigest("mensagens teste", DigestPersona.T1000, "");
-        assertThat(resultado).isEqualTo("Digest gerado");
+        assertThatThrownBy(() -> groqClient.chatCompletion("system", "user", "llama", 0.5, 100))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Resposta inválida");
+    }
+
+    @Test
+    void chatCompletion_comSystemPromptNulo_trataComoVazio() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(List.of(new Choice(new Message("assistant", "OK"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String result = groqClient.chatCompletion(null, "user", "llama", 0.5, 100);
+        assertThat(result).isEqualTo("OK");
+        verify(bodySpec).body(any(Object.class));
+    }
+
+    @Test
+    void chatCompletion_comUserPromptNulo_trataComoVazio() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(List.of(new Choice(new Message("assistant", "OK"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String result = groqClient.chatCompletion("system", null, "llama", 0.5, 100);
+        assertThat(result).isEqualTo("OK");
+        verify(bodySpec).body(any(Object.class));
+    }
+
+    @Test
+    void chatCompletion_comPromptGrande_naoFalha() {
+        stubChatUri();
+        String largePrompt = "a".repeat(6000);
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(List.of(new Choice(new Message("assistant", "OK"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String result = groqClient.chatCompletion(largePrompt, "user", "llama", 0.5, 100);
+        assertThat(result).isEqualTo("OK");
+    }
+
+    @Test
+    void chatCompletion_deveLancarExcecaoQuandoHttpError() {
+        stubChatUri();
+        HttpClientErrorException.TooManyRequests ex =
+                (HttpClientErrorException.TooManyRequests)
+                        HttpClientErrorException.create(
+                                HttpStatusCode.valueOf(429), "Too Many Requests", null, null, null);
+        when(responseSpec.body(ChatCompletionResponse.class)).thenThrow(ex);
+
+        assertThatThrownBy(() -> groqClient.chatCompletion("system", "user", "llama", 0.5, 100))
+                .isInstanceOf(HttpClientErrorException.TooManyRequests.class);
+    }
+
+    @Test
+    void chatCompletion_deveLancarExcecaoQuandoResourceAccessError() {
+        stubChatUri();
+        when(responseSpec.body(ChatCompletionResponse.class))
+                .thenThrow(new ResourceAccessException("Conectividade"));
+
+        assertThatThrownBy(() -> groqClient.chatCompletion("system", "user", "llama", 0.5, 100))
+                .isInstanceOf(ResourceAccessException.class);
+    }
+
+    // =========================
+    // 🧪 GERAR RESUMO DIGEST
+    // =========================
+
+    @Test
+    void gerarResumoDigest_deveRetornarResumo() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "Resumo do digest"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String result = groqClient.gerarResumoDigest("mensagens", DigestPersona.T1000, "manhã");
+        assertThat(result).isEqualTo("Resumo do digest");
+    }
+
+    @Test
+    void gerarResumoDigest_comPeriodLabelNulo_usaPadrao() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(List.of(new Choice(new Message("assistant", "Resumo"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String result = groqClient.gerarResumoDigest("mensagens", DigestPersona.T1000, "Período");
+        assertThat(result).isEqualTo("Resumo");
+    }
+
+    @Test
+    void gerarResumoDigest_deveLancarExcecaoQuandoGroqFalha() {
+        stubChatUri();
+        when(responseSpec.body(ChatCompletionResponse.class))
+                .thenThrow(new RuntimeException("Erro Groq"));
+
+        assertThatThrownBy(
+                        () ->
+                                groqClient.gerarResumoDigest(
+                                        "mensagens", DigestPersona.T1000, "manhã"))
+                .isInstanceOf(RuntimeException.class);
+    }
+
+    // =========================
+    // 🧪 CONSTRUTOR ORIGINAL
+    // =========================
+
+    @Test
+    void construtorOriginal_deveFuncionar() {
+        GroqClient client =
+                new GroqClient(
+                        "fake-key",
+                        10000,
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(30),
+                        new DigestPromptFactory());
+        assertThat(client).isNotNull();
     }
 }

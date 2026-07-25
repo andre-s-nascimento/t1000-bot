@@ -1,15 +1,92 @@
-tmdb:
-  token: fake
-  api:
-    url: http://localhost
+# Variáveis de ambiente (em maiúsculas) para placeholders
+TMDB_READ_TOKEN: dummy
+TMDB_TOKEN: dummy
+GROQ_API_KEY: dummy
+WATCHMODE_API_KEY: dummy
+TELEGRAM_BOT_TOKEN: dummy
+TELEGRAM_OWNER_ID: 0
+STREAMING_AVAILABILITY_API_KEY: dummy
 
-groq:
-  api:
-    key: fake
-
-bot:
-  token: fake
+# Propriedades normais (em minúsculas)
+spring:
+  threads:
+    virtual:
+      enabled: false
+  application:
+    name: tmill-bot-test
 
 telegram:
   bot:
-    enabled: false # Desativa o polling no ambiente de teste
+    polling:
+      enabled: false
+    token: dummy
+    username: test_bot
+    owner:
+      id: 0
+  message:
+    limit: 4000
+
+groq:
+  api:
+    key: dummy
+  model:
+    transcription: whisper-large-v3
+    refinement: llama-3.1-8b-instant
+    digest: meta-llama/llama-4-scout-17b-16e-instruct
+  max-prompt-length: 32000
+
+tmdb:
+  token: dummy
+  api:
+    url: http://localhost
+
+watchmode:
+  api:
+    key: dummy
+
+streaming-availability:
+  api:
+    key: dummy
+
+admin:
+  allowed-ips: 127.0.0.1
+
+digest:
+  enabled: false
+  chat-ids: 123
+
+bot:
+  allowed-chats: -100123
+
+worldcup:
+  enabled: false
+  data:
+    file: worldcup2026.json
+  update:
+    enabled: false
+
+cache:
+  transcription:
+    enabled: false
+    ttl-seconds: 86400
+
+auto:
+  response:
+    enabled: false
+    file: auto-responses.json
+
+easter-egg:
+  file: easter-eggs.json
+
+weekly:
+  reminder:
+    media-file: weekly-reminder.mp4
+
+t1000:
+  features:
+    transcription-enabled: false
+  audio:
+    max-size-mb: 20
+
+server:
+  port: 8080
