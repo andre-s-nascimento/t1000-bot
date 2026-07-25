@@ -489,8 +489,7 @@ class TmdbClientTest {
                 .thenThrow(new RuntimeException("Erro"));
 
         TmdbClient client = new TmdbClient(restClient);
-        assertThatThrownBy(() -> client.listarProvedoresFilmes())
-                .isInstanceOf(RuntimeException.class);
+        assertThatThrownBy(client::listarProvedoresFilmes).isInstanceOf(RuntimeException.class);
     }
 
     // ===================== buscarDetalhesSerie =====================
@@ -513,5 +512,80 @@ class TmdbClientTest {
         assertThatThrownBy(() -> client.buscarDetalhesSerie(1L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Falha ao buscar detalhes da serie");
+    }
+
+    // ===================== TESTES ADICIONAIS PARA COBERTURA =====================
+    // ===================== TESTES ADICIONAIS PARA COBERTURA =====================
+
+    @Test
+    void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoFlatRateNulo() {
+        WatchProviderResponse.CountryProviders brProviders =
+                mock(WatchProviderResponse.CountryProviders.class);
+        when(brProviders.flatrate()).thenReturn(null);
+        WatchProviderResponse response = mock(WatchProviderResponse.class);
+        when(response.results()).thenReturn(Map.of("BR", brProviders));
+        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
+
+        TmdbClient client = new TmdbClient(restClient);
+        String result = client.buscarOndeAssistirFilme(1L);
+
+        assertThat(result).contains("Indisponivel no momento");
+    }
+
+    @Test
+    void buscarOndeAssistirSerie_deveRetornarIndisponivelQuandoFlatRateNulo() {
+        WatchProviderResponse.CountryProviders brProviders =
+                mock(WatchProviderResponse.CountryProviders.class);
+        when(brProviders.flatrate()).thenReturn(null);
+        WatchProviderResponse response = mock(WatchProviderResponse.class);
+        when(response.results()).thenReturn(Map.of("BR", brProviders));
+        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
+
+        TmdbClient client = new TmdbClient(restClient);
+        String result = client.buscarOndeAssistirSerie(1L);
+
+        assertThat(result).contains("Indisponivel no momento");
+    }
+
+    @Test
+    void buscarOndeAssistirFilme_deveRetornarStringVaziaQuandoTodosProvedoresNulos() {
+        Provider provider1 = mock(Provider.class);
+        when(provider1.name()).thenReturn(null);
+        Provider provider2 = mock(Provider.class);
+        when(provider2.name()).thenReturn(null);
+        List<Provider> providers = List.of(provider1, provider2);
+
+        WatchProviderResponse.CountryProviders brProviders =
+                mock(WatchProviderResponse.CountryProviders.class);
+        when(brProviders.flatrate()).thenReturn(providers);
+        WatchProviderResponse response = mock(WatchProviderResponse.class);
+        when(response.results()).thenReturn(Map.of("BR", brProviders));
+        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
+
+        TmdbClient client = new TmdbClient(restClient);
+        String result = client.buscarOndeAssistirFilme(1L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void buscarOndeAssistirSerie_deveRetornarStringVaziaQuandoTodosProvedoresNulos() {
+        Provider provider1 = mock(Provider.class);
+        when(provider1.name()).thenReturn(null);
+        Provider provider2 = mock(Provider.class);
+        when(provider2.name()).thenReturn(null);
+        List<Provider> providers = List.of(provider1, provider2);
+
+        WatchProviderResponse.CountryProviders brProviders =
+                mock(WatchProviderResponse.CountryProviders.class);
+        when(brProviders.flatrate()).thenReturn(providers);
+        WatchProviderResponse response = mock(WatchProviderResponse.class);
+        when(response.results()).thenReturn(Map.of("BR", brProviders));
+        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
+
+        TmdbClient client = new TmdbClient(restClient);
+        String result = client.buscarOndeAssistirSerie(1L);
+
+        assertThat(result).isEmpty();
     }
 }

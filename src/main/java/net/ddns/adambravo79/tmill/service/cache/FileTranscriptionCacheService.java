@@ -1,4 +1,3 @@
-/* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.service.cache;
 
 import java.util.Map;
@@ -33,45 +32,18 @@ public class FileTranscriptionCacheService {
     @PostConstruct
     public void startCleanerAndStatsLogger() {
         if (cacheEnabled) {
-            // Cleaner (remove entradas expiradas)
-            cleaner.scheduleAtFixedRate(
-                    () -> {
-                        long now = System.currentTimeMillis();
-                        int before = cache.size();
-                        cache.entrySet()
-                                .removeIf(
-                                        entry ->
-                                                now - entry.getValue().timestamp()
-                                                        > ttlSeconds * 1000);
-                        int after = cache.size();
-                        if (before != after) {
-                            log.debug(
-                                    "Cache de transcrições limpo: {} entradas removidas, {}"
-                                            + " restantes",
-                                    before - after,
-                                    after);
-                        }
-                    },
-                    1,
-                    1,
-                    TimeUnit.HOURS);
-
-            // Stats logger (a cada hora)
-            cleaner.scheduleAtFixedRate(
-                    () ->
-                            log.info(
-                                    "Cache stats: hits={}, misses={}, size={}",
-                                    hits.get(),
-                                    misses.get(),
-                                    cache.size()),
-                    1,
-                    1,
-                    TimeUnit.HOURS);
-
+            cleaner.scheduleAtFixedRate(this::cleanExpiredTask, 1, 1, TimeUnit.HOURS);
+            cleaner.scheduleAtFixedRate(this::logStatsTask, 1, 1, TimeUnit.HOURS);
             log.info("Cache de transcrições ativado (TTL: {} segundos)", ttlSeconds);
         } else {
             log.info("Cache de transcrições desativado");
         }
+    }
+
+    // Método extraído para facilitar testes
+    void logStats() {
+        log.info(
+                "Cache stats: hits={}, misses={}, size={}", hits.get(), misses.get(), cache.size());
     }
 
     public TranscriptionCacheEntry get(String fileId) {
@@ -111,15 +83,24 @@ public class FileTranscriptionCacheService {
     }
 
     public void cleanExpired() {
+        cleanExpiredTask(); // delega para o método extraído
+    }
+
+    private void cleanExpiredTask() {
         long now = System.currentTimeMillis();
         int before = cache.size();
         cache.entrySet().removeIf(entry -> now - entry.getValue().timestamp() > ttlSeconds * 1000);
         int after = cache.size();
         if (before != after) {
-            log.info(
+            log.debug(
                     "Cache de transcrições limpo: {} entradas removidas, {} restantes",
                     before - after,
                     after);
         }
+    }
+
+    private void logStatsTask() {
+        log.info(
+                "Cache stats: hits={}, misses={}, size={}", hits.get(), misses.get(), cache.size());
     }
 }

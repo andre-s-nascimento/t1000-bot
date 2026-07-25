@@ -1,17 +1,21 @@
 /* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,6 +24,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 import com.pengrad.telegrambot.model.CallbackQuery;
 import com.pengrad.telegrambot.model.Chat;
@@ -28,7 +33,9 @@ import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.model.User;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 
+import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
+import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
@@ -147,7 +154,7 @@ class AudioHandlerTest {
         verify(audioService)
                 .processarFluxoAudio(
                         eq(mockFile), eq(CHAT_ID), eq(USER_ID), eq("Testador Silva"), any());
-        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), eq("Texto refinado"));
+        verify(telegramFacade).enviarMensagem(CHAT_ID, "Texto refinado");
         verify(telegramFacade, never()).enviarComBotoesHtml(anyLong(), anyString(), any());
     }
 
@@ -185,6 +192,7 @@ class AudioHandlerTest {
     // =========================
 
     @Test
+    @SneakyThrows
     void deveProcessarAudioGrupoComSucesso() {
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
         when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
@@ -198,27 +206,31 @@ class AudioHandlerTest {
 
         AudioPipelineService.ProcessedAudio processed =
                 new AudioPipelineService.ProcessedAudio("bruto", "refinado");
-        when(audioService.processarEArmazenar(
-                        eq(mockFile), eq(GROUP_CHAT_ID), eq(USER_ID), eq("Testador Silva")))
+        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
                 .thenReturn(CompletableFuture.completedFuture(processed));
 
         audioHandler.handleAudioUpdate(update);
-
-        verify(fileService).baixarArquivo(FILE_ID);
-        verify(audioService)
-                .processarEArmazenar(
-                        eq(mockFile), eq(GROUP_CHAT_ID), eq(USER_ID), eq("Testador Silva"));
-        verify(cacheService).put(eq(FILE_ID), eq("bruto"), eq("refinado"));
-        verify(transcriptStore)
-                .saveTranscriptWithRaw(
-                        eq(GROUP_CHAT_ID),
-                        eq(USER_ID),
-                        eq("Testador Silva"),
-                        eq("bruto"),
-                        eq("refinado"));
-        verify(telegramFacade)
-                .enviarComBotoesHtml(
-                        eq(GROUP_CHAT_ID), anyString(), any(InlineKeyboardMarkup.class));
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(fileService).baixarArquivo(FILE_ID);
+                            verify(audioService)
+                                    .processarEArmazenar(
+                                            mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva");
+                            verify(cacheService).put(FILE_ID, "bruto", "refinado");
+                            verify(transcriptStore)
+                                    .saveTranscriptWithRaw(
+                                            GROUP_CHAT_ID,
+                                            USER_ID,
+                                            "Testador Silva",
+                                            "bruto",
+                                            "refinado");
+                            verify(telegramFacade)
+                                    .enviarComBotoesHtml(
+                                            eq(GROUP_CHAT_ID),
+                                            anyString(),
+                                            any(InlineKeyboardMarkup.class));
+                        });
     }
 
     // =========================
@@ -304,8 +316,7 @@ class AudioHandlerTest {
         audioHandler.handleTranscriptionCallback(callback, "trans_bruto|token456");
 
         verify(telegramFacade)
-                .answerCallbackQuery(
-                        eq("cb123"), eq("Processando áudio... enviarei no privado."), eq(false));
+                .answerCallbackQuery("cb123", "Processando áudio... enviarei no privado.", false);
     }
 
     // =========================
@@ -327,8 +338,7 @@ class AudioHandlerTest {
         audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token999");
 
         verify(telegramFacade)
-                .answerCallbackQuery(
-                        eq("cb123"), eq("Pedido expirado. Envie o audio novamente."), eq(true));
+                .answerCallbackQuery("cb123", "Pedido expirado. Envie o audio novamente.", true);
         verifyNoInteractions(cacheService, fileService, audioService);
     }
 
@@ -384,5 +394,574 @@ class AudioHandlerTest {
                         contains(
                                 "⚠️ Usuario precisa iniciar conversa com o bot no privado para"
                                         + " receber transcricoes."));
+    }
+
+    // ========================= TESTES ADICIONAIS PARA COBERTURA =========================
+
+    // 1. Update sem áudio e sem voice
+    @Test
+    void deveIgnorarUpdateSemAudioNemVoice() {
+        when(chat.id()).thenReturn(CHAT_ID);
+        when(message.audio()).thenReturn(null);
+        when(message.voice()).thenReturn(null);
+
+        audioHandler.handleAudioUpdate(update);
+
+        verifyNoInteractions(fileService, audioService, telegramFacade);
+    }
+
+    // 2. ProcessGroupAudio com resultado nulo
+    @Test
+    @SneakyThrows
+    void deveNotificarErroQuandoResultadoProcessamentoNulo() {
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(DURATION);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+        when(audioService.processarEArmazenar(any(), anyLong(), anyLong(), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(null));
+
+        audioHandler.handleAudioUpdate(update);
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarMensagem(
+                                            eq(GROUP_CHAT_ID),
+                                            contains("Erro ao processar o audio"));
+                        });
+    }
+
+    // 3. Falha no pipeline com AudioProcessingException
+    @Test
+    @SneakyThrows
+    void deveTratarFalhaNoPipelineComAudioProcessingException() {
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(DURATION);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        CompletableFuture<AudioPipelineService.ProcessedAudio> failedFuture =
+                new CompletableFuture<>();
+        failedFuture.completeExceptionally(new AudioProcessingException("Falha no pipeline"));
+        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
+                .thenReturn(failedFuture);
+
+        audioHandler.handleAudioUpdate(update);
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarMensagem(
+                                            eq(GROUP_CHAT_ID),
+                                            contains("Erro ao processar o audio"));
+                        }); // Aguarda a execução assíncrona
+
+        // Mensagem real da constante ERRO_PROCESSAR_AUDIO
+
+    }
+
+    // 4. Falha no pipeline com RuntimeException
+    @Test
+    @SneakyThrows
+    void deveTratarFalhaNoPipelineComRuntimeException() {
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(DURATION);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        CompletableFuture<AudioPipelineService.ProcessedAudio> failedFuture =
+                new CompletableFuture<>();
+        failedFuture.completeExceptionally(new AudioProcessingException("Falha no pipeline"));
+        when(audioService.processarEArmazenar(any(), anyLong(), anyLong(), anyString()))
+                .thenReturn(failedFuture);
+
+        audioHandler.handleAudioUpdate(update);
+
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarMensagem(
+                                            eq(GROUP_CHAT_ID),
+                                            contains("Erro ao processar o audio"));
+                        });
+    }
+
+    // 5. Callback malformado (menos de 2 partes)
+    @Test
+    void deveIgnorarCallbackMalformado() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.data()).thenReturn("trans_bruto"); // sem token
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_bruto");
+
+        verifyNoInteractions(cacheService, fileService, audioService, telegramFacade);
+    }
+
+    // 6. Callback com mensagem inacessível
+    @Test
+    void deveIgnorarCallbackComMensagemInacessivel() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token123");
+        when(callback.maybeInaccessibleMessage()).thenReturn(null);
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token123");
+
+        // 👇 Removido o eq(true) e passado true diretamente
+        verify(telegramFacade)
+                .answerCallbackQuery("cb123", "Mensagem original não disponível", true);
+        verifyNoInteractions(cacheService, fileService, audioService);
+    }
+
+    // 7. processarAudioCallback com AudioProcessingException
+    @Test
+    void deveTratarErroAudioProcessingExceptionNoProcessamentoCallback() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        when(cacheService.get(FILE_ID)).thenReturn(null);
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(new File("audio.oga"));
+
+        doThrow(new AudioProcessingException("Falha no áudio"))
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
+        // Executa e espera a thread assíncrona (usando sleep para garantir execução)
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarMensagem(eq(USER_ID), contains("Erro no processamento"));
+                        });
+    }
+
+    // 8. processarAudioCallback com HttpClientErrorException (não-403)
+    @Test
+    void deveTratarErroHttpClientExceptionNoProcessamentoCallback() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        when(cacheService.get(FILE_ID)).thenReturn(null);
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(new File("audio.oga"));
+
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarMensagem(eq(USER_ID), contains("Erro no processamento"));
+                        });
+    }
+
+    // 9. processarAudioCallback com ResourceAccessException
+    @Test
+    void deveTratarErroResourceAccessExceptionNoProcessamentoCallback() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        when(cacheService.get(FILE_ID)).thenReturn(null);
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(new File("audio.oga"));
+
+        doThrow(new ResourceAccessException("Falha de rede"))
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarMensagem(
+                                            eq(USER_ID), contains("Falha de conectividade"));
+                        });
+    }
+
+    // 10. processarAudioCallback com RuntimeException
+    @Test
+    void deveTratarErroRuntimeExceptionNoProcessamentoCallback() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        when(cacheService.get(FILE_ID)).thenReturn(null);
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(new File("audio.oga"));
+
+        doThrow(new RuntimeException("Erro inesperado"))
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarMensagem(eq(USER_ID), contains("Erro no processamento"));
+                        });
+    }
+
+    // 11. safeSendMessage com HttpClientErrorException genérico
+    @Test
+    void deveCapturarHttpClientErrorExceptionNoSafeSendMessage() {
+        // Provoca exceção no envio da mensagem
+        when(chat.id()).thenReturn(CHAT_ID);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(DURATION);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.Private);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        doAnswer(
+                        inv -> {
+                            BiConsumer<String, Boolean> callback = inv.getArgument(4);
+                            callback.accept("Texto", true);
+                            return null;
+                        })
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.BAD_GATEWAY, "Bad Gateway", null, null, null))
+                .when(telegramFacade)
+                .enviarMensagem(eq(CHAT_ID), anyString());
+
+        audioHandler.handleAudioUpdate(update);
+
+        // Não deve propagar exceção, apenas logar
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), anyString());
+    }
+
+    // 12. safeSendMessage com ResourceAccessException
+    @Test
+    void deveCapturarResourceAccessExceptionNoSafeSendMessage() {
+        when(chat.id()).thenReturn(CHAT_ID);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(DURATION);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.Private);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        doAnswer(
+                        inv -> {
+                            BiConsumer<String, Boolean> callback = inv.getArgument(4);
+                            callback.accept("Texto", true);
+                            return null;
+                        })
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
+        doThrow(new ResourceAccessException("Falha de rede"))
+                .when(telegramFacade)
+                .enviarMensagem(eq(CHAT_ID), anyString());
+
+        audioHandler.handleAudioUpdate(update);
+
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), anyString());
+    }
+
+    // 13. safeSendTranscription com HttpClientErrorException (não-403)
+    @Test
+    @SneakyThrows
+    void deveCapturarHttpClientErrorExceptionNoSafeSendTranscription() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        TranscriptionCacheEntry entry =
+                new TranscriptionCacheEntry("bruto", "refinado", System.currentTimeMillis());
+        when(cacheService.get(FILE_ID)).thenReturn(entry);
+
+        // A primeira tentativa falha, e o fallback também pode enviar uma mensagem
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
+                .when(telegramFacade)
+                .enviarMensagem(eq(USER_ID), anyString());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            // Verifica que a mensagem de erro foi enviada
+                            verify(telegramFacade, atLeastOnce())
+                                    .enviarMensagem(eq(USER_ID), contains("Erro de comunicação"));
+                        });
+    }
+
+    // 14. safeSendTranscription com ResourceAccessException
+    @Test
+    void deveCapturarResourceAccessExceptionNoSafeSendTranscription() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        TranscriptionCacheEntry entry =
+                new TranscriptionCacheEntry("bruto", "refinado", System.currentTimeMillis());
+        when(cacheService.get(FILE_ID)).thenReturn(entry);
+
+        doThrow(new ResourceAccessException("Falha de rede"))
+                .when(telegramFacade)
+                .enviarMensagem(eq(USER_ID), anyString());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade, times(2)).enviarMensagem(eq(USER_ID), captor.capture());
+        List<String> messages = captor.getAllValues();
+        assertThat(messages)
+                .anyMatch(msg -> msg.contains("✨ Transcrição Refinada"))
+                .anyMatch(msg -> msg.contains("Falha de conectividade"));
+    }
+
+    // 15. safeSendButtons com HttpClientErrorException
+    @Test
+    @SneakyThrows
+    void deveCapturarHttpClientErrorExceptionNoSafeSendButtons() {
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(DURATION);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        AudioPipelineService.ProcessedAudio processed =
+                new AudioPipelineService.ProcessedAudio("bruto", "refinado");
+        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
+                .thenReturn(CompletableFuture.completedFuture(processed));
+
+        // Agora simula a exceção no envio dos botões
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
+                .when(telegramFacade)
+                .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+
+        audioHandler.handleAudioUpdate(update);
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+                        });
+    }
+
+    // 17. tratarErroTranscricao com isForbidden = true
+    @Test
+    void deveTratarErroTranscricaoComForbiddenTrue() throws Exception {
+        // Usa reflexão para chamar o método privado
+        java.lang.reflect.Method method =
+                AudioHandler.class.getDeclaredMethod(
+                        "tratarErroTranscricao", Exception.class, long.class, long.class);
+        method.setAccessible(true);
+
+        Exception e =
+                HttpClientErrorException.create(
+                        HttpStatus.FORBIDDEN, "can't initiate conversation", null, null, null);
+        method.invoke(audioHandler, e, USER_ID, GROUP_CHAT_ID);
+
+        verify(telegramFacade)
+                .enviarMensagem(eq(GROUP_CHAT_ID), contains("Usuario precisa iniciar conversa"));
+        verify(telegramFacade, never()).enviarMensagem(eq(USER_ID), anyString());
+    }
+
+    // 18. tratarErroTranscricao com isForbidden = false
+    @Test
+    void deveTratarErroTranscricaoComForbiddenFalse() throws Exception {
+        java.lang.reflect.Method method =
+                AudioHandler.class.getDeclaredMethod(
+                        "tratarErroTranscricao", Exception.class, long.class, long.class);
+        method.setAccessible(true);
+
+        Exception e = new RuntimeException("Erro genérico");
+        method.invoke(audioHandler, e, USER_ID, GROUP_CHAT_ID);
+
+        verify(telegramFacade).enviarMensagem(eq(USER_ID), contains("Erro no processamento"));
+        verify(telegramFacade, never()).enviarMensagem(eq(GROUP_CHAT_ID), anyString());
+    }
+
+    // 19. gerarToken
+    @Test
+    void deveGerarTokenCorretamente() throws Exception {
+        java.lang.reflect.Method method =
+                AudioHandler.class.getDeclaredMethod("gerarToken", String.class);
+        method.setAccessible(true);
+
+        String token = (String) method.invoke(audioHandler, FILE_ID);
+        assertThat(token).isNotNull();
+        assertThat(token.length()).isLessThanOrEqualTo(20);
+    }
+
+    // 20. cleanExpiredTokens
+    @Test
+    void deveLimparTokensExpirados() throws Exception {
+        java.lang.reflect.Method method =
+                AudioHandler.class.getDeclaredMethod("cleanExpiredTokens");
+        method.setAccessible(true);
+
+        // Cria um token expirado
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000 - 1000,
+                        USER_ID,
+                        "Testador Silva");
+        pendingMap.put("token_antigo", request);
+        pendingMap.put(
+                "token_novo",
+                new AudioRequest(
+                        FILE_ID, GROUP_CHAT_ID, System.currentTimeMillis(), USER_ID, "Testador"));
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        method.invoke(audioHandler);
+
+        // Deve remover apenas o token antigo
+        assertThat(pendingMap).containsKey("token_novo").doesNotContainKey("token_antigo");
     }
 }

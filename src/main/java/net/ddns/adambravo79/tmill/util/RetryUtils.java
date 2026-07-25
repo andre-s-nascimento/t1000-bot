@@ -17,6 +17,7 @@ public final class RetryUtils {
     private RetryUtils() {}
 
     @FunctionalInterface
+    @SuppressWarnings("squid:S112") // Exception genérica permitida para interface funcional
     public interface RetryableAction<T> {
         T execute() throws Exception;
     }
@@ -68,13 +69,15 @@ public final class RetryUtils {
         String msg = e.getMessage();
         if (msg != null && msg.contains("try again in")) {
             try {
-                Pattern pattern = Pattern.compile("try again in (\\d+\\.?\\d*)s");
+                // Regex simplificada para evitar backtracking excessivo
+                Pattern pattern = Pattern.compile("try again in (\\d+(\\.\\d+)?)s");
                 Matcher matcher = pattern.matcher(msg);
                 if (matcher.find()) {
                     double waitSeconds = Double.parseDouble(matcher.group(1));
                     return (long) (waitSeconds * 1000) + 500;
                 }
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                log.debug("Falha ao extrair tempo de espera da mensagem: {}", msg, ex);
             }
         }
         return fallbackMs;

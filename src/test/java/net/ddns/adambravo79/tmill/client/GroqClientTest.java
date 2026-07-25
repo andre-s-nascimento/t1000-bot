@@ -1,20 +1,26 @@
 package net.ddns.adambravo79.tmill.client;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import net.ddns.adambravo79.tmill.model.ChatCompletionResponse;
@@ -46,7 +52,7 @@ class GroqClientTest {
                 groqClient, "digestModel", "meta-llama/llama-4-scout-17b-16e-instruct");
         ReflectionTestUtils.setField(groqClient, "refinementMaxTokens", 4000);
 
-        when(restClient.post()).thenReturn(uriSpec);
+        lenient().when(restClient.post()).thenReturn(uriSpec);
         lenient().when(uriSpec.uri("/openai/v1/audio/transcriptions")).thenReturn(bodySpec);
         lenient().when(bodySpec.contentType(MediaType.MULTIPART_FORM_DATA)).thenReturn(bodySpec);
         lenient().when(bodySpec.body(any(MultiValueMap.class))).thenReturn(bodySpec);
@@ -114,8 +120,28 @@ class GroqClientTest {
         assertThat(groqClient.refinarTexto(null)).isEmpty();
         assertThat(groqClient.refinarTexto("")).isEmpty();
         assertThat(groqClient.refinarTexto("   ")).isEmpty();
-        // Garante que não chamou a API
         verify(restClient, never()).post();
+    }
+
+    @Test
+    void refinarTexto_comTextoValido_deveChamarGroqComParametrosCorretos() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "Texto refinado"))));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        groqClient.refinarTexto("texto bruto");
+
+        verify(bodySpec)
+                .body(
+                        argThat(
+                                (ArgumentMatcher<Map<String, Object>>)
+                                        payload ->
+                                                "llama-3.1-8b-instant".equals(payload.get("model"))
+                                                        && 4000
+                                                                == (int)
+                                                                        payload.get("max_tokens")));
     }
 
     // =========================
@@ -162,11 +188,9 @@ class GroqClientTest {
                 new ChatCompletionResponse(List.of(new Choice(new Message("assistant", "OK"))));
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
-        // Não deve lançar exceção
         String result = groqClient.chatCompletion(null, "user", "llama", 0.5, 100);
         assertThat(result).isEqualTo("OK");
-        // Verifica que a chamada aconteceu (o corpo foi construído)
-        verify(bodySpec, atLeastOnce()).body(any());
+        verify(bodySpec).body(any(Object.class));
     }
 
     @Test
@@ -178,20 +202,42 @@ class GroqClientTest {
 
         String result = groqClient.chatCompletion("system", null, "llama", 0.5, 100);
         assertThat(result).isEqualTo("OK");
+        verify(bodySpec).body(any(Object.class));
     }
 
     @Test
     void chatCompletion_comPromptGrande_naoFalha() {
         stubChatUri();
-        // Cria um prompt grande (maior que maxPromptLength = 5000)
         String largePrompt = "a".repeat(6000);
         ChatCompletionResponse response =
                 new ChatCompletionResponse(List.of(new Choice(new Message("assistant", "OK"))));
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
-        // Não deve lançar exceção (apenas log)
         String result = groqClient.chatCompletion(largePrompt, "user", "llama", 0.5, 100);
         assertThat(result).isEqualTo("OK");
+    }
+
+    @Test
+    void chatCompletion_deveLancarExcecaoQuandoHttpError() {
+        stubChatUri();
+        HttpClientErrorException.TooManyRequests ex =
+                (HttpClientErrorException.TooManyRequests)
+                        HttpClientErrorException.create(
+                                HttpStatusCode.valueOf(429), "Too Many Requests", null, null, null);
+        when(responseSpec.body(ChatCompletionResponse.class)).thenThrow(ex);
+
+        assertThatThrownBy(() -> groqClient.chatCompletion("system", "user", "llama", 0.5, 100))
+                .isInstanceOf(HttpClientErrorException.TooManyRequests.class);
+    }
+
+    @Test
+    void chatCompletion_deveLancarExcecaoQuandoResourceAccessError() {
+        stubChatUri();
+        when(responseSpec.body(ChatCompletionResponse.class))
+                .thenThrow(new ResourceAccessException("Conectividade"));
+
+        assertThatThrownBy(() -> groqClient.chatCompletion("system", "user", "llama", 0.5, 100))
+                .isInstanceOf(ResourceAccessException.class);
     }
 
     // =========================
@@ -217,9 +263,21 @@ class GroqClientTest {
                 new ChatCompletionResponse(List.of(new Choice(new Message("assistant", "Resumo"))));
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
-        // Não deve lançar exceção
-        String result = groqClient.gerarResumoDigest("mensagens", DigestPersona.T1000, null);
+        String result = groqClient.gerarResumoDigest("mensagens", DigestPersona.T1000, "Período");
         assertThat(result).isEqualTo("Resumo");
+    }
+
+    @Test
+    void gerarResumoDigest_deveLancarExcecaoQuandoGroqFalha() {
+        stubChatUri();
+        when(responseSpec.body(ChatCompletionResponse.class))
+                .thenThrow(new RuntimeException("Erro Groq"));
+
+        assertThatThrownBy(
+                        () ->
+                                groqClient.gerarResumoDigest(
+                                        "mensagens", DigestPersona.T1000, "manhã"))
+                .isInstanceOf(RuntimeException.class);
     }
 
     // =========================
@@ -228,13 +286,12 @@ class GroqClientTest {
 
     @Test
     void construtorOriginal_deveFuncionar() {
-        // Apenas para cobertura do construtor real
         GroqClient client =
                 new GroqClient(
                         "fake-key",
                         10000,
-                        java.time.Duration.ofSeconds(5),
-                        java.time.Duration.ofSeconds(30),
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(30),
                         new DigestPromptFactory());
         assertThat(client).isNotNull();
     }

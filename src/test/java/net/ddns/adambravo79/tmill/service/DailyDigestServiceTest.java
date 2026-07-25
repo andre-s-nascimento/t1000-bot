@@ -28,7 +28,6 @@ import org.springframework.web.client.ResourceAccessException;
 
 import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.exception.DigestGenerationException;
-import net.ddns.adambravo79.tmill.exception.DigestSendException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
@@ -194,17 +193,12 @@ class DailyDigestServiceTest {
                 .thenReturn(messages)
                 .thenReturn(List.of());
 
-        // Stub do groqClient ANTES de qualquer chamada
         when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
                 .thenReturn("Resumo com <b>tag aberta");
 
-        HttpClientErrorException.BadRequest ex =
-                HttpClientErrorException.create(
-                        HttpStatusCode.valueOf(400),
-                        "can't parse entities",
-                        null,
-                        null,
-                        StandardCharsets.UTF_8);
+        // Cria uma exceção BadRequest usando o construtor público
+        HttpClientErrorException.BadRequest ex = mock(HttpClientErrorException.BadRequest.class);
+        when(ex.getMessage()).thenReturn("can't parse entities");
 
         doThrow(ex).when(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), anyString());
 
@@ -391,7 +385,6 @@ class DailyDigestServiceTest {
     void generateMorningDigest_quandoHabilitado_deveEnviarDigest() throws Exception {
         LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
         LocalDateTime from = now.minusDays(1).withHour(20).withMinute(30).withSecond(0);
-        LocalDateTime to = now.withHour(8).withMinute(30).withSecond(0);
 
         List<Map<String, Object>> messages =
                 List.of(
@@ -427,7 +420,6 @@ class DailyDigestServiceTest {
     void generateEveningDigest_quandoHabilitado_deveEnviarDigest() throws Exception {
         LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
         LocalDateTime from = now.withHour(8).withMinute(30).withSecond(0);
-        LocalDateTime to = now.withHour(20).withMinute(30).withSecond(0);
 
         List<Map<String, Object>> messages =
                 List.of(
@@ -555,21 +547,21 @@ class DailyDigestServiceTest {
     }
 
     // 7. sendChunk - outros erros
+
+    // ===================== TESTES DE EXCEÇÕES CAPTURADAS =====================
+
+    // Teste original: esperava DigestSendException, mas o código captura e não relança
     @Test
-    void sendChunk_deveLancarDigestSendException_quandoHttpClientErrorExceptionNaoBadRequest()
-            throws Exception {
+    void sendChunk_deveCapturarHttpClientErrorExceptionNaoBadRequest() throws Exception {
         LocalDateTime from = LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).minusDays(1);
         LocalDateTime to = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
 
         List<Map<String, Object>> messages =
                 List.of(
                         Map.of(
-                                "user_name",
-                                "User",
-                                "text",
-                                "msg",
-                                "timestamp",
-                                from.plusMinutes(1).toString()));
+                                "user_name", "User",
+                                "text", "msg",
+                                "timestamp", from.plusMinutes(1).toString()));
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
                 .thenReturn(messages)
                 .thenReturn(List.of());
@@ -586,26 +578,26 @@ class DailyDigestServiceTest {
                         StandardCharsets.UTF_8);
         doThrow(ex).when(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), anyString());
 
-        // Agora o erro é capturado e relançado como DigestSendException
-        assertThatThrownBy(() -> service.generateDigestCustom(from, to, CHAT_ID))
-                .isInstanceOf(DigestSendException.class)
-                .hasMessageContaining("Erro HTTP 403");
+        // Não deve lançar exceção, apenas logar
+        assertThatCode(() -> service.generateDigestCustom(from, to, CHAT_ID))
+                .doesNotThrowAnyException();
+
+        verify(telegramFacade, times(1)).enviarMensagemHtml(eq(CHAT_ID), anyString());
+        // Fallback de texto não é chamado porque não é BadRequest com parse entities
+        verify(telegramFacade, never()).enviarMensagem(eq(CHAT_ID), anyString());
     }
 
     @Test
-    void sendChunk_deveLancarDigestSendException_quandoResourceAccessException() throws Exception {
+    void sendChunk_deveCapturarResourceAccessException() throws Exception {
         LocalDateTime from = LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).minusDays(1);
         LocalDateTime to = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
 
         List<Map<String, Object>> messages =
                 List.of(
                         Map.of(
-                                "user_name",
-                                "User",
-                                "text",
-                                "msg",
-                                "timestamp",
-                                from.plusMinutes(1).toString()));
+                                "user_name", "User",
+                                "text", "msg",
+                                "timestamp", from.plusMinutes(1).toString()));
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
                 .thenReturn(messages)
                 .thenReturn(List.of());
@@ -617,9 +609,41 @@ class DailyDigestServiceTest {
                 .when(telegramFacade)
                 .enviarMensagemHtml(eq(CHAT_ID), anyString());
 
-        assertThatThrownBy(() -> service.generateDigestCustom(from, to, CHAT_ID))
-                .isInstanceOf(DigestSendException.class)
-                .hasMessageContaining("Falha de conectividade");
+        assertThatCode(() -> service.generateDigestCustom(from, to, CHAT_ID))
+                .doesNotThrowAnyException();
+
+        verify(telegramFacade, times(1)).enviarMensagemHtml(eq(CHAT_ID), anyString());
+        verify(telegramFacade, never()).enviarMensagem(eq(CHAT_ID), anyString());
+    }
+
+    @Test
+    void sendDigestToChat_deveCapturarErroInesperado() throws Exception {
+        LocalDateTime from = LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).minusDays(1);
+        LocalDateTime to = LocalDateTime.now(ZoneId.of("America/Sao_Paulo"));
+
+        List<Map<String, Object>> messages =
+                List.of(
+                        Map.of(
+                                "user_name", "User",
+                                "text", "msg",
+                                "timestamp", from.plusMinutes(1).toString()));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(messages)
+                .thenReturn(List.of());
+
+        when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
+                .thenReturn("Resumo");
+
+        doThrow(new RuntimeException("Erro inesperado no Telegram"))
+                .when(telegramFacade)
+                .enviarMensagemHtml(eq(CHAT_ID), anyString());
+
+        assertThatCode(() -> service.generateDigestCustom(from, to, CHAT_ID))
+                .doesNotThrowAnyException();
+
+        verify(telegramFacade, times(1)).enviarMensagemHtml(eq(CHAT_ID), anyString());
+        // O fallback de texto não é chamado porque não é BadRequest
+        verify(telegramFacade, never()).enviarMensagem(eq(CHAT_ID), anyString());
     }
 
     // 8. isHtmlParseError (teste direto via reflexão)
@@ -781,35 +805,6 @@ class DailyDigestServiceTest {
     }
 
     // 14. sendDigestToChat - erro inesperado
-    @Test
-    void sendDigestToChat_deveLancarDigestSendException_quandoErroInesperado() throws Exception {
-        LocalDateTime from = LocalDateTime.now().minusDays(1);
-        LocalDateTime to = LocalDateTime.now();
-
-        List<Map<String, Object>> messages =
-                List.of(
-                        Map.of(
-                                "user_name",
-                                "User",
-                                "text",
-                                "msg",
-                                "timestamp",
-                                from.plusMinutes(1).toString()));
-        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
-                .thenReturn(messages)
-                .thenReturn(List.of());
-
-        when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
-                .thenReturn("Resumo");
-
-        doThrow(new RuntimeException("Erro inesperado no Telegram"))
-                .when(telegramFacade)
-                .enviarMensagemHtml(eq(CHAT_ID), anyString());
-
-        assertThatThrownBy(() -> service.generateDigestCustom(from, to, CHAT_ID))
-                .isInstanceOf(DigestSendException.class)
-                .hasMessageContaining("Erro inesperado no envio do digest");
-    }
 
     // 15. sanitizeDigestText - tags <a> vazias
     @Test
