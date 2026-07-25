@@ -462,10 +462,8 @@ class DailyReleasesServiceTest {
 
         verify(telegramFacade, times(2)).enviarMensagemHtml(anyLong(), captor.capture());
 
-        // Obtém a lista com todas as mensagens capturadas
         List<String> mensagensEnviadas = captor.getAllValues();
-
-        // Valida se pelo menos uma das mensagens capturadas possui o conteúdo esperado
+        mensagensEnviadas.forEach(msg -> System.out.println("DEBUG MSG CAPTURADA:\n" + msg));
         assertThat(mensagensEnviadas)
                 .anySatisfy(
                         mensagem ->
@@ -473,7 +471,9 @@ class DailyReleasesServiceTest {
                                         .contains("Filme Teste")
                                         .contains("GIRO DOS STREAMINGS")
                                         .contains("Netflix")
-                                        .matches(".*8[,.]0/10.*"));
+                                        .containsPattern(
+                                                "(?s)8[,.]0/10")); // (?s) ativa modo DOTALL
+        // (multilinha)
     }
 
     @Test
