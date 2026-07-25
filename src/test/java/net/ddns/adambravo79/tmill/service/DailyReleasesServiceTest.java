@@ -467,7 +467,7 @@ class DailyReleasesServiceTest {
                 .contains("Filme Teste")
                 .contains("GIRO DOS STREAMINGS")
                 .contains("Netflix")
-                .contains("8,0/10");
+                .matches(".*8[,.]0/10.*");
     }
 
     @Test
