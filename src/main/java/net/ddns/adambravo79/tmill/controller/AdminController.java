@@ -20,10 +20,14 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -44,6 +48,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.AutoResponseService;
@@ -552,20 +557,60 @@ public class AdminController {
     }
 
     private LocalDate parseDateParam(String param) {
-        if (param == null || param.isBlank()) {
-            return null;
+        if (param == null || param.isBlank()) return null;
+        String lower = param.toLowerCase().trim();
+        if (lower.equals("hoje") || lower.equals("de hoje"))
+            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
+        if (lower.equals("ontem") || lower.equals("de ontem"))
+            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE)).minusDays(1);
+
+        String cleaned = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
+        LocalDate parsed = tryParseWithPattern(cleaned);
+        if (parsed != null) return parsed;
+
+        // fallback attempts
+        parsed = tryParseFallback(param, "dd/MM", "dd-MM");
+        if (parsed != null) return parsed;
+        return null;
+    }
+
+    private LocalDate tryParseWithPattern(String cleaned) {
+        Pattern pattern =
+                Pattern.compile("\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
+        Matcher m = pattern.matcher(cleaned);
+        if (m.find()) {
+            String dateStr = m.group(1).trim();
+            try {
+                if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}")) return LocalDate.parse(dateStr);
+                if (dateStr.matches("\\d{1,2}[/-]\\d{2}")) {
+                    DateTimeFormatter fmt =
+                            new DateTimeFormatterBuilder()
+                                    .appendPattern(dateStr.contains("/") ? "dd/MM" : "dd-MM")
+                                    .parseDefaulting(ChronoField.YEAR, 2026)
+                                    .toFormatter();
+                    return LocalDate.parse(dateStr, fmt);
+                }
+            } catch (DateTimeParseException ignored) {
+                /* log if needed */
+            }
         }
-        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
-        if (param.equalsIgnoreCase("ontem")) {
-            return today.minusDays(1);
-        } else if (param.equalsIgnoreCase("hoje")) {
-            return today;
+        return null;
+    }
+
+    private LocalDate tryParseFallback(String param, String... patterns) {
+        for (String p : patterns) {
+            try {
+                DateTimeFormatter fmt =
+                        new DateTimeFormatterBuilder()
+                                .appendPattern(p)
+                                .parseDefaulting(ChronoField.YEAR, 2026)
+                                .toFormatter();
+                return LocalDate.parse(param, fmt);
+            } catch (DateTimeParseException ignored) {
+                /* continue */
+            }
         }
-        try {
-            return LocalDate.parse(param);
-        } catch (DateTimeParseException e) {
-            return null;
-        }
+        return null;
     }
 
     private LocalDate[] parseDateRange(String startDate, String endDate) {

@@ -40,8 +40,10 @@ public class AudioPipelineService {
 
     private static final int MAX_RETRIES = 4;
     private static final long BASE_RETRY_DELAY_MS = 2000L;
+
+    // 🔧 Correção S8786: expressão mais eficiente, sem backtracking excessivo
     private static final Pattern RATE_LIMIT_PATTERN =
-            Pattern.compile("try again in (\\d+\\.?\\d*)s");
+            Pattern.compile("try again in (\\d+(?:\\.\\d+)?)s");
 
     private final AudioService audioService;
     private final GroqClient groqClient;
@@ -118,7 +120,7 @@ public class AudioPipelineService {
 
         return audioService
                 .converterParaWav(ogaFile)
-                .thenApplyAsync(wavFile -> transcreverERefinar(wavFile, chatId, userId, userName))
+                .thenApplyAsync(this::transcreverERefinar)
                 .whenComplete(
                         (result, ex) -> {
                             // Cleanup do arquivo OGA independente de sucesso ou falha
@@ -190,11 +192,10 @@ public class AudioPipelineService {
     }
 
     /**
-     * Transcreve e refina um arquivo WAV, retornando ambos os textos. Executado dentro do
-     * thenApplyAsync.
+     * Transcreve e refina um arquivo WAV, retornando ambos os textos. (Parâmetros chatId, userId,
+     * userName foram removidos por não serem utilizados)
      */
-    private ProcessedAudio transcreverERefinar(
-            File wavFile, long chatId, long userId, String userName) {
+    private ProcessedAudio transcreverERefinar(File wavFile) {
         try {
             String bruto = groqClient.transcrever(wavFile);
             String refinado = retryRefinamento(bruto);
@@ -303,12 +304,13 @@ public class AudioPipelineService {
      * tratados como exceções de negócio.
      */
     private void rethrowIfFatal(Throwable t) {
-        if (t instanceof Error) {
-            throw (Error) t;
+        // 🔧 Correção S6201: uso de pattern matching para instanceof
+        if (t instanceof Error error) {
+            throw error;
         }
-        if (t instanceof InterruptedException) {
+        if (t instanceof InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new CompletionException("Thread interrompida", t);
+            throw new CompletionException("Thread interrompida", ie);
         }
     }
 
