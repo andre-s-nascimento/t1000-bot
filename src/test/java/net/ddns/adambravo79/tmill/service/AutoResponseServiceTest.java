@@ -18,6 +18,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import net.ddns.adambravo79.tmill.model.AutoResponseConfig;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.AutoResponseRule;
 import tools.jackson.databind.ObjectMapper;
@@ -64,16 +65,218 @@ class AutoResponseServiceTest {
       }
       """;
 
+    // JSON para testar novos formatos e casos extremos
+    private static final String JSON_COM_USER_OVERRIDES =
+            """
+      {
+        "rules": {
+          "nova": {
+            "triggers": ["teste"],
+            "response": "Resposta padrão",
+            "userOverrides": {
+              "999": {
+                "response": "Resposta especial",
+                "animation": "https://exemplo.com/especial.gif"
+              }
+            }
+          },
+          "sem_triggers": {
+            "triggers": null,
+            "response": "não deve aparecer"
+          },
+          "sem_response": {
+            "triggers": ["vazio"],
+            "response": null
+          }
+        }
+      }
+      """;
+
     @BeforeEach
     void setUp() {
-        // Cria o service manualmente com o ObjectMapper real
         service = new AutoResponseService(resourceLoader, objectMapper);
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "configFile", "classpath:auto-responses-test.json");
     }
 
     // =========================
-    // 🧪 TESTES DE CARREGAMENTO
+    // 1. init() com enabled = false
+    // =========================
+    @Test
+    void init_quandoEnabledFalse_naoCarregaRegras() {
+        ReflectionTestUtils.setField(service, "enabled", false);
+        // Não mockamos resourceLoader, mas verificamos que loadResponses não é chamado
+        // Para isso, podemos espionar o service e verificar que loadResponses não foi invocado.
+        AutoResponseService spy = spy(service);
+        spy.init();
+        verify(spy, never()).loadResponses();
+    }
+
+    // =========================
+    // 2. loadResponses() com config = null
+    // =========================
+    @Test
+    void loadResponses_quandoConfigNull_naoFalha() throws Exception {
+        ObjectMapper mockMapper = mock(ObjectMapper.class);
+        ReflectionTestUtils.setField(service, "objectMapper", mockMapper);
+
+        when(resourceLoader.getResource(anyString())).thenReturn(resource);
+        when(resource.exists()).thenReturn(true);
+        when(resource.getInputStream()).thenReturn(mock(InputStream.class));
+        when(mockMapper.readValue(any(InputStream.class), eq(AutoResponseConfig.class)))
+                .thenReturn(null);
+
+        assertThatCode(() -> service.loadResponses()).doesNotThrowAnyException();
+        assertThat(service.getRulesCount()).isZero();
+    }
+
+    // =========================
+    // 3. Regras com triggers ou response nulos
+    // =========================
+    @Test
+    void loadResponses_quandoRegraComTriggersNulo_ignora() throws Exception {
+        InputStream is = new ByteArrayInputStream(JSON_COM_USER_OVERRIDES.getBytes());
+        when(resourceLoader.getResource(anyString())).thenReturn(resource);
+        when(resource.exists()).thenReturn(true);
+        when(resource.getInputStream()).thenReturn(is);
+
+        service.loadResponses();
+
+        // Apenas a regra "nova" deve ser carregada (as outras são ignoradas)
+        assertThat(service.getRulesCount()).isEqualTo(1);
+        Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "teste");
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().response()).isEqualTo("Resposta padrão");
+
+        // "sem_triggers" e "sem_response" não devem existir
+        assertThat(service.getResponseRule(1L, "vazio")).isEmpty();
+        assertThat(service.getResponseRule(1L, "sem_triggers")).isEmpty();
+    }
+
+    // =========================
+    // 4. Novo formato userOverrides
+    // =========================
+    @Test
+    void responseRule_deveAplicarUserOverridesNovoFormato() throws Exception {
+        InputStream is = new ByteArrayInputStream(JSON_COM_USER_OVERRIDES.getBytes());
+        when(resourceLoader.getResource(anyString())).thenReturn(resource);
+        when(resource.exists()).thenReturn(true);
+        when(resource.getInputStream()).thenReturn(is);
+        service.loadResponses();
+
+        // Usuário com override
+        Optional<AutoResponseOverride> resultado = service.getResponseRule(999L, "teste");
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().response()).isEqualTo("Resposta especial");
+        assertThat(resultado.get().animation()).isEqualTo("https://exemplo.com/especial.gif");
+
+        // Usuário sem override
+        Optional<AutoResponseOverride> resultado2 = service.getResponseRule(888L, "teste");
+        assertThat(resultado2).isPresent();
+        assertThat(resultado2.get().response()).isEqualTo("Resposta padrão");
+        assertThat(resultado2.get().animation()).isNull();
+    }
+
+    // =========================
+    // 5. getResponseRule com time = null
+    // =========================
+    @Test
+    void responseRule_comTimeNull_usaHorarioAtual() {
+        // Carrega regras com timeRange para testar
+        try {
+            carregarRegras();
+        } catch (Exception e) {
+            fail("Falha ao carregar regras", e);
+        }
+
+        // Para garantir que o horário atual (que pode ser qualquer um) não influencie,
+        // usamos uma regra sem timeRange (ex: "bom dia") – sempre ativa.
+        // Chamamos o método de 3 args com time=null
+        Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "bom dia", null);
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().response()).isEqualTo("Olá! Bom dia/tarde para você!");
+    }
+
+    // =========================
+    // 6. getResponseRule com userId = null
+    // =========================
+    @Test
+    void responseRule_comUserIdNull_retornaDefault() throws Exception {
+        carregarRegras();
+        Optional<AutoResponseOverride> resultado = service.getResponseRule(null, "obrigado");
+        assertThat(resultado).isPresent();
+        // Deve retornar a resposta padrão (não a personalizada)
+        assertThat(resultado.get().response()).isEqualTo("De nada!");
+        assertThat(resultado.get().animation()).isNull();
+    }
+
+    // =========================
+    // 7. Trigger curto (length < 3) é filtrado
+    // =========================
+    @Test
+    void responseRule_triggerCurtoNaoAtiva() throws Exception {
+        carregarRegras();
+        // "oi" tem length 2, deve ser filtrado
+        Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "oi");
+        assertThat(resultado).isEmpty();
+    }
+
+    // =========================
+    // 8. Horário fora do intervalo
+    // =========================
+    @Test
+    void responseRule_foraDoIntervaloNaoAtiva() throws Exception {
+        carregarRegras();
+        // "tchau" só funciona entre 18:00 e 23:59
+        // Simular horário 12:00 (fora)
+        LocalTime fora = LocalTime.of(12, 0);
+        Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, "tchau", fora);
+        assertThat(resultado).isEmpty();
+
+        // Simular horário 20:00 (dentro)
+        LocalTime dentro = LocalTime.of(20, 0);
+        Optional<AutoResponseOverride> resultado2 = service.getResponseRule(1L, "tchau", dentro);
+        assertThat(resultado2).isPresent();
+        assertThat(resultado2.get().response()).isEqualTo("Até logo!");
+    }
+
+    // =========================
+    // 9. getRulesSummary()
+    // =========================
+    @Test
+    void getRulesSummary_retornaResumoDasRegras() throws Exception {
+        carregarRegras();
+        var summary = service.getRulesSummary();
+        assertThat(summary).isNotEmpty();
+        assertThat(summary).containsKeys("bom dia", "boa tarde", "tchau", "obrigado", "oi", "olá");
+        // Verifica se o formato contém 'response='
+        assertThat(summary.values()).allMatch(s -> s.contains("response="));
+    }
+
+    // =========================
+    // 10. isEnabled()
+    // =========================
+    @Test
+    void isEnabled_retornaValorConfigurado() {
+        ReflectionTestUtils.setField(service, "enabled", true);
+        assertThat(service.isEnabled()).isTrue();
+
+        ReflectionTestUtils.setField(service, "enabled", false);
+        assertThat(service.isEnabled()).isFalse();
+    }
+
+    // =========================
+    // 11. reload()
+    // =========================
+    @Test
+    void reload_chamaLoadResponses() {
+        AutoResponseService spy = spy(service);
+        spy.reload();
+        verify(spy, times(1)).loadResponses();
+    }
+
+    // =========================
+    // TESTES EXISTENTES (mantidos)
     // =========================
 
     @Test
@@ -114,10 +317,6 @@ class AutoResponseServiceTest {
         assertThat(resultado).isEmpty();
     }
 
-    // =========================
-    // 🧪 TESTES DE containsExactWord
-    // =========================
-
     @Test
     void containsExactWord_deveRetornarTrueParaPalavraExata() {
         Boolean result =
@@ -139,10 +338,6 @@ class AutoResponseServiceTest {
                 ReflectionTestUtils.invokeMethod(service, "containsExactWord", "BOM DIA", "dia");
         assertThat(result).isTrue();
     }
-
-    // =========================
-    // 🧪 TESTES DE isTimeInRange
-    // =========================
 
     @Test
     void isTimeInRange_deveRetornarTrueDentroDoIntervalo() {
@@ -193,10 +388,6 @@ class AutoResponseServiceTest {
         assertThat(result3).isFalse();
     }
 
-    // =========================
-    // 🧪 TESTES DE responseRule
-    // =========================
-
     @Test
     void responseRule_deveRetornarRespostaParaTriggerExato() throws Exception {
         carregarRegras();
@@ -228,9 +419,33 @@ class AutoResponseServiceTest {
     }
 
     @Test
-    void responseRule_deveRetornarEmptyParaMensagemNull() throws Exception {
-        carregarRegras();
-        Optional<AutoResponseOverride> resultado = service.getResponseRule(1L, null);
+    void loadResponses_quandoRulesNulo_naoFalha() throws Exception {
+        ObjectMapper mockMapper = mock(ObjectMapper.class);
+        ReflectionTestUtils.setField(service, "objectMapper", mockMapper);
+
+        Resource mockResource = mock(Resource.class);
+        when(resourceLoader.getResource(anyString())).thenReturn(mockResource);
+        when(mockResource.exists()).thenReturn(true);
+        when(mockResource.getInputStream()).thenReturn(mock(InputStream.class));
+
+        AutoResponseConfig config = mock(AutoResponseConfig.class);
+        when(config.rules()).thenReturn(null);
+        when(mockMapper.readValue(any(InputStream.class), eq(AutoResponseConfig.class)))
+                .thenReturn(config);
+
+        assertThatCode(() -> service.loadResponses()).doesNotThrowAnyException();
+        assertThat(service.getRulesCount()).isZero();
+    }
+
+    @Test
+    void responseRule_deveRetornarEmptyParaMensagemNull() {
+        try {
+            carregarRegras();
+        } catch (Exception e) {
+            fail("Falha ao carregar regras: " + e.getMessage());
+        }
+
+        Optional<AutoResponseOverride> resultado = service.getResponseRule(123L, null);
         assertThat(resultado).isEmpty();
     }
 
@@ -256,7 +471,6 @@ class AutoResponseServiceTest {
 
     @Test
     void responseRule_devePriorizarTriggerMaisEspecifico() {
-        // Este teste não usa o ObjectMapper, então pode usar mock ou criar novo
         AutoResponseService service2 = new AutoResponseService(resourceLoader, objectMapper);
         ReflectionTestUtils.setField(service2, "enabled", true);
         AutoResponseRule rule1 = new AutoResponseRule("Resposta curta", null, null, null, null);
@@ -272,7 +486,7 @@ class AutoResponseServiceTest {
     }
 
     // =========================
-    // 🧪 HELPER
+    // HELPER
     // =========================
 
     private void carregarRegras() throws Exception {

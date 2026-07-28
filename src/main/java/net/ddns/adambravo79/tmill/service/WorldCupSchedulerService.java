@@ -2,6 +2,7 @@
 
 package net.ddns.adambravo79.tmill.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -35,6 +36,7 @@ public class WorldCupSchedulerService {
     private final Set<Long> allowedGroups = new HashSet<>();
     private final Set<String> remindersSent = ConcurrentHashMap.newKeySet();
     private final WorldCupUpdaterService worldCupUpdaterService;
+    private final Clock clock;
 
     @Value(BotMessages.DEFAULT_WORLDCUP_ENABLED)
     private boolean worldcupEnabled;
@@ -45,10 +47,12 @@ public class WorldCupSchedulerService {
     public WorldCupSchedulerService(
             StaticWorldCupService worldCupService,
             TelegramFacade telegramFacade,
-            WorldCupUpdaterService worldCupUpdaterService) {
+            WorldCupUpdaterService worldCupUpdaterService,
+            Clock clock) {
         this.worldCupService = worldCupService;
         this.telegramFacade = telegramFacade;
         this.worldCupUpdaterService = worldCupUpdaterService;
+        this.clock = clock != null ? clock : Clock.systemDefaultZone();
     }
 
     @PostConstruct
@@ -85,7 +89,7 @@ public class WorldCupSchedulerService {
     public void checkThirtyMinutesBeforeEachMatch() {
         if (!worldcupEnabled || allowedGroups.isEmpty()) return;
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
-        LocalDateTime now = LocalDateTime.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
+        LocalDateTime now = LocalDateTime.now(clock);
 
         List<WorldCupMatch> matches = worldCupService.getMatchesForDay(today);
         for (WorldCupMatch match : matches) {
@@ -146,15 +150,20 @@ public class WorldCupSchedulerService {
 
     private void sendThirtyMinuteReminder(WorldCupMatch match) {
         ZonedDateTime localTime = match.getMatchDateTime(ZoneId.of(BotMessages.BRAZIL_ZONE));
+        // Use a text block for the multi-line message
         String message =
-                String.format(
-                        "<b>⏰ Faltam 30 minutos para o inicio do jogo!</b>\n\n"
-                                + "⚽ %s (%s) x (%s) %s - %s",
-                        translateTeam(match.homeTeam()),
-                        flagEmoji(match.homeTeam()),
-                        flagEmoji(match.awayTeam()),
-                        translateTeam(match.awayTeam()),
-                        localTime.format(DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM)));
+                """
+        <b>⏰ Faltam 30 minutos para o inicio do jogo!</b>
+
+        ⚽ %s (%s) x (%s) %s - %s
+        """
+                        .formatted(
+                                translateTeam(match.homeTeam()),
+                                flagEmoji(match.homeTeam()),
+                                flagEmoji(match.awayTeam()),
+                                translateTeam(match.awayTeam()),
+                                localTime.format(
+                                        DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM)));
         for (Long groupId : allowedGroups) {
             telegramFacade.enviarMensagemHtml(groupId, message);
         }
@@ -175,99 +184,123 @@ public class WorldCupSchedulerService {
             return;
         }
 
+        String resultsMessage = buildResultsMessage(date, matches);
+        telegramFacade.enviarMensagemHtml(chatId, resultsMessage);
+    }
+
+    private String buildResultsMessage(LocalDate date, List<WorldCupMatch> matches) {
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern(BotMessages.FMT_DD_MM_YYYY);
         StringBuilder sb = new StringBuilder();
         sb.append("<b>📊 RESULTADOS - ").append(date.format(dateFormatter)).append(FECHA_BOLD);
 
-        for (WorldCupMatch m : matches) {
-            if (!m.hasScore()) {
-                sb.append("⏳ ")
-                        .append(translateTeam(m.homeTeam()))
-                        .append(" (")
-                        .append(flagEmoji(m.homeTeam()))
-                        .append(") x (")
-                        .append(flagEmoji(m.awayTeam()))
-                        .append(") ")
-                        .append(translateTeam(m.awayTeam()))
-                        .append(" - Aguardando resultado\n\n");
-                continue;
-            }
-
-            Score score = m.score();
-            List<Integer> ft = score.ft();
-            int homeGoals = ft.get(0);
-            int awayGoals = ft.get(1);
-
-            StringBuilder header = new StringBuilder();
-            header.append(flagEmoji(m.homeTeam()))
-                    .append(" ")
-                    .append(translateTeam(m.homeTeam()))
-                    .append(" ")
-                    .append(homeGoals)
-                    .append(" x ")
-                    .append(awayGoals)
-                    .append(" ")
-                    .append(translateTeam(m.awayTeam()))
-                    .append(" ")
-                    .append(flagEmoji(m.awayTeam()));
-
-            if (score.et() != null && score.et().size() == 2) {
-                int etHome = score.et().get(0);
-                int etAway = score.et().get(1);
-                header.append(" (pro) ").append(etHome).append("-").append(etAway);
-            }
-
-            if (score.p() != null && score.p().size() == 2) {
-                int pHome = score.p().get(0);
-                int pAway = score.p().get(1);
-                header.append(" (pen) ").append(pHome).append("-").append(pAway);
-            }
-
-            sb.append(header.toString()).append("\n");
-
-            List<Gol> todosGols = new ArrayList<>();
-            if (m.goals1() != null) {
-                for (Goal g : m.goals1()) {
-                    todosGols.add(new Gol(g, m.homeTeam()));
-                }
-            }
-            if (m.goals2() != null) {
-                for (Goal g : m.goals2()) {
-                    todosGols.add(new Gol(g, m.awayTeam()));
-                }
-            }
-
-            todosGols.sort(Comparator.comparingInt(g -> parseMinuteToInt(g.getMinute())));
-
-            for (Gol gol : todosGols) {
-                sb.append("  ⚽ ")
-                        .append(flagEmoji(gol.team))
-                        .append(" ")
-                        .append(gol.goal.name())
-                        .append(" ")
-                        .append(gol.goal.minute());
-                if (Boolean.TRUE.equals(gol.goal.penalty())) sb.append(" (P)");
-                if (Boolean.TRUE.equals(gol.goal.owngoal())) sb.append(" (GC)");
-                sb.append("\n");
-            }
+        for (WorldCupMatch match : matches) {
+            sb.append(formatMatchResult(match));
             sb.append("\n");
         }
-
-        telegramFacade.enviarMensagemHtml(chatId, sb.toString());
+        return sb.toString();
     }
 
-    private static class Gol {
-        final Goal goal;
-        final String team;
-
-        Gol(Goal goal, String team) {
-            this.goal = goal;
-            this.team = team;
+    private String formatMatchResult(WorldCupMatch match) {
+        StringBuilder sb = new StringBuilder();
+        if (!match.hasScore()) {
+            sb.append("⏳ ")
+                    .append(translateTeam(match.homeTeam()))
+                    .append(" (")
+                    .append(flagEmoji(match.homeTeam()))
+                    .append(") x (")
+                    .append(flagEmoji(match.awayTeam()))
+                    .append(") ")
+                    .append(translateTeam(match.awayTeam()))
+                    .append(" - Aguardando resultado\n\n");
+            return sb.toString();
         }
 
-        String getMinute() {
-            return goal.minute();
+        // Build the header with scores and possible extra time/penalties
+        sb.append(formatScoreHeader(match));
+
+        // Append goals
+        List<Goal> allGoals = collectAllGoals(match);
+        allGoals.sort(Comparator.comparingInt(g -> parseMinuteToInt(g.minute())));
+
+        for (Goal goal : allGoals) {
+            sb.append(formatGoal(goal, match));
         }
+        sb.append("\n");
+        return sb.toString();
+    }
+
+    private String formatScoreHeader(WorldCupMatch match) {
+        Score score = match.score();
+        List<Integer> ft = score.ft();
+        int homeGoals = ft.get(0);
+        int awayGoals = ft.get(1);
+
+        StringBuilder header = new StringBuilder();
+        header.append(flagEmoji(match.homeTeam()))
+                .append(" ")
+                .append(translateTeam(match.homeTeam()))
+                .append(" ")
+                .append(homeGoals)
+                .append(" x ")
+                .append(awayGoals)
+                .append(" ")
+                .append(translateTeam(match.awayTeam()))
+                .append(" ")
+                .append(flagEmoji(match.awayTeam()));
+
+        if (score.et() != null && score.et().size() == 2) {
+            int etHome = score.et().get(0);
+            int etAway = score.et().get(1);
+            header.append(" (pro) ").append(etHome).append("-").append(etAway);
+        }
+
+        if (score.p() != null && score.p().size() == 2) {
+            int pHome = score.p().get(0);
+            int pAway = score.p().get(1);
+            header.append(" (pen) ").append(pHome).append("-").append(pAway);
+        }
+
+        return header.append("\n").toString();
+    }
+
+    private List<Goal> collectAllGoals(WorldCupMatch match) {
+        List<Goal> allGoals = new ArrayList<>();
+        if (match.goals1() != null) {
+            allGoals.addAll(match.goals1());
+        }
+        if (match.goals2() != null) {
+            allGoals.addAll(match.goals2());
+        }
+        return allGoals;
+    }
+
+    private String formatGoal(Goal goal, WorldCupMatch match) {
+        String team = determineGoalTeam(goal, match);
+        StringBuilder line =
+                new StringBuilder("  ⚽ ")
+                        .append(flagEmoji(team))
+                        .append(" ")
+                        .append(goal.name())
+                        .append(" ")
+                        .append(goal.minute());
+        if (Boolean.TRUE.equals(goal.penalty())) line.append(" (P)");
+        if (Boolean.TRUE.equals(goal.owngoal())) line.append(" (GC)");
+        line.append("\n");
+        return line.toString();
+    }
+
+    private String determineGoalTeam(Goal goal, WorldCupMatch match) {
+        // Assuming Goal objects do not contain team info; we need to check which list contains the
+        // goal.
+        // Since we don't have a direct link, we can use a simple heuristic: if the goal appears in
+        // home
+        // team's list, it's home.
+        if (match.goals1() != null && match.goals1().contains(goal)) {
+            return match.homeTeam();
+        } else if (match.goals2() != null && match.goals2().contains(goal)) {
+            return match.awayTeam();
+        }
+        return "?";
     }
 
     private int parseMinuteToInt(String minute) {
@@ -275,6 +308,7 @@ public class WorldCupSchedulerService {
         minute = minute.trim();
         if (minute.contains("+")) {
             String[] parts = minute.split("\\+");
+            if (parts.length < 2) return 0; // ← adicione esta linha
             try {
                 int base = Integer.parseInt(parts[0]);
                 int extra = Integer.parseInt(parts[1]);

@@ -588,4 +588,15 @@ class TmdbClientTest {
 
         assertThat(result).isEmpty();
     }
+
+    @Test
+    void buscarDiretor_deveRetornarNullQuandoCrewNulo() {
+        // response não é nulo, mas a lista de crew é nula
+        CreditsResponse credits = new CreditsResponse(List.of(), null);
+        when(responseSpec.body(CreditsResponse.class)).thenReturn(credits);
+
+        TmdbClient client = new TmdbClient(restClient);
+        String diretor = client.buscarDiretor(1L);
+        assertThat(diretor).isNull();
+    }
 }

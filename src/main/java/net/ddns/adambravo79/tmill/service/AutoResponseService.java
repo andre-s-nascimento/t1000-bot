@@ -59,6 +59,11 @@ public class AutoResponseService {
             AutoResponseConfig config =
                     objectMapper.readValue(resource.getInputStream(), AutoResponseConfig.class);
 
+            if (config == null || config.rules() == null) {
+                log.warn("Arquivo de respostas automáticas vazio ou inválido.");
+                return;
+            }
+
             triggerToRule.clear();
             for (Map.Entry<String, AutoResponseRuleEntry> entry : config.rules().entrySet()) {
                 String ruleName = entry.getKey();
@@ -110,10 +115,14 @@ public class AutoResponseService {
         }
     }
 
+    /**
+     * Builds a map of user-specific overrides. Uses computeIfAbsent to avoid explicit
+     * containsKey+put.
+     */
     private Map<String, AutoResponseOverride> buildOverrides(AutoResponseRuleEntry entry) {
         Map<String, AutoResponseOverride> overrides = new HashMap<>();
 
-        // 1. Formato novo: userOverrides
+        // 1. New format: userOverrides
         if (entry.userOverrides() != null) {
             for (Map.Entry<String, UserOverride> ov : entry.userOverrides().entrySet()) {
                 overrides.put(
@@ -123,16 +132,16 @@ public class AutoResponseService {
             }
         }
 
-        // 2. Fallback: userResponse + userAnimation (legado)
+        // 2. Legacy fallback: userResponse + userAnimation
         if (entry.userResponse() != null) {
             for (Map.Entry<String, String> uv : entry.userResponse().entrySet()) {
                 String userId = uv.getKey();
                 String response = uv.getValue();
                 String animation =
                         entry.userAnimation() != null ? entry.userAnimation().get(userId) : null;
-                if (!overrides.containsKey(userId)) {
-                    overrides.put(userId, new AutoResponseOverride(response, animation));
-                }
+                // Only add if not already present (new format takes precedence)
+                overrides.computeIfAbsent(
+                        userId, k -> new AutoResponseOverride(response, animation));
             }
         }
 
