@@ -7,7 +7,7 @@
 Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenAI), **busca filmes** no TMDB e **gera resumos automáticos** das conversas do grupo.
 
 ![Java](https://img.shields.io/badge/Java-21-orange)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.0.6-brightgreen)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.0-brightgreen)
 ![Build](https://img.shields.io/badge/build-passing-success)
 ![Tests](https://img.shields.io/badge/tests-coming_soon-yellow)
 ![License](https://img.shields.io/badge/license-MIT-blue)
