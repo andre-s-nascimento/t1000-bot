@@ -561,4 +561,83 @@ class AudioPipelineServiceTest {
         assertThatThrownBy(() -> method.invoke(service, re))
                 .hasCauseInstanceOf(CompletionException.class);
     }
+
+    // ========================================================================
+    // TESTES ADICIONAIS PARA COBRIR BRANCHES FALTANTES
+    // ========================================================================
+
+    @Test
+    void processarFluxoAudio_deveLancarIllegalArgumentException_quandoOgaFileNulo() {
+        var audio = mock(AudioService.class);
+        var groq = mock(GroqClient.class);
+        var cache = mock(ChatTranscriptionCache.class);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+
+        assertThatThrownBy(() -> service.processarFluxoAudio(null, 1L, 1L, "Usuário", (t, b) -> {}))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ogaFile não pode ser nulo");
+    }
+
+    @Test
+    void processarFluxoAudio_deveLancarIllegalArgumentException_quandoCallbackNulo()
+            throws Exception {
+        var audio = mock(AudioService.class);
+        var groq = mock(GroqClient.class);
+        var cache = mock(ChatTranscriptionCache.class);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+
+        File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
+
+        assertThatThrownBy(() -> service.processarFluxoAudio(input, 1L, 1L, "Usuário", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("callback não pode ser nulo");
+    }
+
+    @Test
+    void calcularWaitTime_deveUsarBackoff_quandoNumberFormatExceptionNoParsing() throws Exception {
+        var audio = mock(AudioService.class);
+        var groq = mock(GroqClient.class);
+        var cache = mock(ChatTranscriptionCache.class);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+
+        Method method =
+                AudioPipelineService.class.getDeclaredMethod(
+                        "calcularWaitTime",
+                        HttpClientErrorException.TooManyRequests.class,
+                        int.class);
+        method.setAccessible(true);
+
+        HttpClientErrorException.TooManyRequests ex =
+                mock(HttpClientErrorException.TooManyRequests.class);
+        when(ex.getMessage()).thenReturn("try again in abc");
+        long waitTime = (long) method.invoke(service, ex, 1);
+        assertThat(waitTime).isEqualTo(4000L);
+    }
+
+    @Test
+    void deletarSilenciosamente_deveCapturarIOException() throws Exception {
+        var audio = mock(AudioService.class);
+        var groq = mock(GroqClient.class);
+        var cache = mock(ChatTranscriptionCache.class);
+        var transcriptStoreService = mock(TranscriptStoreService.class);
+        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+
+        Method method =
+                AudioPipelineService.class.getDeclaredMethod("deletarSilenciosamente", File.class);
+        method.setAccessible(true);
+
+        Path dir = Files.createDirectory(tempDir.resolve("dir"));
+        File file = new File(dir.toFile(), "arquivo.txt");
+        Files.createFile(file.toPath());
+        file.setReadOnly();
+
+        assertThatCode(() -> method.invoke(service, file)).doesNotThrowAnyException();
+
+        file.setWritable(true);
+        Files.deleteIfExists(file.toPath());
+        Files.deleteIfExists(dir);
+    }
 }

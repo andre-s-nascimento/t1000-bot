@@ -7,7 +7,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -97,7 +96,7 @@ public class StaticWorldCupService {
         log.debug("Buscando jogos para data {} – disponíveis: {}", date, matchesByDate.keySet());
         return matchesByDate.getOrDefault(date, Collections.emptyList()).stream()
                 .sorted(Comparator.comparing(m -> m.getMatchDateTime(brazilZone)))
-                .collect(Collectors.toList());
+                .toList(); // substitui collect(Collectors.toList())
     }
 
     public Optional<WorldCupMatch> getFirstMatchOfDay(LocalDate date) {

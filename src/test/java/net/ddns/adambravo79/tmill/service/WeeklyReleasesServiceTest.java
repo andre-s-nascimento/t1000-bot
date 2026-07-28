@@ -30,6 +30,10 @@ class WeeklyReleasesServiceTest {
     private static final LocalDate THURSDAY = LocalDate.of(2026, Month.JULY, 9);
     private static final LocalDate NEXT_THURSDAY = THURSDAY.plusDays(7);
 
+    // ========================================================================
+    // TESTES EXISTENTES (mantidos)
+    // ========================================================================
+
     @Test
     void getWeeklyReleasesMessage_deveRetornarMensagemComLançamentos() {
         WeeklyReleasesService spyService = spy(service);
@@ -37,7 +41,6 @@ class WeeklyReleasesServiceTest {
                 .when(spyService)
                 .calculateThursdayPeriod();
 
-        // Objetos reais (records)
         MovieResult movie1 = new MovieResult(1, "Filme A", "2026-07-09", 8.0);
         MovieResult movie2 = new MovieResult(2, "Filme B", "2026-07-10", 7.5);
         TmdbDiscoverMovieResponse movieResponse =
@@ -129,5 +132,126 @@ class WeeklyReleasesServiceTest {
         String result = spyService.getWeeklyReleasesMessage();
 
         assertThat(result).doesNotContain("Filme 9").contains("... e mais 1 títulos neste dia");
+    }
+
+    // ========================================================================
+    // NOVOS TESTES PARA COBRIR BRANCHES FALTANTES
+    // ========================================================================
+
+    @Test
+    void getWeeklyReleasesMessage_deveIgnorarItensComDataNull() {
+        WeeklyReleasesService spyService = spy(service);
+        doReturn(new LocalDate[] {THURSDAY, NEXT_THURSDAY})
+                .when(spyService)
+                .calculateThursdayPeriod();
+
+        MovieResult movieNull = new MovieResult(1, "Filme Null", null, 0.0);
+        MovieResult movieValido = new MovieResult(2, "Filme Válido", "2026-07-09", 8.0);
+        TmdbDiscoverMovieResponse movieResponse =
+                new TmdbDiscoverMovieResponse(1, List.of(movieNull, movieValido), 1, 2);
+
+        TmdbDiscoverTvResponse tvResponse = new TmdbDiscoverTvResponse(1, List.of(), 1, 0);
+
+        when(tmdbClient.discoverMoviesByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(movieResponse);
+        when(tmdbClient.discoverTvByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(tvResponse);
+
+        String result = spyService.getWeeklyReleasesMessage();
+
+        assertThat(result).contains("Filme Válido").doesNotContain("Filme Null");
+    }
+
+    @Test
+    void getWeeklyReleasesMessage_quandoMoviesResponseNull_deveRetornarListaVazia() {
+        WeeklyReleasesService spyService = spy(service);
+        doReturn(new LocalDate[] {THURSDAY, NEXT_THURSDAY})
+                .when(spyService)
+                .calculateThursdayPeriod();
+
+        when(tmdbClient.discoverMoviesByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(null);
+        TmdbDiscoverTvResponse tvResponse = new TmdbDiscoverTvResponse(1, List.of(), 1, 0);
+        when(tmdbClient.discoverTvByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(tvResponse);
+
+        String result = spyService.getWeeklyReleasesMessage();
+        assertThat(result).isEqualTo("Nenhum lançamento encontrado para esta semana.");
+    }
+
+    @Test
+    void getWeeklyReleasesMessage_quandoSeriesResponseNull_deveRetornarListaVazia() {
+        WeeklyReleasesService spyService = spy(service);
+        doReturn(new LocalDate[] {THURSDAY, NEXT_THURSDAY})
+                .when(spyService)
+                .calculateThursdayPeriod();
+
+        MovieResult movie = new MovieResult(1, "Filme Teste", "2026-07-09", 8.0);
+        TmdbDiscoverMovieResponse movieResponse =
+                new TmdbDiscoverMovieResponse(1, List.of(movie), 1, 1);
+        when(tmdbClient.discoverMoviesByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(movieResponse);
+        when(tmdbClient.discoverTvByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(null);
+
+        String result = spyService.getWeeklyReleasesMessage();
+        assertThat(result).contains("Filme Teste").doesNotContain("série");
+    }
+
+    @Test
+    void getWeeklyReleasesMessage_quandoMoviesResultsNull_deveRetornarListaVazia() {
+        WeeklyReleasesService spyService = spy(service);
+        doReturn(new LocalDate[] {THURSDAY, NEXT_THURSDAY})
+                .when(spyService)
+                .calculateThursdayPeriod();
+
+        TmdbDiscoverMovieResponse movieResponse = mock(TmdbDiscoverMovieResponse.class);
+        when(movieResponse.results()).thenReturn(null);
+        TmdbDiscoverTvResponse tvResponse = new TmdbDiscoverTvResponse(1, List.of(), 1, 0);
+
+        when(tmdbClient.discoverMoviesByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(movieResponse);
+        when(tmdbClient.discoverTvByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(tvResponse);
+
+        String result = spyService.getWeeklyReleasesMessage();
+        assertThat(result).isEqualTo("Nenhum lançamento encontrado para esta semana.");
+    }
+
+    @Test
+    void getWeeklyReleasesMessage_quandoTvResultsNull_deveRetornarListaVazia() {
+        WeeklyReleasesService spyService = spy(service);
+        doReturn(new LocalDate[] {THURSDAY, NEXT_THURSDAY})
+                .when(spyService)
+                .calculateThursdayPeriod();
+
+        MovieResult movie = new MovieResult(1, "Filme Teste", "2026-07-09", 8.0);
+        TmdbDiscoverMovieResponse movieResponse =
+                new TmdbDiscoverMovieResponse(1, List.of(movie), 1, 1);
+        TmdbDiscoverTvResponse tvResponse = mock(TmdbDiscoverTvResponse.class);
+        when(tvResponse.results()).thenReturn(null);
+
+        when(tmdbClient.discoverMoviesByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(movieResponse);
+        when(tmdbClient.discoverTvByDate(THURSDAY.toString(), NEXT_THURSDAY.toString()))
+                .thenReturn(tvResponse);
+
+        String result = spyService.getWeeklyReleasesMessage();
+        assertThat(result).contains("Filme Teste").doesNotContain("série");
+    }
+
+    // ========================================================================
+    // TESTE PARA CALCULAR PERÍODO (opcional, para cobertura extra)
+    // ========================================================================
+
+    @Test
+    void calculateThursdayPeriod_deveRetornarQuintaAtualEProxima() {
+        // Não podemos testar com data fixa facilmente, mas podemos chamar e verificar que retorna
+        // array
+        // de 2 datas
+        LocalDate[] period = service.calculateThursdayPeriod();
+        assertThat(period).hasSize(2);
+        assertThat(period[0].getDayOfWeek().getValue()).isEqualTo(4); // quinta = 4
+        assertThat(period[1].minusDays(7)).isEqualTo(period[0]);
     }
 }

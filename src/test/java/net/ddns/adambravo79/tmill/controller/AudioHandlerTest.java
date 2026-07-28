@@ -2,6 +2,7 @@
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -963,5 +964,217 @@ class AudioHandlerTest {
 
         // Deve remover apenas o token antigo
         assertThat(pendingMap).containsKey("token_novo").doesNotContainKey("token_antigo");
+    }
+
+    @Test
+    void deveDividirMensagemLongaNaSafeSendTranscription() {
+        // Configura callback com cache hit
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        TranscriptionCacheEntry entry =
+                new TranscriptionCacheEntry(
+                        "bruto",
+                        "texto muito longo " + "a".repeat(5000),
+                        System.currentTimeMillis());
+        when(cacheService.get(FILE_ID)).thenReturn(entry);
+
+        // Stub do split
+        when(utils.splitMessage(anyString(), anyInt())).thenReturn(List.of("Parte 1", "Parte 2"));
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+
+        verify(utils).splitMessage(contains("texto muito longo"), eq(4000));
+        verify(telegramFacade, times(2)).enviarMensagem(eq(USER_ID), anyString());
+    }
+
+    @Test
+    @SneakyThrows
+    void deveEnviarMensagemSilasCastParaDuracaoLonga() {
+        // Configura áudio com duração > 300 segundos
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(400); // 400 segundos (> 300)
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        AudioPipelineService.ProcessedAudio processed =
+                new AudioPipelineService.ProcessedAudio("bruto", "refinado");
+        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
+                .thenReturn(CompletableFuture.completedFuture(processed));
+
+        audioHandler.handleAudioUpdate(update);
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+                            verify(telegramFacade)
+                                    .enviarComBotoesHtml(
+                                            eq(GROUP_CHAT_ID), captor.capture(), any());
+                            String mensagem = captor.getValue();
+                            assertThat(mensagem).contains("SilasCast");
+                        });
+    }
+
+    @Test
+    void transcreverAudio_semResultado_deveLancarIllegalStateException() {
+        // Configura callback com cache miss
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.from()).thenReturn(user);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.data()).thenReturn("trans_refinado|token456");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        System.currentTimeMillis(),
+                        USER_ID,
+                        "Testador Silva");
+        java.util.Map<String, AudioRequest> pendingMap =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        pendingMap.put("token456", request);
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", pendingMap);
+
+        when(cacheService.get(FILE_ID)).thenReturn(null);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        // O pipeline nunca chama o callback → resultado[0] permanece null
+        doAnswer(inv -> null)
+                .when(audioService)
+                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            // Deve enviar mensagem de erro para o usuário
+                            verify(telegramFacade)
+                                    .enviarMensagem(eq(USER_ID), contains("Erro no processamento"));
+                            // E remover o token
+                            assertThat(pendingMap).doesNotContainKey("token456");
+                        });
+    }
+
+    // ========================================================================
+    // TESTES PARA SAFEANSWER CALLBACK (BRANCHES FALTANTES)
+    // ========================================================================
+
+    @Test
+    void deveCapturarHttpClientErrorExceptionNoSafeAnswerCallback() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.from()).thenReturn(user);
+        when(callback.data()).thenReturn("trans_refinado|token999");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        // Força exceção ao responder o callback
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
+                .when(telegramFacade)
+                .answerCallbackQuery(eq("cb123"), anyString(), anyBoolean());
+
+        // Não deve lançar exceção
+        assertThatCode(
+                        () ->
+                                audioHandler.handleTranscriptionCallback(
+                                        callback, "trans_refinado|token999"))
+                .doesNotThrowAnyException();
+
+        verify(telegramFacade)
+                .answerCallbackQuery("cb123", "Pedido expirado. Envie o audio novamente.", true);
+    }
+
+    @Test
+    void deveCapturarResourceAccessExceptionNoSafeAnswerCallback() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        when(callback.id()).thenReturn("cb123");
+        when(callback.from()).thenReturn(user);
+        when(callback.data()).thenReturn("trans_refinado|token999");
+
+        Message callbackMessage = mock(Message.class);
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        doThrow(new ResourceAccessException("Timeout"))
+                .when(telegramFacade)
+                .answerCallbackQuery(eq("cb123"), anyString(), anyBoolean());
+
+        assertThatCode(
+                        () ->
+                                audioHandler.handleTranscriptionCallback(
+                                        callback, "trans_refinado|token999"))
+                .doesNotThrowAnyException();
+
+        verify(telegramFacade)
+                .answerCallbackQuery("cb123", "Pedido expirado. Envie o audio novamente.", true);
+    }
+
+    @Test
+    @SneakyThrows
+    void deveCapturarResourceAccessExceptionNoSafeSendButtons() {
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
+        when(audio.duration()).thenReturn(DURATION);
+
+        File mockFile = new File("audio.oga");
+        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+
+        AudioPipelineService.ProcessedAudio processed =
+                new AudioPipelineService.ProcessedAudio("bruto", "refinado");
+        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
+                .thenReturn(CompletableFuture.completedFuture(processed));
+
+        doThrow(new ResourceAccessException("Timeout"))
+                .when(telegramFacade)
+                .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+
+        audioHandler.handleAudioUpdate(update);
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(
+                        () -> {
+                            verify(telegramFacade)
+                                    .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+                            // Não lança exceção
+                        });
     }
 }

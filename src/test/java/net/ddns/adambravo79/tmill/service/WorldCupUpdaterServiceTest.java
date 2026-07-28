@@ -13,7 +13,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -31,13 +33,13 @@ class WorldCupUpdaterServiceTest {
     @Mock private RestClient.RequestHeadersSpec<?> requestHeadersSpec;
     @Mock private RestClient.ResponseSpec responseSpec;
 
-    private WorldCupUpdaterService service;
+    @Spy @InjectMocks private WorldCupUpdaterService service;
 
     @TempDir Path tempDir;
 
     @BeforeEach
     void setUp() {
-        service = new WorldCupUpdaterService(worldCupService);
+
         ReflectionTestUtils.setField(service, "restClient", restClient);
         ReflectionTestUtils.setField(service, "updateEnabled", true);
         ReflectionTestUtils.setField(service, "updateUrl", "https://test.com/worldcup.json");
@@ -156,11 +158,10 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void forceUpdate_deveChamarUpdateWorldCupData() {
-        WorldCupUpdaterService spyService = spy(service);
-        doNothing().when(spyService).updateWorldCupData();
+        doNothing().when(service).updateWorldCupData();
 
-        spyService.forceUpdate();
+        service.forceUpdate();
 
-        verify(spyService).updateWorldCupData();
+        verify(service).updateWorldCupData();
     }
 }

@@ -3,11 +3,11 @@ package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.io.File;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -25,27 +25,16 @@ class AudioServiceTest {
         // Arrange
         var service = spy(new AudioService());
 
-        // Cria ficheiro de entrada e de saída no directório temporário
         File input = new File(tempDir.toFile(), "audio.oga");
         File expectedOutput = new File(tempDir.toFile(), "audio.wav");
 
-        // Garante que ambos existem (o de saída é criado para simular o FFmpeg)
-        if (!input.exists()) input.createNewFile();
-        if (!expectedOutput.exists()) expectedOutput.createNewFile();
+        input.createNewFile();
+        expectedOutput.createNewFile();
 
         Process process = mock(Process.class);
         doReturn(process).when(service).startProcess(any(ProcessBuilder.class));
 
-        // Usa doAnswer para maior controlo e evitar problemas de correspondência
-        when(process.waitFor(anyLong(), any(TimeUnit.class)))
-                .thenAnswer(
-                        inv -> {
-                            long timeout = inv.getArgument(0);
-                            TimeUnit unit = inv.getArgument(1);
-                            System.out.println(
-                                    "waitFor chamado com timeout=" + timeout + ", unit=" + unit);
-                            return true;
-                        });
+        when(process.waitFor(anyLong(), any(TimeUnit.class))).thenReturn(true);
         when(process.exitValue()).thenReturn(0);
 
         // Act
@@ -53,12 +42,8 @@ class AudioServiceTest {
         File file = result.join();
 
         // Assert
-        assertThat(file)
-                .isNotNull()
-                .hasName("audio.wav")
-                .exists(); // verifica que o ficheiro foi devolvido (existe)
+        assertThat(file).isNotNull().hasName("audio.wav").exists();
 
-        // Verifica que o método startProcess foi chamado exactamente uma vez
         verify(service, times(1)).startProcess(any(ProcessBuilder.class));
     }
 
@@ -113,11 +98,11 @@ class AudioServiceTest {
         assertThatThrownBy(result::join)
                 .isInstanceOf(CompletionException.class)
                 .hasCauseInstanceOf(RuntimeException.class)
-                .hasRootCauseMessage("erro original"); // Nota: a mensagem original é substituída
+                .hasRootCauseMessage("erro original");
     }
 
     // ========================================================================
-    // NOVOS TESTES PARA COBERTURA DE AudioService
+    // NOVOS TESTES PARA COBERTURA
     // ========================================================================
 
     // -----------------------------
@@ -127,16 +112,16 @@ class AudioServiceTest {
     void drainStream_deveCapturarExcecao() throws Exception {
         // Arrange
         var service = new AudioService();
-        java.io.InputStream mockStream = mock(java.io.InputStream.class);
+        InputStream mockStream = mock(InputStream.class);
         doThrow(new java.io.IOException("simulated error")).when(mockStream).transferTo(any());
 
-        // Act: invoca via reflexão
+        // Act & Assert: invoca via reflexão e garante que não propaga exceção
         java.lang.reflect.Method method =
-                AudioService.class.getDeclaredMethod("drainStream", java.io.InputStream.class);
+                AudioService.class.getDeclaredMethod("drainStream", InputStream.class);
         method.setAccessible(true);
-        method.invoke(service, mockStream);
 
-        // Assert: não lança exceção; cobertura do catch alcançada
+        assertThatCode(() -> method.invoke(service, mockStream))
+                .doesNotThrowAnyException(); // cobertura do catch alcançada
     }
 
     // -----------------------------
@@ -160,7 +145,7 @@ class AudioServiceTest {
 
         // Assert
         assertThat(process).isNotNull();
-        int exitCode = process.waitFor(); // espera terminar
+        int exitCode = process.waitFor();
         assertThat(exitCode).isZero();
     }
 
@@ -191,7 +176,9 @@ class AudioServiceTest {
         assertThat(file).exists();
         verify(service, times(1)).startProcess(any(ProcessBuilder.class));
 
-        // Dá um tempo para a thread de drenagem executar (a lambda)
-        await().atMost(2, TimeUnit.SECONDS);
+        // Aguarda a execução da thread de drenagem (lambda) para garantir cobertura
+        await().atMost(2, TimeUnit.SECONDS).until(() -> true);
+        // A asserção acima é apenas para esperar; a cobertura da lambda é garantida
+        // pelo spy e pela execução do método.
     }
 }

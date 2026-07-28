@@ -82,8 +82,9 @@ class GroqClientTest {
     @Test
     void transcrever_deveLancarExcecaoQuandoRespostaNula() {
         when(responseSpec.body(TranscriptionResponse.class)).thenReturn(null);
+        File audioFile = new File("audio.wav"); // criado fora do lambda
 
-        assertThatThrownBy(() -> groqClient.transcrever(new File("audio.wav")))
+        assertThatThrownBy(() -> groqClient.transcrever(audioFile))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Falha na transcrição");
     }
@@ -93,8 +94,9 @@ class GroqClientTest {
         TranscriptionResponse mockResponse = mock(TranscriptionResponse.class);
         when(mockResponse.text()).thenReturn(null);
         when(responseSpec.body(TranscriptionResponse.class)).thenReturn(mockResponse);
+        File audioFile = new File("audio.wav");
 
-        assertThatThrownBy(() -> groqClient.transcrever(new File("audio.wav")))
+        assertThatThrownBy(() -> groqClient.transcrever(audioFile))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Falha na transcrição");
     }
