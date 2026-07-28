@@ -1,6 +1,10 @@
 # 🎬 T-1000 Bot
 
-Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento Llama), **busca filmes** no TMDB e **gera resumos automáticos** das conversas do grupo.
+> **Versão atual: v2.1.2** | Branch: `main` | Último build: 2026-07-20
+>
+> _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente._
+
+Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenAI), **busca filmes** no TMDB e **gera resumos automáticos** das conversas do grupo.
 
 ![Java](https://img.shields.io/badge/Java-21-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.0.6-brightgreen)
@@ -86,9 +90,9 @@ A funcionalidade pode ser desligada/ligada via propriedade `auto.response.enable
 ## 🏗️ Tecnologias
 
 - **Java 21** com virtual threads
-- **Spring Boot 4.0.6**
+- **Spring Boot 4.1.0**
 - **Telegram Bots Long Polling API**
-- **Groq Cloud** (Whisper + Llama 3.1/4)
+- **Groq Cloud** (Whisper)
 - **TMDB API**
 - **SQLite** (persistência de mensagens e transcrições)
 - **FFmpeg** (conversão de áudio)
@@ -248,14 +252,6 @@ Assim, a implementação com SQLite pode ser substituída por MongoDB, PostgreSQ
 
 - **Muito simples e bem isolado**. Carrega um JSON e retorna `Optional<String>`.
 - **Modularização**: poderia ser transformado em um serviço genérico `FeatureFlagService` ou `ContentEnricher` que, dado um ID e um tipo, retorna conteúdo extra. No T-1000, é usado apenas para filmes, mas poderia ser usado para outros contextos.
-
-## 🗺️ Roadmap
-
-- [x] [v1.1.0 — Stability & Hardening](https://github.com/andre-s-nascimento/t1000-bot/milestone/1)
-- [ ] [v1.2.0 — Performance & Testing](https://github.com/andre-s-nascimento/t1000-bot/milestone/2)
-- [ ] [v1.3.0 — UX Improvements](https://github.com/andre-s-nascimento/t1000-bot/milestone/3)
-- [ ] [v1.4.0 — DevOps](https://github.com/andre-s-nascimento/t1000-bot/milestone/4)
-- [ ] [v2.0.0 — Scalability](https://github.com/andre-s-nascimento/t1000-bot/milestone/5)
 
 ## 📄 Licença
 
