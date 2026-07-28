@@ -1,7 +1,3 @@
-/**********************************************************
- * ARQUIVO: ./src/main/java/net/ddns/adambravo79/tmill/controller/CommandHandler.java
- **********************************************************/
-
 package net.ddns.adambravo79.tmill.controller;
 
 import java.time.LocalDate;
@@ -10,9 +6,11 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -70,7 +68,8 @@ public class CommandHandler {
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
 
-    // Método principal chamado pelo TextCommandHandler
+    // ========================= Método principal =========================
+
     public void handleTextUpdate(Update update) {
         Message message = update.message();
         long chatId = message.chat().id();
@@ -108,35 +107,9 @@ public class CommandHandler {
         // Normaliza comando (t-1000 -> t1000)
         String normalized = text.replace("t-1000", "t1000");
 
-        // --- Roteamento de comandos ---
-        if (normalized.startsWith("t1000 anotar ideia")) {
-            String idea = rawText.replaceFirst("(?i)^t1000\s+anotar\s+ideia\s*", "").trim();
-            handleAnotarIdeia(message, chatId, idea);
-            return;
-        }
-        if (normalized.startsWith("t1000 buscar")) {
-            String termo = rawText.replaceFirst("(?i)^t1000\s+buscar\s*", "").trim();
-            handleBuscarFilme(chatId, termo);
-            return;
-        }
-        if (normalized.startsWith("t1000 estreias da semana")
-                || normalized.startsWith("t1000 lancamentos")) {
-            handleEstreias(chatId);
-            return;
-        }
-        if (normalized.contains("t1000 jogos") || normalized.contains("t1000 copa")) {
-            handleJogosCopa(chatId, rawText);
-            return;
-        }
-        if (normalized.startsWith("t1000 resultados")) {
-            handleResultados(chatId, rawText);
-            return;
-        }
-
-        // Se for comando não reconhecido
-        if (isCommand) {
+        // --- Roteamento de comandos (extraído para método auxiliar) ---
+        if (!dispatchCommand(normalized, rawText, chatId, message) && isCommand) {
             telegramFacade.enviarMensagem(chatId, BotMessages.COMANDO_NAO_RECONHECIDO);
-            // Logar link se houver
             if (rawText.contains("http://") || rawText.contains("https://")) {
                 log.warn(
                         "🔗 Link não processado: '{}' (chatId={})",
@@ -146,23 +119,55 @@ public class CommandHandler {
         }
     }
 
-    // ========================= Métodos privados para cada comando =========================
+    // ========================= Dispatcher auxiliar =========================
+
+    private boolean dispatchCommand(
+            String normalized, String rawText, long chatId, Message message) {
+        if (normalized.startsWith("t1000 anotar ideia")) {
+            String idea = rawText.replaceFirst("(?i)^t1000\\s+anotar\\s+ideia\\s*", "").trim();
+            handleAnotarIdeia(message, chatId, idea);
+            return true;
+        }
+        if (normalized.startsWith("t1000 buscar")) {
+            String termo = rawText.replaceFirst("(?i)^t1000\\s+buscar\\s*", "").trim();
+            handleBuscarFilme(chatId, termo);
+            return true;
+        }
+        if (normalized.startsWith("t1000 estreias da semana")
+                || normalized.startsWith("t1000 lancamentos")) {
+            handleEstreias(chatId);
+            return true;
+        }
+        if (normalized.contains("t1000 jogos") || normalized.contains("t1000 copa")) {
+            handleJogosCopa(chatId);
+            return true;
+        }
+        if (normalized.startsWith("t1000 resultados")) {
+            handleResultados(chatId, rawText);
+            return true;
+        }
+        return false;
+    }
+
+    // ========================= Métodos privados de cada comando =========================
 
     private void sendWelcome(long chatId, String firstName) {
         String saudacao =
-                String.format(
-                        "🤖 Olá, <b>%s</b>! Eu sou o <b>Tmill Bot</b>, o robô de metal líquido das"
-                            + " transcrições e buscas.\n\n"
-                            + "📌 <b>O que posso fazer?</b>\n"
-                            + "🎬 Buscar filmes: <code>t1000 buscar &lt;nome do filme&gt;</code>\n"
-                            + "🎙️ Transcrever áudios: envie uma mensagem de voz ou áudio.\n\n"
-                            + "💡 <b>Em grupos/canais:</b>\n"
-                            + "Ao enviar um áudio, aparecerão botões para você escolher a"
-                            + " transcrição bruta ou refinada.\n\n"
-                            + "💡 Anotar sugestões: <code>t1000 anotar ideia Achar os pais adotivos"
-                            + " do John Connor...</code>\n\n"
-                            + "Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.",
-                        utils.escapeHtml(firstName));
+                """
+        🤖 Olá, <b>%s</b>! Eu sou o <b>Tmill Bot</b>, o robô de metal líquido das transcrições e buscas.
+
+        📌 <b>O que posso fazer?</b>
+        🎬 Buscar filmes: <code>t1000 buscar &lt;nome do filme&gt;</code>
+        🎙️ Transcrever áudios: envie uma mensagem de voz ou áudio.
+
+        💡 <b>Em grupos/canais:</b>
+        Ao enviar um áudio, aparecerão botões para você escolher a transcrição bruta ou refinada.
+
+        💡 Anotar sugestões: <code>t1000 anotar ideia Achar os pais adotivos do John Connor...</code>
+
+        Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
+        """
+                        .formatted(utils.escapeHtml(firstName));
         telegramFacade.enviarMensagemHtml(chatId, saudacao);
     }
 
@@ -172,7 +177,6 @@ public class CommandHandler {
         String animation = response.animation();
 
         if (animation != null && !animation.isBlank()) {
-            // Verifica se a URL tem um host válido (para HTTP/HTTPS)
             if (isValidUrl(animation)) {
                 telegramFacade.enviarMidia(chatId, animation, finalMsg);
             } else {
@@ -195,7 +199,7 @@ public class CommandHandler {
             if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
                 return uri.getHost() != null && !uri.getHost().isBlank();
             }
-            return false; // URLs com outros esquemas não são suportadas para envio de mídia
+            return false;
         } catch (java.net.URISyntaxException e) {
             return false;
         }
@@ -203,10 +207,13 @@ public class CommandHandler {
 
     private void handleAnotarIdeia(Message message, long chatId, String idea) {
         log.info("📝 Comando 'anotar ideia' recebido: {}", sanitizeForLog(idea));
-        if (idea.isEmpty()) {
+
+        // 🔧 Correção NPE: verifica se a ideia é nula ou vazia
+        if (idea == null || idea.isEmpty()) {
             telegramFacade.enviarMensagem(chatId, BotMessages.IDEIA_DIGITE_APOS_COMANDO);
             return;
         }
+
         if (idea.startsWith(":") || idea.startsWith("：")) {
             idea = idea.substring(1).trim();
         }
@@ -222,20 +229,23 @@ public class CommandHandler {
 
         ideasLogger.saveIdea(userId, userName, chatId, idea, chatName);
 
+        // Mensagem para o administrador usando Text Block
         String adminMsg =
-                String.format(
-                        "💡 <b>Nova ideia</b>\n"
-                                + "📝 <i>%s</i>\n"
-                                + "👤 <b>Usuário:</b> %s\n"
-                                + "📍 <b>Local:</b> %s\n"
-                                + "🕒 %s",
-                        utils.escapeHtml(idea),
-                        utils.buildUserMention(from),
-                        utils.escapeHtml(chatName),
-                        LocalDateTime.now()
-                                .format(
-                                        DateTimeFormatter.ofPattern(
-                                                BotMessages.FMT_DD_MM_YYYY_HH_MM)));
+                """
+        💡 <b>Nova ideia</b>
+        📝 <i>%s</i>
+        👤 <b>Usuário:</b> %s
+        📍 <b>Local:</b> %s
+        🕒 %s
+        """
+                        .formatted(
+                                utils.escapeHtml(idea),
+                                utils.buildUserMention(from),
+                                utils.escapeHtml(chatName),
+                                LocalDateTime.now(ZoneId.of(BotMessages.BRAZIL_ZONE))
+                                        .format(
+                                                DateTimeFormatter.ofPattern(
+                                                        BotMessages.FMT_DD_MM_YYYY_HH_MM)));
         telegramFacade.enviarMensagemHtml(ownerId, adminMsg);
         telegramFacade.enviarMensagemHtml(chatId, BotMessages.IDEIA_REGISTRADA);
     }
@@ -268,7 +278,6 @@ public class CommandHandler {
             return;
         }
 
-        // Múltiplos resultados → enviar opções com botões
         enviarOpcoesDesambiguacao(chatId, busca.results());
     }
 
@@ -317,7 +326,8 @@ public class CommandHandler {
         telegramFacade.enviarMensagemHtml(chatId, response);
     }
 
-    private void handleJogosCopa(long chatId, String rawText) {
+    // Parâmetro rawText removido (não utilizado)
+    private void handleJogosCopa(long chatId) {
         if (!worldcupEnabled) {
             telegramFacade.enviarMensagem(chatId, BotMessages.WORLD_CUP_FINISHED);
             return;
@@ -332,9 +342,8 @@ public class CommandHandler {
             return;
         }
 
-        // Remove o prefixo "t1000 resultados" e limpa palavras comuns
-        String param = rawText.replaceFirst("(?i)^t1000\s+resultados\s+", "").trim();
-        String cleanedParam = param.replaceAll("(?i)\b(do|dia|de|da|as|os|dias)\b", " ").trim();
+        String param = rawText.replaceFirst("(?i)^t1000\\s+resultados\\s+", "").trim();
+        String cleanedParam = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
 
         LocalDate date;
         if (cleanedParam.isEmpty()) {
@@ -352,19 +361,37 @@ public class CommandHandler {
         }
     }
 
-    // Utilitário de parse de data (copiado do controller original)
+    // ========================= Parser de data (refatorado) =========================
+
     private LocalDate parseDateParam(String param) {
         if (param == null || param.isBlank()) return null;
-        LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         String lower = param.toLowerCase().trim();
-        if (lower.equals("hoje") || lower.equals("de hoje")) return today;
-        if (lower.equals("ontem") || lower.equals("de ontem")) return today.minusDays(1);
+
+        // Datas relativas
+        if (lower.equals("hoje") || lower.equals("de hoje")) {
+            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
+        }
+        if (lower.equals("ontem") || lower.equals("de ontem")) {
+            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE)).minusDays(1);
+        }
 
         String cleaned = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
 
+        // Tenta extrair padrão com regex
+        LocalDate parsed = tryParseWithPattern(cleaned);
+        if (parsed != null) return parsed;
+
+        // Tentativas finais com formatos comuns
+        parsed = tryParseFallback(param, "dd/MM", "dd-MM");
+        if (parsed != null) return parsed;
+
+        return null;
+    }
+
+    private LocalDate tryParseWithPattern(String cleaned) {
         Pattern pattern =
                 Pattern.compile("\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
-        java.util.regex.Matcher matcher = pattern.matcher(cleaned);
+        Matcher matcher = pattern.matcher(cleaned);
         if (matcher.find()) {
             String dateStr = matcher.group(1).trim();
             try {
@@ -375,35 +402,31 @@ public class CommandHandler {
                     DateTimeFormatter fmt =
                             new DateTimeFormatterBuilder()
                                     .appendPattern(dateStr.contains("/") ? "dd/MM" : "dd-MM")
-                                    .parseDefaulting(java.time.temporal.ChronoField.YEAR, 2026)
+                                    .parseDefaulting(ChronoField.YEAR, 2026)
                                     .toFormatter();
                     return LocalDate.parse(dateStr, fmt);
                 }
-            } catch (DateTimeParseException ignored) {
-                // fall through
+            } catch (DateTimeParseException e) {
+                // Apenas ignora e tenta o próximo formato
+                log.debug("Falha ao parsear data com pattern: {}", dateStr);
             }
         }
-        try {
-            return LocalDate.parse(param);
-        } catch (DateTimeParseException ignored) {
-        }
-        try {
-            DateTimeFormatter fmt =
-                    new DateTimeFormatterBuilder()
-                            .appendPattern("dd/MM")
-                            .parseDefaulting(java.time.temporal.ChronoField.YEAR, 2026)
-                            .toFormatter();
-            return LocalDate.parse(param, fmt);
-        } catch (DateTimeParseException ignored) {
-        }
-        try {
-            DateTimeFormatter fmt =
-                    new DateTimeFormatterBuilder()
-                            .appendPattern("dd-MM")
-                            .parseDefaulting(java.time.temporal.ChronoField.YEAR, 2026)
-                            .toFormatter();
-            return LocalDate.parse(param, fmt);
-        } catch (DateTimeParseException ignored) {
+        return null;
+    }
+
+    private LocalDate tryParseFallback(String param, String... patterns) {
+        for (String p : patterns) {
+            try {
+                DateTimeFormatter fmt =
+                        new DateTimeFormatterBuilder()
+                                .appendPattern(p)
+                                .parseDefaulting(ChronoField.YEAR, 2026)
+                                .toFormatter();
+                return LocalDate.parse(param, fmt);
+            } catch (DateTimeParseException e) {
+                // Apenas ignora e tenta o próximo formato
+                log.debug("Falha ao parsear data com padrão '{}'", p);
+            }
         }
         return null;
     }
