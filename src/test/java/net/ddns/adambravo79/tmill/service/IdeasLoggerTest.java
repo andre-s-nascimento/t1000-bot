@@ -45,7 +45,7 @@ class IdeasLoggerTest {
     }
 
     @Test
-    void deveCriarDiretorioSeNaoExistir() throws Exception {
+    void deveCriarDiretorioSeNaoExistir() {
         // Arrange
         Path deeperDir = tempDir.resolve("subdir").resolve("logs");
         IdeasLogger logger = new IdeasLogger();

@@ -43,7 +43,6 @@ public class MovieService {
      * @throws MovieNotFoundException se nenhum resultado for encontrado.
      */
     public MovieSearchResponse buscarFilme(String nome) {
-        // NOVO: sanitização básica
         String sanitized = nome.trim().replaceAll("[^\\p{L}\\p{N}\\s]", "");
         if (sanitized.length() < 3) {
             throw new MovieNotFoundException("Termo de busca muito curto: " + nome);
@@ -87,72 +86,98 @@ public class MovieService {
                     BotMessages.FALHA_BUSCAR_DETALHES_FILME + " para ID: " + id);
         }
 
-        // 🔥 Limitar elenco aos 5 primeiros nomes e exibir total restante
-        List<CastRecord> elencoCompleto = elencoFuture.join();
-        int totalCast = elencoCompleto.size();
-        String elenco =
-                elencoCompleto.stream()
+        // Formatação dos dados em métodos auxiliares para reduzir complexidade
+        String ano = formatYear(detalhes);
+        String bandeiras = formatFlags(detalhes);
+        String elenco = formatCast(elencoFuture.join());
+        String diretor = diretorFuture.join();
+        String streamings = streamingsFuture.join();
+        String easterEgg = easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse("");
+
+        String textoHtml =
+                buildResponseText(detalhes, diretor, elenco, ano, bandeiras, streamings, easterEgg);
+        String urlPoster = buildPosterUrl(detalhes);
+
+        return new MovieOrchestrationResponse(textoHtml, urlPoster);
+    }
+
+    // ========================= MÉTODOS AUXILIARES PARA FORMATAÇÃO =========================
+
+    private String formatYear(MovieRecord detalhes) {
+        if (detalhes.releaseDate() != null && detalhes.releaseDate().length() >= 4) {
+            return detalhes.releaseDate().substring(0, 4);
+        }
+        return BotMessages.TBA;
+    }
+
+    private String formatFlags(MovieRecord detalhes) {
+        if (detalhes.originCountry() == null || detalhes.originCountry().isEmpty()) {
+            return BotMessages.GLOBE_EMOJI;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String code : detalhes.originCountry()) {
+            getFlagEmoji(code).ifPresent(sb::append);
+        }
+        return sb.isEmpty() ? BotMessages.GLOBE_EMOJI : sb.toString();
+    }
+
+    private String formatCast(List<CastRecord> castList) {
+        int totalCast = castList.size();
+        String castNames =
+                castList.stream()
                         .limit(5)
                         .map(c -> c.name() != null ? c.name() : "")
                         .collect(Collectors.joining(", "));
         if (totalCast > 5) {
-            elenco += " e mais " + (totalCast - 5) + " atores";
+            castNames += " e mais " + (totalCast - 5) + " atores";
         }
+        return castNames;
+    }
 
-        String diretor = diretorFuture.join();
-        String streamings = streamingsFuture.join();
-
-        String ano =
-                (detalhes.releaseDate() != null && detalhes.releaseDate().length() >= 4)
-                        ? detalhes.releaseDate().substring(0, 4)
-                        : BotMessages.TBA;
-
-        String bandeiras = BotMessages.GLOBE_EMOJI;
-        if (detalhes.originCountry() != null && !detalhes.originCountry().isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            for (String code : detalhes.originCountry()) {
-                getFlagEmoji(code).ifPresent(sb::append);
-            }
-            if (!sb.isEmpty()) bandeiras = sb.toString();
-        }
-
+    private String buildResponseText(
+            MovieRecord detalhes,
+            String diretor,
+            String elenco,
+            String ano,
+            String bandeiras,
+            String streamings,
+            String easterEgg) {
+        String diretorFinal = (diretor != null && !diretor.isBlank()) ? diretor : BotMessages.N_A;
         String linkTmdb = "https://www.themoviedb.org/movie/" + detalhes.id();
 
-        String textoHtml =
-                String.format(
-                        """
-            🎬 <b>%s</b>
-            <i>%s</i>
-            📅 Ano: %s %s
-            ⭐ <b>Nota:</b> <a href="%s">%.1f/10</a>
+        return String.format(
+                """
+        🎬 <b>%s</b>
+        <i>%s</i>
+        📅 Ano: %s %s
+        ⭐ <b>Nota:</b> <a href="%s">%.1f/10</a>
 
-            🎬 <b>Diretor:</b> %s
+        🎬 <b>Diretor:</b> %s
 
-            👥 <b>Elenco:</b> %s
+        👥 <b>Elenco:</b> %s
 
-            📖 <b>Sinopse:</b> %s
+        📖 <b>Sinopse:</b> %s
 
-            📺 <b>Onde assistir:</b> %s%s
-            """,
-                        detalhes.title().toUpperCase(),
-                        escapeHtml(
-                                detalhes.originalTitle() != null ? detalhes.originalTitle() : ""),
-                        ano,
-                        bandeiras,
-                        linkTmdb,
-                        detalhes.voteAverage(),
-                        (diretor != null && !diretor.isBlank()) ? diretor : BotMessages.N_A,
-                        elenco,
-                        escapeHtml(detalhes.overview()),
-                        streamings,
-                        easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse(""));
+        📺 <b>Onde assistir:</b> %s%s
+        """,
+                detalhes.title().toUpperCase(),
+                escapeHtml(detalhes.originalTitle() != null ? detalhes.originalTitle() : ""),
+                ano,
+                bandeiras,
+                linkTmdb,
+                detalhes.voteAverage(),
+                diretorFinal,
+                elenco,
+                escapeHtml(detalhes.overview()),
+                streamings,
+                easterEgg);
+    }
 
-        String urlPoster =
-                (detalhes.posterPath() != null && !detalhes.posterPath().isBlank())
-                        ? "https://image.tmdb.org/t/p/w500" + detalhes.posterPath()
-                        : "";
-
-        return new MovieOrchestrationResponse(textoHtml, urlPoster);
+    private String buildPosterUrl(MovieRecord detalhes) {
+        if (detalhes.posterPath() != null && !detalhes.posterPath().isBlank()) {
+            return "https://image.tmdb.org/t/p/w500" + detalhes.posterPath();
+        }
+        return "";
     }
 
     /** Converte código de país ISO em emoji de bandeira. */
