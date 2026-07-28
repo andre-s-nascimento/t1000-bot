@@ -27,13 +27,11 @@ class WatchmodeClientTest {
         headersSpec = mock(RequestHeadersSpec.class);
         responseSpec = mock(ResponseSpec.class);
 
-        // Usa doReturn para evitar problemas de tipo com genéricos
         doReturn(requestSpec).when(restClient).get();
         doReturn(headersSpec).when(requestSpec).uri(anyString());
         doReturn(responseSpec).when(headersSpec).retrieve();
         doReturn("{}").when(responseSpec).body(String.class);
 
-        // Cria o cliente real e injeta o restClient mock
         watchmodeClient = new WatchmodeClient("fake-api-key");
         ReflectionTestUtils.setField(watchmodeClient, "restClient", restClient);
     }
@@ -58,7 +56,6 @@ class WatchmodeClientTest {
           { "region": "BR", "name": "Prime Video" }
         ]
         """;
-        // Usa doReturn para cada chamada de body
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -95,6 +92,57 @@ class WatchmodeClientTest {
         verify(requestSpec)
                 .uri("/search/title/?search_field=tmdb_tv_id&search_value=2&apiKey=fake-api-key");
         verify(requestSpec).uri("/title/67890/sources/?apiKey=fake-api-key");
+    }
+
+    // ===================== Testes para nome vazio ou nulo =====================
+
+    @Test
+    void getProviders_comMovie_ignoraProvedorComNomeVazio() {
+        String searchJson =
+                """
+        {
+          "title_results": [
+            { "id": 12345 }
+          ]
+        }
+        """;
+        String sourcesJson =
+                """
+        [
+          { "region": "BR", "name": "Netflix" },
+          { "region": "BR", "name": "" },
+          { "region": "BR", "name": "Prime Video" }
+        ]
+        """;
+        doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
+
+        String result = watchmodeClient.getProviders(1L, "movie");
+
+        assertThat(result).isEqualTo("Netflix, Prime Video");
+    }
+
+    @Test
+    void getProviders_comMovie_ignoraProvedorComNomeNull() {
+        String searchJson =
+                """
+        {
+          "title_results": [
+            { "id": 12345 }
+          ]
+        }
+        """;
+        String sourcesJson =
+                """
+        [
+          { "region": "BR", "name": null },
+          { "region": "BR", "name": "Prime Video" }
+        ]
+        """;
+        doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
+
+        String result = watchmodeClient.getProviders(1L, "movie");
+
+        assertThat(result).isEqualTo("Prime Video");
     }
 
     // ===================== Sem provedores BR =====================
@@ -211,6 +259,26 @@ class WatchmodeClientTest {
         assertThat(result).isNull();
     }
 
+    // ===================== Novo teste: JSON inválido para sources =====================
+
+    @Test
+    void getProviders_sourcesJsonInvalido_retornaNull() {
+        String searchJson =
+                """
+        {
+          "title_results": [
+            { "id": 123 }
+          ]
+        }
+        """;
+        String sourcesJson = "{ invalid json }";
+        doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
+
+        String result = watchmodeClient.getProviders(1L, "movie");
+
+        assertThat(result).isNull();
+    }
+
     // ===================== Exceção genérica (erro na API) =====================
 
     @Test
@@ -222,7 +290,7 @@ class WatchmodeClientTest {
         assertThat(result).isNull();
     }
 
-    // ===================== Exceção no parse JSON =====================
+    // ===================== Exceção no parse JSON (busca) =====================
 
     @Test
     void getProviders_jsonInvalido_retornaNull() {
@@ -233,11 +301,33 @@ class WatchmodeClientTest {
         assertThat(result).isNull();
     }
 
-    // ===================== Construtor padrão (cobertura) =====================
+    // ===================== Construtor =====================
 
     @Test
     void construtorPadrao_deveFuncionar() {
         WatchmodeClient client = new WatchmodeClient("chave-teste");
         assertThat(client).isNotNull();
+    }
+
+    @Test
+    void getProviders_comMovie_semId_retornaNull() {
+        String searchJson =
+                """
+        {
+          "title_results": [
+            { }
+          ]
+        }
+        """;
+        // Não precisa de sourcesJson porque vai retornar null antes
+        doReturn(searchJson).when(responseSpec).body(String.class);
+
+        String result = watchmodeClient.getProviders(1L, "movie");
+
+        assertThat(result).isNull();
+        verify(requestSpec)
+                .uri(
+                        "/search/title/?search_field=tmdb_movie_id&search_value=1&apiKey=fake-api-key");
+        verify(requestSpec, never()).uri(contains("/sources/"));
     }
 }

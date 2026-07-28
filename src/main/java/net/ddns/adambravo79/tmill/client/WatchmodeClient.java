@@ -32,61 +32,27 @@ public class WatchmodeClient {
             unless = "#result == null")
     public String getProviders(long tmdbId, String type) {
         try {
-            String searchField = "movie".equals(type) ? "tmdb_movie_id" : "tmdb_tv_id";
-            String searchEndpoint =
-                    "/search/title/?search_field="
-                            + searchField
-                            + "&search_value="
-                            + tmdbId
-                            + "&apiKey="
-                            + apiKey;
-
-            log.debug("Consultando Watchmode: {}", searchEndpoint);
-
-            // Lê como String para evitar problemas de desserialização
-            String searchResponse =
-                    restClient.get().uri(searchEndpoint).retrieve().body(String.class);
-
-            if (searchResponse == null) {
+            JsonNode searchResult = fetchSearchResult(tmdbId, type);
+            if (searchResult == null) {
                 return null;
             }
 
-            JsonNode searchResult = mapper.readTree(searchResponse);
-            if (searchResult.path("title_results").isEmpty()) {
+            long watchmodeId = extractWatchmodeId(searchResult);
+            if (watchmodeId == -1) {
                 return null;
             }
 
-            long watchmodeId = searchResult.path("title_results").get(0).path("id").asLong();
-
-            String sourcesEndpoint = "/title/" + watchmodeId + "/sources/?apiKey=" + apiKey;
-            String sourcesResponse =
-                    restClient.get().uri(sourcesEndpoint).retrieve().body(String.class);
-
-            if (sourcesResponse == null) {
+            JsonNode sources = fetchSources(watchmodeId);
+            if (sources == null || !sources.isArray()) {
                 return null;
             }
 
-            JsonNode sources = mapper.readTree(sourcesResponse);
-            if (!sources.isArray()) {
+            List<String> providers = extractBrazilianProviders(sources);
+            if (providers.isEmpty()) {
                 return null;
             }
 
-            List<String> brProviders = new ArrayList<>();
-            for (JsonNode source : sources) {
-                String region = source.path("region").asText();
-                if ("BR".equalsIgnoreCase(region)) {
-                    String name = source.path("name").asText();
-                    if (name != null && !name.isBlank()) {
-                        brProviders.add(name);
-                    }
-                }
-            }
-
-            if (brProviders.isEmpty()) {
-                return null;
-            }
-
-            String result = String.join(", ", brProviders);
+            String result = String.join(", ", providers);
             log.info("✅ Watchmode: {} ID {} -> {}", type, tmdbId, result);
             return result;
 
@@ -94,5 +60,72 @@ public class WatchmodeClient {
             log.warn("Erro ao consultar Watchmode para {} ID {}: {}", type, tmdbId, e.getMessage());
             return null;
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Métodos privados auxiliares
+    // ------------------------------------------------------------------------
+
+    private JsonNode fetchSearchResult(long tmdbId, String type) {
+        String searchField = "movie".equals(type) ? "tmdb_movie_id" : "tmdb_tv_id";
+        String endpoint =
+                String.format(
+                        "/search/title/?search_field=%s&search_value=%d&apiKey=%s",
+                        searchField, tmdbId, apiKey);
+
+        log.debug("Consultando Watchmode: {}", endpoint);
+
+        String response = restClient.get().uri(endpoint).retrieve().body(String.class);
+
+        if (response == null) {
+            return null;
+        }
+
+        try {
+            JsonNode root = mapper.readTree(response);
+            JsonNode results = root.path("title_results");
+            return results.isEmpty() ? null : root;
+        } catch (Exception e) {
+            log.warn("Erro ao parsear resposta de busca: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private long extractWatchmodeId(JsonNode searchResult) {
+        JsonNode results = searchResult.path("title_results");
+        // results nunca é vazio (validado em fetchSearchResult)
+        return results.get(0).path("id").asLong(-1);
+    }
+
+    private JsonNode fetchSources(long watchmodeId) {
+        String endpoint = String.format("/title/%d/sources/?apiKey=%s", watchmodeId, apiKey);
+
+        String response = restClient.get().uri(endpoint).retrieve().body(String.class);
+
+        if (response == null) {
+            return null;
+        }
+
+        try {
+            return mapper.readTree(response);
+        } catch (Exception e) {
+            log.warn("Erro ao parsear fontes: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<String> extractBrazilianProviders(JsonNode sources) {
+        List<String> brProviders = new ArrayList<>();
+        for (JsonNode source : sources) {
+            // Único if com todas as condições – sem continue (S135)
+            if ("BR".equalsIgnoreCase(source.path("region").asText(""))
+                    && !source.path("name").isNull()) {
+                String name = source.path("name").asText();
+                if (!name.isBlank()) {
+                    brProviders.add(name);
+                }
+            }
+        }
+        return brProviders;
     }
 }

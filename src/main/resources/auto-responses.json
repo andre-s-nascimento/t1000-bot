@@ -1,47 +1,49 @@
 {
-  "frase-especial": {
-    "triggers": [
-      "cada dia terminado é a esperança renovada do mundo ser mudado"
-    ],
-    "response": "Tá bom, Tá bom... Aham GUS... Senta lá... 🙄",
-    "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/xuxa-aham.gif"
-  },
-  "saudacao": {
-    "triggers": ["bom dia"],
-    "response": "BOOOOOM DIAAAAAA... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
-    "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
-    "timeRange": {
-      "start": "06:00",
-      "end": "12:00"
+  "rules": {
+    "frase-especial": {
+      "triggers": [
+        "cada dia terminado é a esperança renovada do mundo ser mudado"
+      ],
+      "response": "Tá bom, Tá bom... Aham GUS... Senta lá... 🙄",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/xuxa-aham.gif"
     },
-    "userResponse": {
-      "1241644136": " AQUI É FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
+    "saudacao": {
+      "triggers": ["bom dia"],
+      "response": "BOOOOOM DIAAAAAA... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      },
+      "userResponse": {
+        "1241644136": " AQUI É FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
+      },
+      "userAnimation": {
+        "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif"
+      }
     },
-    "userAnimation": {
-      "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif"
+    "saudacion": {
+      "triggers": ["buenos dias", "buen dia", "buenos días"],
+      "response": "BUUEEENOS DIAAAAAAS... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      },
+      "userResponse": {
+        "1241644136": " PERO ACA ÉS FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
+      },
+      "userAnimation": {
+        "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif"
+      }
+    },
+    "tchau": {
+      "triggers": ["tchau", "ate logo", "flw"],
+      "response": "Hasta la vista, baby! 👋😎"
+    },
+    "obrigado": {
+      "triggers": ["obrigado", "valeu", "obg", "vlw", "obrigada"],
+      "response": "Por nada! Isto fica feliz em ser útil. 🤖"
     }
-  },
-  "saudacion": {
-    "triggers": ["buenos dias", "buen dia", "buenos días"],
-    "response": "BUUEEENOS DIAAAAAAS... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
-    "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
-    "timeRange": {
-      "start": "06:00",
-      "end": "12:00"
-    },
-    "userResponse": {
-      "1241644136": " PERO ACA ÉS FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
-    },
-    "userAnimation": {
-      "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif"
-    }
-  },
-  "tchau": {
-    "triggers": ["tchau", "ate logo", "flw"],
-    "response": "Hasta la vista, baby! 👋😎"
-  },
-  "obrigado": {
-    "triggers": ["obrigado", "valeu", "obg", "vlw", "obrigada"],
-    "response": "Por nada! Isto fica feliz em ser útil. 🤖"
   }
 }

@@ -29,13 +29,12 @@ class MessageStoreServiceTest {
 
         verify(jdbcTemplate)
                 .update(
-                        eq(
-                                "INSERT INTO messages (chat_id, user_id, user_name, text) VALUES"
-                                        + " (?, ?, ?, ?)"),
-                        eq(CHAT_ID),
-                        eq(USER_ID),
-                        eq(USER_NAME),
-                        eq(TEXT));
+                        "INSERT INTO messages (chat_id, user_id, user_name, text) VALUES"
+                                + " (?, ?, ?, ?)",
+                        CHAT_ID,
+                        USER_ID,
+                        USER_NAME,
+                        TEXT);
     }
 
     @Test

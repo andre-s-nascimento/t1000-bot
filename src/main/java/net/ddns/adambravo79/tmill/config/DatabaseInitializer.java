@@ -2,28 +2,28 @@ package net.ddns.adambravo79.tmill.config;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
-@Slf4j
 @Component
 public class DatabaseInitializer {
 
-    private static final String RELEASES_NOTIFIED = "releases_notified";
-
-    // Whitelists para garantir segurança
-    private static final Set<String> ALLOWED_TABLES = Set.of(RELEASES_NOTIFIED);
-    private static final Set<String> ALLOWED_COLUMNS =
-            Set.of("title", "overview", "rating", "providers", "poster_path");
-    private static final Set<String> ALLOWED_TYPES = Set.of("TEXT", "REAL");
-
+    private static final Logger log = LoggerFactory.getLogger(DatabaseInitializer.class);
     private final JdbcTemplate jdbcTemplate;
+
+    // Static map of column → full, hard‑coded ALTER statement (no dynamic parts)
+    private static final Map<String, String> RELEASE_ALTER_STATEMENTS =
+            Map.of(
+                    "title", "ALTER TABLE releases_notified ADD COLUMN title TEXT",
+                    "overview", "ALTER TABLE releases_notified ADD COLUMN overview TEXT",
+                    "rating", "ALTER TABLE releases_notified ADD COLUMN rating REAL",
+                    "providers", "ALTER TABLE releases_notified ADD COLUMN providers TEXT",
+                    "poster_path", "ALTER TABLE releases_notified ADD COLUMN poster_path TEXT");
 
     public DatabaseInitializer(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -31,103 +31,98 @@ public class DatabaseInitializer {
 
     @PostConstruct
     public void init() {
-        // Tabela transcripts
-        jdbcTemplate.execute(
-                """
-            CREATE TABLE IF NOT EXISTS transcripts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                user_name TEXT,
-                text TEXT NOT NULL,
-                raw_text TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """);
+        criarTabelaTranscripts();
+        criarTabelaReleasesNotified();
+        adicionarColunaRawText();
+        adicionarColunasReleases();
+    }
 
-        // Verifica/adiciona coluna raw_text
+    private void criarTabelaTranscripts() {
+        String sql =
+                """
+        CREATE TABLE IF NOT EXISTS transcripts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            user_name TEXT,
+            text TEXT NOT NULL,
+            raw_text TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """;
+        try {
+            jdbcTemplate.execute(sql);
+        } catch (Exception e) {
+            log.error("Erro ao criar tabela transcripts", e);
+        }
+    }
+
+    private void criarTabelaReleasesNotified() {
+        String sql =
+                """
+        CREATE TABLE IF NOT EXISTS releases_notified (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tmdb_id INTEGER NOT NULL,
+            media_type TEXT NOT NULL,
+            release_date TEXT NOT NULL,
+            title TEXT,
+            overview TEXT,
+            rating REAL,
+            providers TEXT,
+            poster_path TEXT
+        )
+        """;
+        try {
+            jdbcTemplate.execute(sql);
+        } catch (Exception e) {
+            log.error("Erro ao criar tabela releases_notified", e);
+        }
+    }
+
+    private void adicionarColunaRawText() {
         try {
             List<Map<String, Object>> columns =
                     jdbcTemplate.queryForList("PRAGMA table_info(transcripts)");
             boolean hasRawText =
-                    columns.stream().anyMatch(row -> "raw_text".equals(row.get("name")));
+                    columns.stream().anyMatch(col -> "raw_text".equals(col.get("name")));
             if (!hasRawText) {
                 jdbcTemplate.execute("ALTER TABLE transcripts ADD COLUMN raw_text TEXT");
-                log.info("Coluna raw_text adicionada à tabela transcripts");
             }
         } catch (Exception e) {
-            log.error("Erro ao verificar/adicionar coluna raw_text: {}", e.getMessage());
+            log.error("Erro ao verificar/adicionar coluna raw_text", e);
         }
-
-        // Tabela releases_notified
-        jdbcTemplate.execute(
-                """
-            CREATE TABLE IF NOT EXISTS releases_notified (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tmdb_id INTEGER NOT NULL,
-                media_type TEXT NOT NULL,
-                release_date TEXT NOT NULL,
-                title TEXT,
-                overview TEXT,
-                rating REAL,
-                providers TEXT,
-                poster_path TEXT,
-                notified_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """);
-
-        // Migrações
-        ensureColumnExists(RELEASES_NOTIFIED, "title", "TEXT");
-        ensureColumnExists(RELEASES_NOTIFIED, "overview", "TEXT");
-        ensureColumnExists(RELEASES_NOTIFIED, "rating", "REAL");
-        ensureColumnExists(RELEASES_NOTIFIED, "providers", "TEXT");
-        ensureColumnExists(RELEASES_NOTIFIED, "poster_path", "TEXT");
-
-        log.info("Tabela releases_notified verificada/criada");
     }
 
-    private void ensureColumnExists(String table, String column, String type) {
-        // ✅ Validação de segurança (whitelist)
-        if (!ALLOWED_TABLES.contains(table)) {
-            log.warn("Tabela não permitida para migração: {}", table);
-            return;
-        }
-        if (!ALLOWED_COLUMNS.contains(column)) {
-            log.warn("Coluna não permitida para migração: {}", column);
-            return;
-        }
-        if (!ALLOWED_TYPES.contains(type)) {
-            log.warn("Tipo não permitido para migração: {}", type);
-            return;
-        }
-
+    private void adicionarColunasReleases() {
         try {
-            // Chamada ao método seguro que executa a SQL
-            boolean exists = columnExists(table, column);
-            if (!exists) {
-                addColumn(table, column, type);
-                log.info("Coluna {} adicionada à tabela {}", column, table);
+            List<Map<String, Object>> columns =
+                    jdbcTemplate.queryForList("PRAGMA table_info(releases_notified)");
+            // Use Stream.toList() instead of Collectors.toList()
+            List<String> existing =
+                    columns.stream().map(col -> col.get("name").toString()).toList();
+
+            for (Map.Entry<String, String> entry : RELEASE_ALTER_STATEMENTS.entrySet()) {
+                String columnName = entry.getKey();
+                if (!existing.contains(columnName)) {
+                    // Extract the actual execution into a separate method
+                    executeAlterStatement(columnName, entry.getValue());
+                }
             }
         } catch (Exception e) {
-            log.warn(
-                    "Não foi possível verificar/adicionar coluna {}: {}",
-                    column,
-                    LogSanitizer.sanitize(e.getMessage()));
+            log.error("Erro ao verificar colunas da tabela releases_notified", e);
         }
     }
 
-    /** Verifica se uma coluna existe em uma tabela. Os parâmetros são validados antes da chamada. */
-    @SuppressWarnings("squid:S2077") // SQL dinâmico seguro com validação de whitelist
-    private boolean columnExists(String table, String column) {
-        String sql = "PRAGMA table_info(" + table + ")";
-        List<Map<String, Object>> columns = jdbcTemplate.queryForList(sql);
-        return columns.stream().anyMatch(row -> column.equals(row.get("name")));
-    }
-
-    /** Adiciona uma coluna a uma tabela. Os parâmetros são validados antes da chamada. */
-    @SuppressWarnings("squid:S2077") // SQL dinâmico seguro com validação de whitelist
-    private void addColumn(String table, String column, String type) {
-        String sql = String.format("ALTER TABLE %s ADD COLUMN %s %s", table, column, type);
-        jdbcTemplate.execute(sql);
+    /**
+     * Executes a static ALTER TABLE statement and logs success/failure. This method contains its own
+     * try-catch, so the caller does not have a nested try block.
+     */
+    private void executeAlterStatement(String columnName, String sql) {
+        try {
+            jdbcTemplate.execute(sql);
+            log.info("Coluna {} adicionada à tabela releases_notified", columnName);
+        } catch (Exception e) {
+            log.error("Erro ao adicionar coluna {} em releases_notified", columnName, e);
+        }
     }
 }
