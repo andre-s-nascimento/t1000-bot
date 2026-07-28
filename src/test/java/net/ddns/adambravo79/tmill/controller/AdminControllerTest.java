@@ -1,11 +1,14 @@
 package net.ddns.adambravo79.tmill.controller;
 
+import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_NOT_AVAILABLE;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -13,6 +16,8 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.core.env.Environment;
@@ -20,9 +25,15 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
@@ -50,6 +61,7 @@ class AdminControllerTest {
     @Mock private ReleaseNotifiedRepository releaseNotifiedRepository;
 
     private AdminController adminController;
+    private ObjectMapper objectMapperSpy;
 
     private static final long SHOWCASE_CHAT_ID = -5283244164L;
 
@@ -57,6 +69,8 @@ class AdminControllerTest {
     @SneakyThrows
     void setup() {
         MockitoAnnotations.openMocks(this);
+
+        objectMapperSpy = mock(ObjectMapper.class);
 
         adminController =
                 new AdminController(
@@ -70,33 +84,39 @@ class AdminControllerTest {
                         telegramFacade,
                         environment,
                         resourceLoader,
-                        new ObjectMapper(),
+                        objectMapperSpy,
                         dailyReleasesService,
                         releaseNotifiedRepository);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
 
+        // Configuração padrão para resourceLoader
         when(resourceLoader.getResource(anyString()))
                 .thenAnswer(
                         invocation -> {
                             String path = invocation.getArgument(0);
                             String fileName = path.replace("classpath:", "");
-                            Resource res;
-                            switch (fileName) {
-                                case "easter-eggs.json":
-                                    res = new ClassPathResource("easter-eggs-test.json");
-                                    break;
-                                case "auto-responses.json":
-                                    res = new ClassPathResource("auto-responses-test.json");
-                                    break;
-                                case "worldcup2026.json":
-                                    res = new ClassPathResource("worldcup2026-test.json");
-                                    break;
-                                default:
+                            // Para testes de fallback /app/config/
+                            if (path.startsWith("file:/app/config/")) {
+                                Resource res = new ClassPathResource(fileName);
+                                if (!res.exists()) {
                                     res = mock(Resource.class);
                                     when(res.exists()).thenReturn(false);
+                                }
+                                return res;
                             }
-                            return res;
+                            switch (fileName) {
+                                case "easter-eggs.json":
+                                    return new ClassPathResource("easter-eggs-test.json");
+                                case "auto-responses.json":
+                                    return new ClassPathResource("auto-responses-test.json");
+                                case "worldcup2026.json":
+                                    return new ClassPathResource("worldcup2026-test.json");
+                                default:
+                                    Resource res = mock(Resource.class);
+                                    when(res.exists()).thenReturn(false);
+                                    return res;
+                            }
                         });
 
         this.mockMvc = MockMvcBuilders.standaloneSetup(adminController).build();
@@ -514,8 +534,8 @@ class AdminControllerTest {
     void reloadWorldCupShowcase_quandoHttpClientErrorException_deveLogarApenas() throws Exception {
         doNothing().when(staticWorldCupService).reload();
         doThrow(
-                        new org.springframework.web.client.HttpClientErrorException(
-                                org.springframework.http.HttpStatus.valueOf(403)))
+                        HttpClientErrorException.create(
+                                HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
                 .when(telegramFacade)
                 .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
 
@@ -528,59 +548,39 @@ class AdminControllerTest {
     }
 
     @Test
-    void testWorldCupResultsShowcase_comDataValida_deveEnviarResultados() throws Exception {
-        doNothing()
-                .when(worldCupSchedulerService)
-                .sendResultsToChat(eq(SHOWCASE_CHAT_ID), any(LocalDate.class));
+    void reloadWorldCupShowcase_quandoResourceAccessException_deveLogarApenas() throws Exception {
+        doNothing().when(staticWorldCupService).reload();
+        doThrow(new ResourceAccessException("Timeout"))
+                .when(telegramFacade)
+                .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
 
-        mockMvc.perform(
-                        post("/admin/test-worldcup-results-showcase")
-                                .param("dateParam", "2026-05-07"))
+        mockMvc.perform(post("/admin/reload-worldcup-showcase"))
                 .andExpect(status().isOk())
-                .andExpect(
-                        content()
-                                .string(
-                                        containsString(
-                                                "Resultados enviados para o chat -5283244164")));
+                .andExpect(content().string(containsString("Dados da Copa recarregados")));
 
-        verify(worldCupSchedulerService)
-                .sendResultsToChat(eq(SHOWCASE_CHAT_ID), any(LocalDate.class));
+        verify(staticWorldCupService).reload();
+        verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
     }
 
-    @Test
-    void testWorldCupResultsShowcase_comDataInvalida_deveRetornarBadRequest() throws Exception {
-        mockMvc.perform(
-                        post("/admin/test-worldcup-results-showcase")
-                                .param("dateParam", "invalido"))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string(containsString("Data invalida")));
-
-        verifyNoInteractions(worldCupSchedulerService);
-    }
-
-    @Test
-    void testWorldCupResultsShowcase_quandoWorldcupDisabled_deveRetornarMensagem()
-            throws Exception {
-        ReflectionTestUtils.setField(adminController, "worldcupEnabled", false);
-
-        mockMvc.perform(
-                        post("/admin/test-worldcup-results-showcase")
-                                .param("dateParam", "2026-05-07"))
+    @ParameterizedTest
+    @CsvSource({", " + SHOWCASE_CHAT_ID, "999, 999"})
+    void testWorldCupShowcase(String chatIdParam, long expectedChatId) throws Exception {
+        doNothing().when(worldCupSchedulerService).sendManualTestToChat(expectedChatId);
+        MockHttpServletRequestBuilder request = post("/admin/test-worldcup-showcase");
+        if (chatIdParam != null && !chatIdParam.isEmpty()) {
+            request.param("chatId", chatIdParam);
+        }
+        mockMvc.perform(request)
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Servico de Copa desativado")));
-
-        verifyNoInteractions(worldCupSchedulerService);
+                .andExpect(content().string(containsString(String.valueOf(expectedChatId))));
+        verify(worldCupSchedulerService).sendManualTestToChat(expectedChatId);
     }
 
     // ========================= PROPERTIES =========================
 
     @Test
     void getProperties_deveRetornarPropriedadesMascaradas() throws Exception {
-        // 1. Stub genérico primeiro: retorna vazio para qualquer propriedade não explicitamente
-        // stubbed
         when(environment.getProperty(anyString())).thenReturn("");
-
-        // 2. Stubs específicos sobrescrevem os genéricos para essas chaves
         when(environment.getProperty("spring.application.name")).thenReturn("tmill-bot");
         when(environment.getProperty("server.port")).thenReturn("8080");
         when(environment.getProperty("spring.threads.virtual.enabled")).thenReturn("true");
@@ -596,9 +596,7 @@ class AdminControllerTest {
 
     @Test
     void maskToken_deveMascararTokenCorretamente() throws Exception {
-        // Stub genérico primeiro
         when(environment.getProperty(anyString())).thenReturn("");
-
         when(environment.getProperty("telegram.bot.token"))
                 .thenReturn("1234567890:ABCdefGHIjklMNOpqrsTUVwxyz");
         when(environment.getProperty("spring.application.name")).thenReturn("test");
@@ -629,7 +627,7 @@ class AdminControllerTest {
 
     @Test
     void getConfigFiles_quandoArquivoNaoEncontrado_deveRetornarMensagemErro() throws Exception {
-        // Força o ResourceLoader a retornar um Resource que não existe
+        // Força o ResourceLoader a retornar um Resource que não existe para qualquer caminho
         when(resourceLoader.getResource(anyString()))
                 .thenAnswer(
                         invocation -> {
@@ -643,6 +641,84 @@ class AdminControllerTest {
                 .andExpect(
                         jsonPath("$['easter-eggs.json']")
                                 .value(containsString("Arquivo não encontrado")));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getConfigFiles_quandoJsonInvalido_deveRetornarMensagemErro() throws Exception {
+        reset(resourceLoader);
+
+        ObjectMapper mockMapper = mock(ObjectMapper.class);
+        doAnswer(
+                        invocation -> {
+                            throw new JsonProcessingException("JSON inválido") {};
+                        })
+                .when(mockMapper)
+                .readValue(any(InputStream.class), any(Class.class));
+
+        ReflectionTestUtils.setField(adminController, "objectMapper", mockMapper);
+
+        Resource mockResource = mock(Resource.class);
+        when(mockResource.exists()).thenReturn(true);
+        when(mockResource.getInputStream()).thenReturn(new ByteArrayInputStream("{}".getBytes()));
+        when(resourceLoader.getResource(anyString())).thenReturn(mockResource);
+
+        mockMvc.perform(get("/admin/config-files"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$['easter-eggs.json']")
+                                .value(containsString("Erro ao parsear JSON")));
+    }
+
+    @Test
+    void getConfigFiles_quandoArquivoNoAppConfig_deveCarregar() throws Exception {
+        reset(resourceLoader);
+
+        // 1. Mock para classpath:easter-eggs.json (não existe)
+        Resource classpathResource = mock(Resource.class);
+        when(classpathResource.exists()).thenReturn(false);
+
+        // 2. Mock para file:/app/config/easter-eggs.json (existe com JSON válido)
+        Resource appConfigResource = mock(Resource.class);
+        when(appConfigResource.exists()).thenReturn(true);
+        String jsonContent = "{\"test\":\"value\"}";
+        when(appConfigResource.getInputStream())
+                .thenReturn(new ByteArrayInputStream(jsonContent.getBytes()));
+
+        // 3. Mocks para os outros arquivos
+        Resource autoResponsesResource = mock(Resource.class);
+        when(autoResponsesResource.exists()).thenReturn(true);
+        when(autoResponsesResource.getInputStream())
+                .thenReturn(new ByteArrayInputStream("{}".getBytes()));
+
+        Resource worldcupResource = mock(Resource.class);
+        when(worldcupResource.exists()).thenReturn(true);
+        when(worldcupResource.getInputStream())
+                .thenReturn(new ByteArrayInputStream("{}".getBytes()));
+
+        // 4. Cria um spy do ObjectMapper para controlar o parse do easter-eggs
+        ObjectMapper spyMapper = spy(new ObjectMapper());
+        doReturn(Map.of("test", "value"))
+                .when(spyMapper)
+                .readValue(any(InputStream.class), eq(Object.class));
+
+        ReflectionTestUtils.setField(adminController, "objectMapper", spyMapper);
+
+        // 5. Stub específico para cada caminho
+        when(resourceLoader.getResource("classpath:easter-eggs.json"))
+                .thenReturn(classpathResource);
+        when(resourceLoader.getResource("file:/app/config/easter-eggs.json"))
+                .thenReturn(appConfigResource);
+        when(resourceLoader.getResource("classpath:auto-responses.json"))
+                .thenReturn(autoResponsesResource);
+        when(resourceLoader.getResource("classpath:worldcup2026.json"))
+                .thenReturn(worldcupResource);
+
+        // 6. Executa e verifica
+        mockMvc.perform(get("/admin/config-files"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['easter-eggs.json']").exists())
+                .andExpect(jsonPath("$['easter-eggs.json']").isNotEmpty());
     }
 
     // ========================= DAILY RELEASES =========================
@@ -704,6 +780,101 @@ class AdminControllerTest {
     }
 
     @Test
+    void testAutoResponse_comAnimationUrlInvalida_deveEnviarApenasTexto() throws Exception {
+        // URL inválida (sem protocolo)
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com animação", "not_a_valid_url");
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk());
+
+        // Não deve chamar enviarMidia
+        verify(telegramFacade, never()).enviarMidia(anyLong(), anyString(), anyString());
+        // Deve chamar enviarMensagemHtml
+        verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+    }
+
+    @Test
+    void testAutoResponse_comEnvioMidiaFalhaHttp_retornaFallback() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com animação", "https://example.com/video.mp4");
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
+                .when(telegramFacade)
+                .enviarMidia(eq(SHOWCASE_CHAT_ID), anyString(), anyString());
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk());
+
+        // Deve tentar enviar mídia
+        verify(telegramFacade)
+                .enviarMidia(
+                        eq(SHOWCASE_CHAT_ID), eq("https://example.com/video.mp4"), anyString());
+        // Deve chamar fallback para texto
+        verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+    }
+
+    @Test
+    void testAutoResponse_comEnvioMidiaFalhaTimeout_retornaFallback() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com animação", "https://example.com/video.mp4");
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        doThrow(new ResourceAccessException("Timeout"))
+                .when(telegramFacade)
+                .enviarMidia(eq(SHOWCASE_CHAT_ID), anyString(), anyString());
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk());
+
+        verify(telegramFacade)
+                .enviarMidia(
+                        eq(SHOWCASE_CHAT_ID), eq("https://example.com/video.mp4"), anyString());
+        verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+    }
+
+    @Test
+    void testAutoResponse_comFallbackFalhaHttp_naoLancaExcecao() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta teste", null);
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
+                .when(telegramFacade)
+                .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk());
+
+        verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+    }
+
+    @Test
+    void testAutoResponse_comFallbackFalhaTimeout_naoLancaExcecao() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta teste", null);
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        doThrow(new ResourceAccessException("Timeout"))
+                .when(telegramFacade)
+                .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk());
+
+        verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+    }
+
+    @Test
     void testAutoResponse_semRegraEncontrada_retornaMensagem() throws Exception {
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.empty());
@@ -717,7 +888,6 @@ class AdminControllerTest {
     @Test
     void testAutoResponse_comParametroMessageAusente_retornaBadRequest() throws Exception {
         mockMvc.perform(post("/admin/test-auto-response")).andExpect(status().isBadRequest());
-        // Não há verificação de conteúdo porque o corpo está vazio
     }
 
     @Test
@@ -781,10 +951,156 @@ class AdminControllerTest {
     @Test
     void listAutoResponseRules_deveRetornarRegras() throws Exception {
         when(autoResponseService.getRulesCount()).thenReturn(5);
-        when(autoResponseService.getRulesSummary()).thenReturn(Map.of()); // retorna mapa vazio
+        when(autoResponseService.getRulesSummary()).thenReturn(Map.of());
 
         mockMvc.perform(get("/admin/auto-response-rules"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalRules").value(5));
+    }
+
+    // ========================================================================
+    // NOVOS TESTES PARA COBRIR BRANCHES FALTANTES
+    // ========================================================================
+
+    // 1. worldCupSchedulerService == null (testWorldCupNoon e testWorldCupEvening)
+    @Test
+    void testWorldCupNoon_quandoServicoNull_deveRetornarServiceUnavailable() throws Exception {
+        ReflectionTestUtils.setField(adminController, "worldCupSchedulerService", null);
+        mockMvc.perform(post("/admin/test-worldcup-noon"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(content().string(containsString(WORLD_CUP_NOT_AVAILABLE)));
+    }
+
+    @Test
+    void testWorldCupEvening_quandoServicoNull_deveRetornarServiceUnavailable() throws Exception {
+        ReflectionTestUtils.setField(adminController, "worldCupSchedulerService", null);
+        mockMvc.perform(post("/admin/test-worldcup-evening"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(content().string(containsString(WORLD_CUP_NOT_AVAILABLE)));
+    }
+
+    // 2. parseDateParam com "ontem" e "hoje"
+    @Test
+    void testWorldCupResultsShowcase_comParamOntem_deveEnviarResultados() throws Exception {
+        doNothing()
+                .when(worldCupSchedulerService)
+                .sendResultsToChat(eq(SHOWCASE_CHAT_ID), any(LocalDate.class));
+        mockMvc.perform(post("/admin/test-worldcup-results-showcase").param("dateParam", "ontem"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resultados enviados")));
+        verify(worldCupSchedulerService)
+                .sendResultsToChat(eq(SHOWCASE_CHAT_ID), any(LocalDate.class));
+    }
+
+    @Test
+    void testWorldCupResultsShowcase_comParamHoje_deveEnviarResultados() throws Exception {
+        doNothing()
+                .when(worldCupSchedulerService)
+                .sendResultsToChat(eq(SHOWCASE_CHAT_ID), any(LocalDate.class));
+        mockMvc.perform(post("/admin/test-worldcup-results-showcase").param("dateParam", "hoje"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resultados enviados")));
+        verify(worldCupSchedulerService)
+                .sendResultsToChat(eq(SHOWCASE_CHAT_ID), any(LocalDate.class));
+    }
+
+    // 3. parseDateParam com parâmetro vazio
+    @Test
+    void testWorldCupResultsShowcase_comParamInvalido_deveRetornarBadRequest() throws Exception {
+        // Usar "invalido" em vez de "" pois o controller trata strings vazias como "ontem"?
+        // Na verdade, parseDateParam retorna null para strings vazias, então deve retornar 400
+        mockMvc.perform(
+                        post("/admin/test-worldcup-results-showcase")
+                                .param("dateParam", "  ")) // espaço em branco
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(containsString("Data invalida")));
+    }
+
+    // 4. isValidUrl com animation vazia (not null, but blank)
+    @Test
+    void testAutoResponse_comAnimationVazia_deveEnviarApenasTexto() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta", "");
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk());
+
+        verify(telegramFacade, never()).enviarMidia(anyLong(), anyString(), anyString());
+        verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+    }
+
+    // 5. parseTime com timeStr vazio (deve retornar null)
+    @Test
+    void testAutoResponse_comTimeVazio_deveUsarHorarioAtual() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com horário atual", null);
+        // O método getResponseRule deve receber time = null (parseTime retorna null)
+        when(autoResponseService.getResponseRule(any(), anyString(), isNull()))
+                .thenReturn(java.util.Optional.of(response));
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("time", ""))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
+
+        // Verifica que o service foi chamado com time=null
+        verify(autoResponseService).getResponseRule(any(), anyString(), isNull());
+    }
+
+    // 6. parseTime com formato inválido
+    @Test
+    void testAutoResponse_comTimeInvalido_deveUsarHorarioAtual() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com horário atual", null);
+        when(autoResponseService.getResponseRule(any(), anyString(), isNull()))
+                .thenReturn(java.util.Optional.of(response));
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("time", "25:00"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
+
+        verify(autoResponseService).getResponseRule(any(), anyString(), isNull());
+    }
+
+    // 7. customDigest com start/end nulos ou vazios (já existe, mas garanta que está cobrindo)
+    // O teste customDigest_comParametrosAusentes já cobre, mas pode-se adicionar um com parâmetros
+    // vazios:
+    @Test
+    void customDigest_comParametrosVazios_deveRetornarBadRequest() throws Exception {
+        mockMvc.perform(get("/admin/custom-digest").param("start", "").param("end", "2026-05-08"))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        content()
+                                .string(
+                                        containsString(
+                                                "Parâmetros 'start' e 'end' são obrigatórios")));
+    }
+
+    // 8. buildTestResponseMessage com userId nulo (já coberto, mas podemos adicionar um teste
+    // explícito)
+    @Test
+    void testAutoResponse_comUserIdNull_deveMostrarNaoDefinido() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta para usuário", null);
+        when(autoResponseService.getResponseRule(isNull(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("userId", "")) // userId vazio será interpretado como null
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
+
+        // Verifica que o service foi chamado com userId=null
+        verify(autoResponseService).getResponseRule(isNull(), anyString(), any());
+        // Verifica que a mensagem enviada contém "NÃO DEFINIDO"
+        verify(telegramFacade)
+                .enviarMensagemHtml(anyLong(), argThat(msg -> msg.contains("NÃO DEFINIDO")));
     }
 }

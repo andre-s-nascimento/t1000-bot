@@ -59,4 +59,26 @@ class UserInteractionLoggerTest {
         assertThat(Files.exists(deeperDir)).isTrue();
         assertThat(Files.isDirectory(deeperDir)).isTrue();
     }
+
+    @Test
+    void deveCapturarIOExceptionQuandoFalhaAoCriarDiretorio() throws IOException {
+        // Arrange: cria um arquivo no lugar do diretório pai para forçar IOException no
+        // createDirectories
+        UserInteractionLogger logger = new UserInteractionLogger();
+        Path dirPath = tempDir.resolve("logs"); // caminho que será usado como diretório de logs
+        // Cria um arquivo com o mesmo nome, para que createDirectories lance IOException
+        Files.createFile(dirPath);
+        ReflectionTestUtils.setField(logger, "logDirectory", dirPath.toString());
+
+        // Act: tenta escrever o log – deve capturar a exceção e não propagar
+        logger.logUser(123L, "Teste", "forçar-erro");
+
+        // Assert: o arquivo de log não deveria ter sido criado
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        Path logFile = dirPath.resolve("users_" + today + ".txt");
+        assertThat(Files.exists(logFile)).isFalse();
+
+        // Também podemos verificar que o arquivo original (dirPath) permanece como arquivo
+        assertThat(Files.isRegularFile(dirPath)).isTrue();
+    }
 }

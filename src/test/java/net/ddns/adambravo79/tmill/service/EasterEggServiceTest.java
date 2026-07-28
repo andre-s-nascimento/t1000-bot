@@ -12,7 +12,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -24,7 +26,9 @@ class EasterEggServiceTest {
     @Mock private ResourceLoader resourceLoader;
     @Mock private Resource resource;
 
-    private EasterEggService service;
+    @Spy @InjectMocks
+    private EasterEggService
+            service; // ainda injeta mocks, mas métodos reais são chamados por padrão
 
     private static final String JSON_VALIDO =
             """
@@ -36,7 +40,6 @@ class EasterEggServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new EasterEggService(resourceLoader);
         ReflectionTestUtils.setField(
                 service, "easterEggFileLocation", "classpath:easter-eggs.json");
     }
@@ -66,7 +69,7 @@ class EasterEggServiceTest {
     }
 
     @Test
-    void deveIgnorarArquivoInexistente() throws Exception {
+    void deveIgnorarArquivoInexistente() {
         EasterEggService emptyService = new EasterEggService(resourceLoader);
         ReflectionTestUtils.setField(
                 emptyService, "easterEggFileLocation", "classpath:easter-eggs.json");

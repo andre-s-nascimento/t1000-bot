@@ -3,7 +3,6 @@ package net.ddns.adambravo79.tmill.config;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
@@ -71,11 +70,14 @@ public class AdminIpFilter extends OncePerRequestFilter {
     }
 
     private String extractClientIp(HttpServletRequest request) {
-        return Optional.ofNullable(request.getHeader("X-Forwarded-For"))
-                .map(h -> h.split(",")[0].trim())
-                .orElseGet(
-                        () ->
-                                Optional.ofNullable(request.getHeader("X-Real-Ip"))
-                                        .orElseGet(request::getRemoteAddr));
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        String realIp = request.getHeader("X-Real-Ip");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 }

@@ -4,10 +4,14 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -38,25 +42,20 @@ class TelegramUtilsTest {
         assertThat(utils.buildFullName(null)).isEmpty();
     }
 
-    @Test
-    void buildFullName_deveRetornarApenasPrimeiroNomeQuandoSemSobrenome() {
-        when(user.firstName()).thenReturn("João");
-        when(user.lastName()).thenReturn(null);
-        assertThat(utils.buildFullName(user)).isEqualTo("João");
+    @ParameterizedTest
+    @MethodSource("buildFullNameData")
+    void buildFullName_deveRetornarNomeCompleto(
+            String firstName, String lastName, String expected) {
+        when(user.firstName()).thenReturn(firstName);
+        when(user.lastName()).thenReturn(lastName);
+        assertThat(utils.buildFullName(user)).isEqualTo(expected);
     }
 
-    @Test
-    void buildFullName_deveRetornarPrimeiroESobrenome() {
-        when(user.firstName()).thenReturn("João");
-        when(user.lastName()).thenReturn("Silva");
-        assertThat(utils.buildFullName(user)).isEqualTo("João Silva");
-    }
-
-    @Test
-    void buildFullName_deveIgnorarSobrenomeVazio() {
-        when(user.firstName()).thenReturn("João");
-        when(user.lastName()).thenReturn("");
-        assertThat(utils.buildFullName(user)).isEqualTo("João");
+    private static Stream<Arguments> buildFullNameData() {
+        return Stream.of(
+                Arguments.of("João", null, "João"),
+                Arguments.of("João", "Silva", "João Silva"),
+                Arguments.of("João", "", "João"));
     }
 
     // =========================
