@@ -3,12 +3,12 @@ name: Sync Labels
 on:
   push:
     paths:
-      - '.github/labels.yml'
+      - ".github/labels.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  issues: write   # 👈 ESSA LINHA RESOLVE
+  issues: write # 👈 ESSA LINHA RESOLVE
 
 jobs:
   labels:
@@ -22,3 +22,4 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           yaml-file: .github/labels.yml
+          delete: false
