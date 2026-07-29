@@ -23,10 +23,3 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           yaml-file: .github/labels.yml
           delete: false
-
-      - name: release
-        color: 48b601
-        description: Versão liberada
-      - name: sync
-        color: 43721d
-        description: Sincronização

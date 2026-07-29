@@ -26,3 +26,11 @@
 
 - name: priority:low
   color: 0e8a16
+
+- name: release
+  color: 48b601
+  description: Versão liberada
+
+- name: sync
+  color: 43721d
+  description: Sincronização
