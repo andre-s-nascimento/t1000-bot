@@ -1,6 +1,7 @@
 /* (c) 2026 | 15/05/2026 */
 package net.ddns.adambravo79.tmill.config;
 
+import java.time.Clock;
 import java.util.concurrent.Executors;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -32,5 +33,10 @@ public class AppConfig {
         // Isso força o Spring a usar Virtual Threads para qualquer @Async
         log.info("⚙️ Configurando AsyncTaskExecutor com Virtual Threads");
         return new TaskExecutorAdapter(Executors.newVirtualThreadPerTaskExecutor());
+    }
+
+    @Bean
+    public Clock clock() {
+        return Clock.systemDefaultZone();
     }
 }
