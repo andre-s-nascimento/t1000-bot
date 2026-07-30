@@ -343,7 +343,12 @@ class CommandHandlerTest {
         commandHandler.handleTextUpdate(update);
 
         verify(messageStoreService)
-                .saveMessage(eq(CHAT_ID), eq(USER_ID), anyString(), eq("Uma mensagem qualquer"));
+                .saveMessage(
+                        eq(CHAT_ID),
+                        eq(USER_ID),
+                        anyString(),
+                        eq("Uma mensagem qualquer"),
+                        eq(false));
         verify(telegramFacade, never()).enviarMensagem(anyLong(), anyString());
     }
 
@@ -355,7 +360,7 @@ class CommandHandlerTest {
         commandHandler.handleTextUpdate(update);
 
         verify(messageStoreService, never())
-                .saveMessage(anyLong(), anyLong(), anyString(), anyString());
+                .saveMessage(anyLong(), anyLong(), anyString(), anyString(), anyBoolean());
     }
 
     // ========================================================================
