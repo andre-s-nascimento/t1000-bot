@@ -23,9 +23,11 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,6 +48,7 @@ import org.springframework.web.client.ResourceAccessException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
@@ -60,6 +63,7 @@ import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -102,6 +106,27 @@ public class AdminController {
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
+
+    @Value("${telegram.owner.id:0}")
+    private long ownerId;
+
+    @Value("${digest.chat-ids:}")
+    private String digestChatIdsStr;
+
+    private Set<Long> digestChatIds = new HashSet<>();
+
+    @PostConstruct
+    public void initChatIds() {
+        if (digestChatIdsStr != null && !digestChatIdsStr.isBlank()) {
+            for (String s : digestChatIdsStr.split(",")) {
+                try {
+                    digestChatIds.add(Long.parseLong(s.trim()));
+                } catch (NumberFormatException e) {
+                    log.warn("ID inválido em digest.chat-ids: {}", s);
+                }
+            }
+        }
+    }
 
     // ========================= LIMPEZA DE DADOS =========================
 
@@ -489,6 +514,53 @@ public class AdminController {
                 Map.of(
                         "totalRules", autoResponseService.getRulesCount(),
                         "rules", autoResponseService.getRulesSummary()));
+    }
+
+    @PostMapping("/fala-t1000")
+    public ResponseEntity<String> falaT1000(
+            @RequestParam String message,
+            @RequestParam(required = false) Long chatId,
+            @RequestParam(defaultValue = "HTML") String parseMode) {
+
+        // 1. Validação
+        if (message == null || message.isBlank()) {
+            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+        }
+
+        // 2. Define o chat alvo
+        long targetChatId;
+        if (chatId != null) {
+            targetChatId = chatId;
+        } else if (ownerId != 0) {
+            targetChatId = ownerId;
+        } else if (!digestChatIds.isEmpty()) {
+            targetChatId = digestChatIds.iterator().next();
+        } else {
+            return ResponseEntity.badRequest()
+                    .body(
+                            "❌ Nenhum chatId informado e nenhum chat padrão configurado (ownerId ou"
+                                    + " digest.chat-ids).");
+        }
+
+        // 3. Log da ação
+        log.info(
+                "📤 Enviando mensagem via admin para chat {}: {}",
+                targetChatId,
+                LogSanitizer.sanitizeMessageText(message));
+
+        // 4. Envia a mensagem
+        try {
+            if ("HTML".equalsIgnoreCase(parseMode)) {
+                telegramFacade.enviarMensagemHtml(targetChatId, message);
+            } else {
+                telegramFacade.enviarMensagem(targetChatId, message);
+            }
+            return ResponseEntity.ok("✅ Mensagem enviada com sucesso para o chat " + targetChatId);
+        } catch (Exception e) {
+            log.error("❌ Falha ao enviar mensagem para chat {}", targetChatId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Erro ao enviar mensagem: " + e.getMessage());
+        }
     }
 
     // ========================= MÉTODOS AUXILIARES PRIVADOS =========================
