@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.pengrad.telegrambot.model.Message;
+import com.pengrad.telegrambot.model.MessageEntity;
 import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.model.User;
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
@@ -90,8 +91,13 @@ public class CommandHandler {
         // Salva mensagem (exceto comandos)
         boolean isCommand = text.startsWith("t1000") || text.startsWith("t-1000");
         if (!isCommand) {
+            boolean ignoreInDigest = hasSpoiler(message);
             messageStoreService.saveMessage(
-                    chatId, message.from().id(), utils.buildFullName(message.from()), rawText);
+                    chatId,
+                    message.from().id(),
+                    utils.buildFullName(message.from()),
+                    rawText,
+                    ignoreInDigest);
         }
 
         // Auto-respostas (se não for comando)
@@ -429,5 +435,15 @@ public class CommandHandler {
             }
         }
         return null;
+    }
+
+    private boolean hasSpoiler(Message message) {
+        if (message.entities() == null) return false;
+        for (MessageEntity entity : message.entities()) {
+            if (entity.type() == MessageEntity.Type.spoiler) { // <- compare com o enum
+                return true;
+            }
+        }
+        return false;
     }
 }
