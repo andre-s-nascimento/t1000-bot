@@ -19,11 +19,18 @@ public class DatabaseInitializer {
     // Static map of column → full, hard‑coded ALTER statement (no dynamic parts)
     private static final Map<String, String> RELEASE_ALTER_STATEMENTS =
             Map.of(
-                    "title", "ALTER TABLE releases_notified ADD COLUMN title TEXT",
-                    "overview", "ALTER TABLE releases_notified ADD COLUMN overview TEXT",
-                    "rating", "ALTER TABLE releases_notified ADD COLUMN rating REAL",
-                    "providers", "ALTER TABLE releases_notified ADD COLUMN providers TEXT",
-                    "poster_path", "ALTER TABLE releases_notified ADD COLUMN poster_path TEXT");
+                    "title",
+                    "ALTER TABLE releases_notified ADD COLUMN title TEXT",
+                    "overview",
+                    "ALTER TABLE releases_notified ADD COLUMN overview TEXT",
+                    "rating",
+                    "ALTER TABLE releases_notified ADD COLUMN rating REAL",
+                    "providers",
+                    "ALTER TABLE releases_notified ADD COLUMN providers TEXT",
+                    "poster_path",
+                    "ALTER TABLE releases_notified ADD COLUMN poster_path TEXT",
+                    "ignore_in_digest",
+                    "ALTER TABLE messages ADD COLUMN ignore_in_digest BOOLEAN DEFAULT 0");
 
     public DatabaseInitializer(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;

@@ -25,16 +25,17 @@ class MessageStoreServiceTest {
 
     @Test
     void deveSalvarMensagemComSucesso() {
-        service.saveMessage(CHAT_ID, USER_ID, USER_NAME, TEXT);
+        service.saveMessage(CHAT_ID, USER_ID, USER_NAME, TEXT, false);
 
         verify(jdbcTemplate)
                 .update(
-                        "INSERT INTO messages (chat_id, user_id, user_name, text) VALUES"
-                                + " (?, ?, ?, ?)",
+                        "INSERT INTO messages (chat_id, user_id, user_name, text, ignore_in_digest)"
+                                + " VALUES (?, ?, ?, ?, ?)",
                         CHAT_ID,
                         USER_ID,
                         USER_NAME,
-                        TEXT);
+                        TEXT,
+                        0);
     }
 
     @Test
@@ -45,7 +46,7 @@ class MessageStoreServiceTest {
                 .update(anyString(), any(Object[].class));
 
         // O método não deve lançar exceção (captura e loga)
-        assertThatCode(() -> service.saveMessage(CHAT_ID, USER_ID, USER_NAME, TEXT))
+        assertThatCode(() -> service.saveMessage(CHAT_ID, USER_ID, USER_NAME, TEXT, false))
                 .doesNotThrowAnyException();
 
         verify(jdbcTemplate).update(anyString(), any(Object[].class));

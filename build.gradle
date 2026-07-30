@@ -148,3 +148,15 @@ tasks.named("check") {
 tasks.named("sonar") {
     dependsOn("jacocoTestReport")
 }
+
+tasks.named('bootRun') {
+    notCompatibleWithConfigurationCache("Carrega variáveis do .env")
+    def envFile = project.file('.env')
+    if (envFile.exists()) {
+        def envVars = envFile.readLines()
+                .findAll { !it.startsWith('#') && it.contains('=') }
+                .collect { it.split('=', 2) }
+                .collectEntries { [it[0], it[1]] }
+        environment(envVars)
+    }
+}
