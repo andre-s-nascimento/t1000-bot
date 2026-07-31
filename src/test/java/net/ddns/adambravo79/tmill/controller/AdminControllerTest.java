@@ -36,6 +36,7 @@ import org.springframework.web.client.ResourceAccessException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import lombok.SneakyThrows;
+import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
@@ -59,6 +60,7 @@ class AdminControllerTest {
     @Mock private ResourceLoader resourceLoader;
     @Mock private DailyReleasesService dailyReleasesService;
     @Mock private ReleaseNotifiedRepository releaseNotifiedRepository;
+    @Mock private AzureTtsClient azureTtsClient;
 
     private AdminController adminController;
     private ObjectMapper objectMapperSpy;
@@ -86,7 +88,8 @@ class AdminControllerTest {
                         resourceLoader,
                         objectMapperSpy,
                         dailyReleasesService,
-                        releaseNotifiedRepository);
+                        releaseNotifiedRepository,
+                        azureTtsClient);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
 

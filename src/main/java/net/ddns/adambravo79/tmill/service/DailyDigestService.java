@@ -57,8 +57,8 @@ import net.ddns.adambravo79.tmill.telegram.util.TelegramMessageSplitter;
 @RequiredArgsConstructor
 public class DailyDigestService {
 
-    private static final int MAX_PROMPT_SIZE = 32000;
-    private static final int ALLOWED_MESSAGES_MARGIN = 4000;
+    private static final int MAX_PROMPT_SIZE = 18000;
+    private static final int ALLOWED_MESSAGES_MARGIN = 2000;
     private static final int TRUNCATE_SLICE_DIVISOR = 3;
 
     /** Formato interno para queries SQL: yyyy-MM-dd HH:mm:ss */
@@ -334,26 +334,32 @@ public class DailyDigestService {
                 finalMessages.length(),
                 allowedMessagesSize);
 
+        // Tenta cortar em uma quebra de linha recente
         int slice = allowedMessagesSize / TRUNCATE_SLICE_DIVISOR;
         int len = finalMessages.length();
 
-        String start = safeSubstring(finalMessages, 0, slice);
+        String start = findCutPoint(finalMessages, 0, slice);
         String middle =
-                safeSubstring(
+                findCutPoint(
                         finalMessages,
                         Math.max(0, (len / 2) - (slice / 2)),
                         Math.min(len, (len / 2) + (slice / 2)));
-        String end = safeSubstring(finalMessages, Math.max(0, len - slice), len);
+        String end = findCutPoint(finalMessages, Math.max(0, len - slice), len);
 
         return start + "\n\n[...]\n\n" + middle + "\n\n[...]\n\n" + end;
     }
 
-    // ======================== TRUNCATE ========================
-
-    private String safeSubstring(String str, int begin, int end) {
-        int safeBegin = Math.clamp(begin, 0, str.length());
-        int safeEnd = Math.clamp(end, safeBegin, str.length());
-        return str.substring(safeBegin, safeEnd);
+    private String findCutPoint(String text, int begin, int end) {
+        int safeEnd = Math.min(end, text.length());
+        if (safeEnd >= text.length()) {
+            return text.substring(Math.min(begin, text.length()));
+        }
+        // Tenta encontrar uma quebra de linha antes do limite
+        int cut = text.lastIndexOf('\n', safeEnd);
+        if (cut > begin) {
+            return text.substring(begin, cut);
+        }
+        return text.substring(begin, safeEnd);
     }
 
     // ======================== SUMMARY ========================

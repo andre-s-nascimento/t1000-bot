@@ -104,35 +104,27 @@ public class TelegramFacade {
     public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
         safeExecutor.run(
                 chatId,
-                this::enviarMensagem, // method reference
+                this::enviarMensagem,
                 () -> {
                     try {
-                        String lower = filePathOrUrl.toLowerCase();
-                        if (lower.endsWith(".mp4")
-                                || lower.endsWith(".mov")
-                                || lower.endsWith(".avi")) {
-                            executor.execute(
-                                    new SendVideo(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
-                        } else if (lower.endsWith(".gif")) {
-                            executor.execute(
-                                    new SendAnimation(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
-                        } else if (lower.endsWith(".jpg")
-                                || lower.endsWith(".jpeg")
-                                || lower.endsWith(".png")) {
-                            executor.execute(
-                                    new SendPhoto(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
-                        } else {
-                            executor.execute(
-                                    new SendPhoto(chatId, filePathOrUrl)
-                                            .caption(caption)
-                                            .parseMode(ParseMode.HTML));
+                        // 1. Verifica se é uma URL HTTP/HTTPS
+                        if (filePathOrUrl.startsWith("http://")
+                                || filePathOrUrl.startsWith("https://")) {
+                            sendMediaByUrl(chatId, filePathOrUrl, caption);
+                            return;
                         }
+
+                        // 2. Tenta interpretar como arquivo local
+                        java.io.File file = new java.io.File(filePathOrUrl);
+                        if (file.exists()) {
+                            sendMediaByFile(chatId, file, caption);
+                            return;
+                        }
+
+                        // 3. Fallback: assume que é um file_id ou URL inválida – trata como URL
+                        log.debug("Tratando '{}' como file_id ou string genérica", filePathOrUrl);
+                        sendMediaByUrl(chatId, filePathOrUrl, caption);
+
                     } catch (Exception e) {
                         log.warn(
                                 "⚠️ Falha ao enviar mídia para chatId {}: {}. Enviando apenas"
@@ -142,6 +134,44 @@ public class TelegramFacade {
                         enviarMensagem(chatId, caption);
                     }
                 });
+    }
+
+    // Métodos auxiliares privados
+
+    private void sendMediaByUrl(long chatId, String url, String caption) {
+        String lower = url.toLowerCase();
+        if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
+            executor.execute(new SendVideo(chatId, url).caption(caption).parseMode(ParseMode.HTML));
+        } else if (lower.endsWith(".gif")) {
+            executor.execute(
+                    new SendAnimation(chatId, url).caption(caption).parseMode(ParseMode.HTML));
+        } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
+            executor.execute(new SendPhoto(chatId, url).caption(caption).parseMode(ParseMode.HTML));
+        } else {
+            // Fallback genérico: tenta enviar como foto
+            executor.execute(new SendPhoto(chatId, url).caption(caption).parseMode(ParseMode.HTML));
+        }
+    }
+
+    private void sendMediaByFile(long chatId, java.io.File file, String caption) {
+        String lower = file.getName().toLowerCase();
+        if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
+            executor.execute(
+                    new SendVideo(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        } else if (lower.endsWith(".gif")) {
+            executor.execute(
+                    new SendAnimation(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        } else if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".oga")) {
+            executor.execute(
+                    new SendAudio(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
+            executor.execute(
+                    new SendPhoto(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        } else {
+            // Para outros tipos, usa SendDocument
+            executor.execute(
+                    new SendDocument(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        }
     }
 
     // Fallback simples (sem parse mode)

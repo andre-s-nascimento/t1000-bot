@@ -15,6 +15,8 @@ import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_NOT_AVAI
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -51,6 +53,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
@@ -103,6 +106,7 @@ public class AdminController {
     private final ObjectMapper objectMapper;
     private final DailyReleasesService dailyReleasesService;
     private final ReleaseNotifiedRepository releaseNotifiedRepository;
+    private final AzureTtsClient azureTtsClient;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -112,6 +116,9 @@ public class AdminController {
 
     @Value("${digest.chat-ids:}")
     private String digestChatIdsStr;
+
+    @Value("${podcast.publish.chat-id}")
+    private long publishChatId;
 
     private Set<Long> digestChatIds = new HashSet<>();
 
@@ -561,6 +568,30 @@ public class AdminController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Erro ao enviar mensagem: " + e.getMessage());
         }
+    }
+
+    @GetMapping("/test-azure-tts")
+    public ResponseEntity<String> testAzureTts() {
+        if (publishChatId == 0) {
+            return ResponseEntity.badRequest().body("❌ podcast.publish.chat-id não configurado.");
+        }
+        String text =
+                "Bem vindos ao espetacular... ah deixa de papo furado. Dadinho é o cara leo, meu"
+                        + " nome agora é Zé Pequeno.";
+        byte[] audio = azureTtsClient.synthesizeFullText(text);
+        if (audio.length > 0) {
+            try {
+                Path temp = Files.createTempFile("test_azure_", ".mp3");
+                Files.write(temp, audio);
+                telegramFacade.enviarMidia(
+                        publishChatId, temp.toAbsolutePath().toString(), "Teste Azure TTS");
+                Files.deleteIfExists(temp);
+                return ResponseEntity.ok("Áudio enviado com sucesso para chat " + publishChatId);
+            } catch (IOException e) {
+                return ResponseEntity.status(500).body("Erro ao salvar áudio: " + e.getMessage());
+            }
+        }
+        return ResponseEntity.status(500).body("Falha na síntese (áudio vazio).");
     }
 
     // ========================= MÉTODOS AUXILIARES PRIVADOS =========================
