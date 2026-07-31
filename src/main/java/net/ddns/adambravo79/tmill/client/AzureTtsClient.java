@@ -2,10 +2,14 @@ package net.ddns.adambravo79.tmill.client;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -16,15 +20,26 @@ import lombok.extern.slf4j.Slf4j;
 public class AzureTtsClient {
 
     private final RestClient restClient;
-    private final String region;
+    private final Path tempDir;
 
     public AzureTtsClient(
             @Value("${azure.speech.key}") String subscriptionKey,
-            @Value("${azure.speech.region}") String region) {
-        this.region = region;
+            @Value("${azure.speech.region}") String region,
+            @Value("${app.temp.dir:./temp}") String tempDirPath)
+            throws Exception {
+
+        // Cria o diretório temporário se não existir
+        this.tempDir = Paths.get(tempDirPath).toAbsolutePath().normalize();
+        Files.createDirectories(this.tempDir);
+        log.info("📁 Diretório temporário configurado: {}", this.tempDir);
+
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(60000);
         this.restClient =
                 RestClient.builder()
                         .baseUrl("https://" + region + ".tts.speech.microsoft.com")
+                        .requestFactory(factory)
                         .defaultHeader("Ocp-Apim-Subscription-Key", subscriptionKey)
                         .defaultHeader("Content-Type", "application/ssml+xml")
                         .defaultHeader(
@@ -78,11 +93,28 @@ public class AzureTtsClient {
                         + text
                         + "</voice></speak>";
 
+        // 🔥 LOG para inspecionar o SSML (primeiros 500 caracteres)
+        log.debug(
+                "SSML enviado (primeiros 500 chars): {}",
+                ssml.length() > 500 ? ssml.substring(0, 500) + "..." : ssml);
+
+        // 🔥 Salva o SSML em um arquivo para inspeção completa
         try {
+            Path ssmlFile = Files.createTempFile(tempDir, "ssml_", ".xml");
+            Files.writeString(ssmlFile, ssml, java.nio.charset.StandardCharsets.UTF_8);
+            log.info("📄 SSML salvo em: {}", ssmlFile);
+        } catch (Exception e) {
+            log.warn("Não foi possível salvar SSML", e);
+        }
+
+        try {
+            // Converte a String para bytes em UTF-8
+            byte[] bodyBytes = ssml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
             return restClient
                     .post()
                     .uri("/cognitiveservices/v1")
-                    .body(ssml)
+                    .body(bodyBytes)
                     .retrieve()
                     .body(byte[].class);
         } catch (Exception e) {
@@ -125,38 +157,77 @@ public class AzureTtsClient {
     }
 
     private byte[] concatenateMp3s(List<byte[]> audioParts) {
+        log.info("Concatenando {} partes de áudio.", audioParts.size());
         try {
             List<Path> tempFiles = new ArrayList<>();
             for (int i = 0; i < audioParts.size(); i++) {
-                Path temp = Files.createTempFile("azure_tts_" + i + "_", ".mp3");
+                Path temp = Files.createTempFile(tempDir, "azure_tts_" + i + "_", ".mp3");
                 Files.write(temp, audioParts.get(i));
                 tempFiles.add(temp);
+                log.debug("Arquivo temporário criado: {}", temp);
             }
 
-            Path output = Files.createTempFile("azure_tts_concat_", ".mp3");
+            Path output = Files.createTempFile(tempDir, "azure_tts_concat_", ".mp3");
+            log.info("Arquivo de saída: {}", output);
             boolean success = concatWithFfmpeg(tempFiles, output);
-            byte[] result = success ? Files.readAllBytes(output) : new byte[0];
+            if (!success) {
+                log.error("Falha na concatenação com FFmpeg. Tentando retornar o primeiro áudio.");
+                if (!audioParts.isEmpty()) {
+                    return audioParts.get(0);
+                }
+                return new byte[0];
+            }
+
+            byte[] result = Files.readAllBytes(output);
+            log.info("Concatenação bem-sucedida: {} bytes.", result.length);
 
             for (Path p : tempFiles) Files.deleteIfExists(p);
             Files.deleteIfExists(output);
-
             return result;
         } catch (Exception e) {
             log.error("Erro ao concatenar áudios", e);
+            if (!audioParts.isEmpty()) {
+                log.warn("Usando fallback: retornando o primeiro áudio.");
+                return audioParts.get(0);
+            }
             return new byte[0];
         }
     }
 
     private boolean concatWithFfmpeg(List<Path> inputs, Path output) {
+        Path fileList = null;
+        AtomicReference<Process> processRef = new AtomicReference<>();
         try {
-            Path fileList = Files.createTempFile("filelist_", ".txt");
-            List<String> lines =
-                    inputs.stream().map(p -> "file '" + p.toAbsolutePath() + "'").toList();
-            Files.write(fileList, lines);
+            // 1. Verifica se FFmpeg está disponível
+            ProcessBuilder checkPb = new ProcessBuilder("ffmpeg", "-version");
+            Process checkProcess = checkPb.start();
+            boolean checkFinished = checkProcess.waitFor(10, TimeUnit.SECONDS);
+            if (!checkFinished) {
+                log.error("FFmpeg não está disponível no sistema (timeout).");
+                return false;
+            }
+            log.info("✅ FFmpeg disponível.");
 
+            // 2. Cria o arquivo de lista para concatenação (agora no tempDir)
+            fileList = Files.createTempFile(tempDir, "filelist_", ".txt");
+            List<String> lines =
+                    inputs.stream()
+                            .map(
+                                    p ->
+                                            "file '"
+                                                    + p.toAbsolutePath()
+                                                            .toString()
+                                                            .replace("'", "'\\''")
+                                                    + "'")
+                            .toList();
+            Files.write(fileList, lines);
+            log.info("📋 Arquivo de lista criado: {}", fileList);
+
+            // 3. Prepara o comando FFmpeg
             ProcessBuilder pb =
                     new ProcessBuilder(
                             "ffmpeg",
+                            "-y",
                             "-f",
                             "concat",
                             "-safe",
@@ -167,13 +238,61 @@ public class AzureTtsClient {
                             "copy",
                             output.toAbsolutePath().toString());
             pb.redirectErrorStream(true);
+
+            log.info("⚙️ Executando FFmpeg: {}", String.join(" ", pb.command()));
             Process process = pb.start();
-            int exitCode = process.waitFor();
-            Files.deleteIfExists(fileList);
+            processRef.set(process);
+
+            // 4. Consome a saída em thread separada
+            Thread outputReader =
+                    new Thread(
+                            () -> {
+                                try (var reader =
+                                        new java.io.BufferedReader(
+                                                new java.io.InputStreamReader(
+                                                        process.getInputStream()))) {
+                                    String line;
+                                    while ((line = reader.readLine()) != null) {
+                                        log.debug("FFmpeg: {}", line);
+                                    }
+                                } catch (Exception e) {
+                                    // Ignora erro ao fechar o reader
+                                }
+                            });
+            outputReader.setDaemon(true);
+            outputReader.start();
+
+            // 5. Aguarda o término com timeout de 120 segundos
+            boolean finished = process.waitFor(120, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                log.error("❌ FFmpeg timeout após 120 segundos.");
+                return false;
+            }
+
+            int exitCode = process.exitValue();
+            log.info("✅ FFmpeg finalizado com código {}", exitCode);
             return exitCode == 0;
+
         } catch (Exception e) {
-            log.error("FFmpeg falhou", e);
+            log.error("❌ FFmpeg falhou", e);
+            Process p = processRef.get();
+            if (p != null && p.isAlive()) {
+                p.destroyForcibly();
+            }
             return false;
+        } finally {
+            if (fileList != null) {
+                try {
+                    Files.deleteIfExists(fileList);
+                } catch (Exception e) {
+                    log.warn("Não foi possível deletar arquivo de lista: {}", fileList);
+                }
+            }
+            Process p = processRef.get();
+            if (p != null && p.isAlive()) {
+                p.destroyForcibly();
+            }
         }
     }
 }

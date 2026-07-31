@@ -1,17 +1,16 @@
 #!/bin/bash
 
 # ================================================================
-# Script: fala-t1000.zsh
-# Descrição: Chama o endpoint /admin/fala-t1000 para enviar mensagens via bot
-# Uso: ./fala-t1000.zsh --message "John Connor bom eh John Connor morto" [--chat-id -100...] [--parse-mode HTML]
+# Script: gerar-audio.sh
+# Descrição: Chama o endpoint /admin/test-azure-tts para gerar áudio a partir de texto
+# Uso: ./gerar-audio.sh --message "Texto para síntese" [--chat-id -100...]
 # ================================================================
 
 BASE_URL="http://localhost:8082"
-ENDPOINT="/admin/fala-t1000"
+ENDPOINT="/admin/fala-t1000-tts"
 
-# Valores padrão (opcionais)
+# Valores padrão
 DEFAULT_CHAT_ID="-1003703557250"
-DEFAULT_PARSE_MODE="HTML"
 
 # ----------------------------------------------------------------
 # Função de ajuda
@@ -21,15 +20,14 @@ function show_help() {
 Uso: $0 [OPÇÕES]
 
 Obrigatório:
-  --message, -m   Texto da mensagem (ex: "John Connor bom eh John Connor morto")
+  --message, -m   Texto para sintetizar em áudio (ex: "Olá, este é um teste")
 
 Opcional:
-  --chat-id, -c   ID do chat (padrão: $DEFAULT_CHAT_ID)
-  --parse-mode, -p Modo de parse: HTML (padrão) ou TEXT
+  --chat-id, -c   ID do chat para receber o áudio (padrão: $DEFAULT_CHAT_ID)
   --help, -h      Mostra esta ajuda
 
 Exemplo:
-  $0 --message "John Connor bom eh John Connor morto" --chat-id -1003703557250 --parse-mode HTML
+  $0 --message "Olá, este é um teste de áudio" --chat-id -1003703557250
 EOF
     exit 0
 }
@@ -39,7 +37,6 @@ EOF
 # ----------------------------------------------------------------
 MESSAGE=""
 CHAT_ID="$DEFAULT_CHAT_ID"
-PARSE_MODE="$DEFAULT_PARSE_MODE"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -49,10 +46,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --chat-id|-c)
             CHAT_ID="$2"
-            shift 2
-            ;;
-        --parse-mode|-p)
-            PARSE_MODE="$2"
             shift 2
             ;;
         --help|-h)
@@ -72,7 +65,7 @@ if [[ -z "$MESSAGE" ]]; then
 fi
 
 # ----------------------------------------------------------------
-# URL encoding (função portável)
+# URL encoding (portável com jq)
 # ----------------------------------------------------------------
 function urlencode() {
     echo -n "$1" | jq -sRr @uri
@@ -80,16 +73,17 @@ function urlencode() {
 
 MESSAGE_ENCODED=$(urlencode "$MESSAGE")
 CHAT_ID_ENCODED=$(urlencode "$CHAT_ID")
-PARSE_MODE_ENCODED=$(urlencode "$PARSE_MODE")
 
 # Monta a URL final
-URL="${BASE_URL}${ENDPOINT}?message=${MESSAGE_ENCODED}&chatId=${CHAT_ID_ENCODED}&parseMode=${PARSE_MODE_ENCODED}"
+URL="${BASE_URL}${ENDPOINT}?message=${MESSAGE_ENCODED}&chatId=${CHAT_ID_ENCODED}"
 
 # ----------------------------------------------------------------
 # Executa o curl
 # ----------------------------------------------------------------
-echo "📤 Enviando requisição para:"
-echo "$URL"
+echo "🎤 Gerando áudio para:"
+echo "$MESSAGE"
+echo
+echo "📤 Enviando para chat: $CHAT_ID"
 echo
 
 curl -X POST "$URL" \

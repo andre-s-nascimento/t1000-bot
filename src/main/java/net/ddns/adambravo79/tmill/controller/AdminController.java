@@ -30,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -61,6 +62,7 @@ import net.ddns.adambravo79.tmill.service.AutoResponseService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
+import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
@@ -107,6 +109,7 @@ public class AdminController {
     private final DailyReleasesService dailyReleasesService;
     private final ReleaseNotifiedRepository releaseNotifiedRepository;
     private final AzureTtsClient azureTtsClient;
+    private final PodcastPublisherService podcastPublisherService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -592,6 +595,123 @@ public class AdminController {
             }
         }
         return ResponseEntity.status(500).body("Falha na síntese (áudio vazio).");
+    }
+
+    @GetMapping("/test-podcast")
+    public ResponseEntity<String> testPodcast(
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end,
+            @RequestParam(required = false) Long chatId) {
+
+        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) : today;
+        LocalDate startDate =
+                (start != null && !start.isBlank()) ? LocalDate.parse(start) : today.minusDays(7);
+
+        if (startDate.isAfter(endDate)) {
+            return ResponseEntity.badRequest()
+                    .body("❌ Data de início não pode ser posterior à data de fim.");
+        }
+
+        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+
+        // 🔁 Processa em background
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        log.info(
+                                "📥 Iniciando geração assíncrona do podcast para chat {}",
+                                targetChatId);
+                        podcastPublisherService.generateAndSendPodcast(
+                                startDate, endDate, targetChatId);
+                        log.info("✅ Podcast assíncrono finalizado para chat {}", targetChatId);
+                    } catch (Exception e) {
+                        log.error(
+                                "❌ Erro assíncrono ao gerar podcast para chat {}", targetChatId, e);
+                        try {
+                            telegramFacade.enviarMensagem(
+                                    targetChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
+                        } catch (Exception ignored) {
+                        }
+                    }
+                });
+
+        // Retorna imediatamente
+        return ResponseEntity.accepted()
+                .body(
+                        String.format(
+                                "🔄 Podcast agendado para o período de %s a %s. Você receberá em"
+                                        + " breve no chat %d.",
+                                startDate, endDate, targetChatId));
+    }
+
+    @PostMapping("/fala-t1000-tts")
+    public ResponseEntity<String> testAzureTts(
+            @RequestParam String message, @RequestParam(required = false) Long chatId) {
+
+        // 1. Validação
+        if (message == null || message.isBlank()) {
+            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+        }
+
+        // 2. Define o chat alvo
+        long targetChatId;
+        if (chatId != null) {
+            targetChatId = chatId;
+        } else if (ownerId != 0) {
+            targetChatId = ownerId;
+        } else if (!digestChatIds.isEmpty()) {
+            targetChatId = digestChatIds.iterator().next();
+        } else {
+            return ResponseEntity.badRequest()
+                    .body("❌ Nenhum chatId informado e nenhum chat padrão configurado.");
+        }
+
+        // 3. Log da ação
+        log.info(
+                "🎤 Sintetizando áudio para chat {}: {}",
+                targetChatId,
+                LogSanitizer.sanitizeMessageText(message));
+
+        // 4. Sintetiza o áudio
+        byte[] audio = azureTtsClient.synthesizeFullText(message);
+        if (audio == null || audio.length == 0) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Falha na síntese (áudio vazio).");
+        }
+
+        // 5. Salva e envia com nome personalizado
+        Path tempFile = null;
+        try {
+            // Gera um nome único com timestamp
+            String fileName =
+                    String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
+            tempFile = Files.createTempFile("tts_audio_", ".mp3");
+            Path finalFile = tempFile.resolveSibling(fileName);
+            Files.write(tempFile, audio);
+            Files.move(tempFile, finalFile); // Renomeia para o nome desejado
+
+            telegramFacade.enviarMidia(
+                    targetChatId,
+                    finalFile.toAbsolutePath().toString(),
+                    "🔊 Áudios para a futura Skynet");
+
+            // Limpeza
+            Files.deleteIfExists(finalFile);
+            return ResponseEntity.ok("✅ Áudio enviado com sucesso para o chat " + targetChatId);
+
+        } catch (IOException e) {
+            log.error("❌ Erro ao salvar ou enviar áudio", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Erro ao salvar áudio: " + e.getMessage());
+        } finally {
+            if (tempFile != null && Files.exists(tempFile)) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException ignored) {
+                }
+            }
+        }
     }
 
     // ========================= MÉTODOS AUXILIARES PRIVADOS =========================

@@ -23,7 +23,7 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 public class PodcastPublisherService {
 
     private final PodcastScriptService scriptService;
-    private final AzureTtsClient ttsClient; // ✅ injetado
+    private final AzureTtsClient ttsClient;
     private final TelegramFacade telegramFacade;
 
     @Value("${podcast.publish.chat-id}")
@@ -32,62 +32,101 @@ public class PodcastPublisherService {
     @Value("${podcast.target.user-id}")
     private long targetUserId;
 
-    @Scheduled(cron = "${podcast.schedule.cron:0 0 22 * * 0}", zone = "America/Sao_Paulo")
+    // Agendamento: toda sexta-feira ao meio-dia (12:00)
+    @Scheduled(cron = "0 0 12 * * 5", zone = "America/Sao_Paulo")
     public void publishWeeklyPodcast() {
-        log.info("🎧 Iniciando geração do podcast semanal...");
+        log.info("🎧 Iniciando geração do podcast semanal (Sexta-feira)...");
 
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        // Período: de segunda a domingo da semana passada (para pegar a semana completa)
         LocalDate endOfWeek = today.with(DayOfWeek.SUNDAY).minusWeeks(1);
         LocalDate startOfWeek = endOfWeek.with(DayOfWeek.MONDAY);
 
+        // Gera e envia usando o método comum
+        generateAndSendPodcast(startOfWeek, endOfWeek, publishChatId);
+    }
+
+    /** Método público para gerar e enviar o podcast sob demanda (usado pelo endpoint de teste). */
+    public void generateAndSendPodcast(LocalDate startDate, LocalDate endDate, long chatId) {
+        log.info(
+                "🎧 Gerando podcast para período de {} a {}, chatId={}",
+                startDate,
+                endDate,
+                chatId);
+        long start = System.currentTimeMillis();
+
         // 1. Gera roteiro
-        String script = scriptService.generateScript(startOfWeek, endOfWeek);
+        log.info("📝 Iniciando geração do roteiro...");
+        String script = scriptService.generateScript(startDate, endDate);
         if (script == null || script.isBlank()) {
-            log.info("📭 Nenhuma mensagem do usuário {} na semana passada.", targetUserId);
+            log.warn("Nenhuma transcrição encontrada.");
+            telegramFacade.enviarMensagem(chatId, "📭 Nenhuma transcrição para o período.");
             return;
         }
+        log.info("📝 Roteiro gerado ({} caracteres).", script.length());
 
-        // 2. Sintetiza todo o áudio (já faz divisão e concatenação internamente)
+        // 2. Sintetiza áudio
+        log.info("🔊 Iniciando síntese de áudio...");
         byte[] audioData = ttsClient.synthesizeFullText(script);
         if (audioData == null || audioData.length == 0) {
-            log.error("❌ Nenhum áudio gerado.");
+            log.error("❌ Áudio vazio.");
+            telegramFacade.enviarMensagem(chatId, "❌ Erro ao gerar áudio do podcast.");
             return;
         }
+        log.info("🔊 Áudio sintetizado: {} bytes", audioData.length);
 
-        // 3. Salva em arquivo temporário único
+        // 3. Gera nome do arquivo
+        String fileName = generatePodcastFileName(endDate);
+        log.info("📁 Nome do arquivo: {}", fileName);
+
+        // 4. Salva e envia
         Path tempFile = null;
         try {
-            tempFile = Files.createTempFile("podcast_semanal_", ".mp3");
+            tempFile = Files.createTempFile("podcast_", ".mp3");
             Files.write(tempFile, audioData);
+
+            // Move para o nome final (opcional, mas podemos renomear)
+            Path finalFile = tempFile.resolveSibling(fileName);
+            Files.move(tempFile, finalFile);
 
             String caption =
                     String.format(
-                            """
-              🎙️ **Podcast Semanal do Silas**
-              📅 Semana de %s a %s
-              ⏱️ Duração: ~%d segundos
-              """,
-                            startOfWeek.format(DateTimeFormatter.ofPattern("dd/MM")),
-                            endOfWeek.format(DateTimeFormatter.ofPattern("dd/MM")),
-                            audioData.length / 16000 // estimativa
-                            );
+                            "<b>🎙️ Silas Cast</b>\n" + "📅 Período: %s a %s",
+                            startDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                            endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
 
-            // 4. Publica no Telegram
-            telegramFacade.enviarMidia(
-                    publishChatId, tempFile.toAbsolutePath().toString(), caption);
-            log.info("✅ Podcast publicado com sucesso!");
+            log.info("📤 Enviando para o Telegram...");
+            telegramFacade.enviarMidia(chatId, finalFile.toAbsolutePath().toString(), caption);
+            log.info("📤 Áudio enviado para chat {}", chatId);
 
-        } catch (IOException e) {
-            log.error("❌ Erro ao salvar ou publicar áudio.", e);
+            // Limpeza
+            Files.deleteIfExists(finalFile);
+
+        } catch (Exception e) {
+            log.error("❌ Erro ao salvar ou enviar áudio", e);
+            telegramFacade.enviarMensagem(chatId, "❌ Erro ao processar podcast: " + e.getMessage());
         } finally {
-            // 5. Limpeza
-            if (tempFile != null) {
+            if (tempFile != null && Files.exists(tempFile)) {
                 try {
                     Files.deleteIfExists(tempFile);
                 } catch (IOException ignored) {
-                    log.warn("Não foi possível deletar arquivo temporário: {}", tempFile);
                 }
             }
         }
+        log.info("✅ Podcast finalizado em {}ms", System.currentTimeMillis() - start);
+    }
+
+    /**
+     * Gera o nome do arquivo no formato: SilasCast-Semana-XX-do-Mes-YY-do-Ano-YYYY.mp3 onde XX é a
+     * semana dentro do mês (1-5) e YY é o mês (01-12)
+     */
+    private String generatePodcastFileName(LocalDate date) {
+        // Calcula a semana dentro do mês (1 a 5)
+        int weekOfMonth = (date.getDayOfMonth() - 1) / 7 + 1;
+        int month = date.getMonthValue();
+        int year = date.getYear();
+
+        return String.format(
+                "SilasCast-Semana-%02d-do-Mes-%02d-do-Ano-%d.mp3", weekOfMonth, month, year);
     }
 }
