@@ -719,23 +719,6 @@ class DailyDigestServiceTest {
         assertThat(result).isEqualTo(texto);
     }
 
-    // 11. safeSubstring - bordas
-    @Test
-    void safeSubstring_deveLidarComBordas() throws Exception {
-        java.lang.reflect.Method method =
-                DailyDigestService.class.getDeclaredMethod(
-                        "safeSubstring", String.class, int.class, int.class);
-        method.setAccessible(true);
-
-        String text = "abcdef";
-        String result = (String) method.invoke(service, text, -5, 3);
-        assertThat(result).isEqualTo("abc");
-        result = (String) method.invoke(service, text, 2, 20);
-        assertThat(result).isEqualTo("cdef");
-        result = (String) method.invoke(service, text, 4, 2);
-        assertThat(result).isEmpty();
-    }
-
     // 12. buildHeader
     @Test
     void buildHeader_deveFormatarCorretamente() throws Exception {

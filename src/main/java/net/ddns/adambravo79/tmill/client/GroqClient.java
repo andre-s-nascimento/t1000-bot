@@ -40,7 +40,7 @@ public class GroqClient {
     @Value("${groq.model.refinement:llama-3.1-8b-instant}")
     private String refinementModel;
 
-    @Value("${groq.model.digest:meta-llama/llama-4-scout-17b-16e-instruct}")
+    @Value("${groq.model.digest:openai/gpt-oss-120b}")
     private String digestModel;
 
     @Value("${groq.model.refinement.max-tokens:4000}") // fallback 4000
