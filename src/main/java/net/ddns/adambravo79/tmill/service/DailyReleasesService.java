@@ -72,15 +72,17 @@ public class DailyReleasesService {
             if (item.providers != null
                     && !item.providers.isBlank()
                     && !"Indisponível".equalsIgnoreCase(item.providers.trim())) {
-                releaseRepository.saveFullRelease(
-                        item.id,
-                        item.type,
-                        today,
-                        item.title,
-                        item.overview,
-                        item.rating,
-                        item.providers,
-                        item.posterPath);
+                FullRelease fullRelease =
+                        new FullRelease(
+                                item.id,
+                                item.type,
+                                today,
+                                item.title,
+                                item.overview,
+                                item.rating,
+                                item.providers,
+                                item.posterPath);
+                releaseRepository.saveFullRelease(fullRelease);
                 sendReleaseToAllChats(item);
             } else {
                 log.debug("Lançamento sem provedor válido, ignorado: {}", item.title);
@@ -280,7 +282,7 @@ public class DailyReleasesService {
         <b>JÁ DISPONÍVEL</b>
 
         ⭐ %s
-        👩‍🎓 %s
+        📝 %s
 
         ⭐ <b>Nota:</b> %s
 

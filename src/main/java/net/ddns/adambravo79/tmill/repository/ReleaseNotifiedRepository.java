@@ -42,15 +42,8 @@ public class ReleaseNotifiedRepository {
     }
 
     // Salva os dados completos do lançamento (usado no DailyReleasesService)
-    public void saveFullRelease(
-            long tmdbId,
-            String mediaType,
-            LocalDate releaseDate,
-            String title,
-            String overview,
-            Double rating,
-            String providers,
-            String posterPath) {
+
+    public void saveFullRelease(FullRelease release) {
         String sql =
                 """
             INSERT INTO releases_notified
@@ -59,15 +52,18 @@ public class ReleaseNotifiedRepository {
         """;
         jdbcTemplate.update(
                 sql,
-                tmdbId,
-                mediaType,
-                releaseDate.toString(),
-                title,
-                overview,
-                rating,
-                providers,
-                posterPath);
-        log.debug("Lançamento completo salvo: tmdbId={}, title={}", tmdbId, title);
+                release.tmdbId(),
+                release.mediaType(),
+                release.releaseDate().toString(),
+                release.title(),
+                release.overview(),
+                release.rating(),
+                release.providers(),
+                release.posterPath());
+        log.debug(
+                "Lançamento completo salvo: tmdbId={}, title={}",
+                release.tmdbId(),
+                release.title());
     }
 
     // Busca lançamentos completos entre duas datas

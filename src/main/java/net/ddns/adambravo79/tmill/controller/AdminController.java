@@ -64,6 +64,7 @@ import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
+import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
@@ -110,6 +111,7 @@ public class AdminController {
     private final ReleaseNotifiedRepository releaseNotifiedRepository;
     private final AzureTtsClient azureTtsClient;
     private final PodcastPublisherService podcastPublisherService;
+    private final TempDirService tempDirService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -584,13 +586,13 @@ public class AdminController {
         byte[] audio = azureTtsClient.synthesizeFullText(text);
         if (audio.length > 0) {
             try {
-                Path temp = Files.createTempFile("test_azure_", ".mp3");
+                Path temp = tempDirService.createTempFile("test_azure_", ".mp3");
                 Files.write(temp, audio);
                 telegramFacade.enviarMidia(
                         publishChatId, temp.toAbsolutePath().toString(), "Teste Azure TTS");
                 Files.deleteIfExists(temp);
                 return ResponseEntity.ok("Áudio enviado com sucesso para chat " + publishChatId);
-            } catch (IOException e) {
+            } catch (Exception e) {
                 return ResponseEntity.status(500).body("Erro ao salvar áudio: " + e.getMessage());
             }
         }
@@ -632,6 +634,8 @@ public class AdminController {
                             telegramFacade.enviarMensagem(
                                     targetChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
                         } catch (Exception ignored) {
+                            // Falha ao deletar arquivo temporário – pode ser ignorado
+                            log.debug("Não foi possível gerar arquivo");
                         }
                     }
                 });
@@ -686,7 +690,7 @@ public class AdminController {
             // Gera um nome único com timestamp
             String fileName =
                     String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
-            tempFile = Files.createTempFile("tts_audio_", ".mp3");
+            tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
             Path finalFile = tempFile.resolveSibling(fileName);
             Files.write(tempFile, audio);
             Files.move(tempFile, finalFile); // Renomeia para o nome desejado
@@ -700,7 +704,7 @@ public class AdminController {
             Files.deleteIfExists(finalFile);
             return ResponseEntity.ok("✅ Áudio enviado com sucesso para o chat " + targetChatId);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("❌ Erro ao salvar ou enviar áudio", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Erro ao salvar áudio: " + e.getMessage());
@@ -709,6 +713,8 @@ public class AdminController {
                 try {
                     Files.deleteIfExists(tempFile);
                 } catch (IOException ignored) {
+                    // Falha ao deletar arquivo temporário – pode ser ignorado
+                    log.debug("Não foi possível deletar arquivo: {}", tempFile);
                 }
             }
         }

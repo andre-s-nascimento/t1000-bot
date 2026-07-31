@@ -41,7 +41,7 @@ public class AudioService {
         try {
             ProcessBuilder pb =
                     new ProcessBuilder(
-                            "ffmpeg",
+                            "/usr/bin/ffmpeg",
                             "-y",
                             "-i",
                             ogaFile.getAbsolutePath(),
