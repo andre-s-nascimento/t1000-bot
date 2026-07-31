@@ -16,6 +16,10 @@ java {
 
 repositories {
     mavenCentral()
+    // Repositório obrigatório para o SDK de Fala da Azure
+    maven {
+        url "https://azureai.azureedge.net/maven/"
+    }
 }
 
 dependencies {
@@ -49,6 +53,11 @@ dependencies {
     // (Opcional) Se precisar de modelos específicos, o starter já inclui o meta-client.
     // Mas para evitar ambiguidades, você pode forçar a versão:
     implementation 'org.telegram:telegrambots-meta:6.9.7.1'
+
+    // ========== Azure Speech SDK (para TTS) ==========
+    // SDK oficial da Microsoft para Java (TTS, STT, etc.)
+    
+implementation 'com.azure:azure-core:1.54.1'   // para suporte HTTP (já deve estar presente via outras dependências)
 
     // Lombok
     compileOnly 'org.projectlombok:lombok:1.18.34'
@@ -159,4 +168,9 @@ tasks.named('bootRun') {
                 .collectEntries { [it[0], it[1]] }
         environment(envVars)
     }
+}
+
+tasks.register('copyDependencies', Copy) {
+    from configurations.runtimeClasspath
+    into "$buildDir/dependencies"
 }
