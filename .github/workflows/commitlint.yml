@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install commitlint
-        run: npm install -g @commitlint/cli @commitlint/config-conventional
+        run: npm ci --ignore-scripts
 
       - name: Validate commits (PR only)
         if: github.event_name == 'pull_request'

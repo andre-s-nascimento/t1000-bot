@@ -71,6 +71,9 @@ if [[ -z "$MESSAGE" ]]; then
     show_help
 fi
 
+# 🔥 Interpreta escapes como \n, \t, etc.
+MESSAGE=$(echo -e "$MESSAGE")
+
 # ----------------------------------------------------------------
 # URL encoding (função portável)
 # ----------------------------------------------------------------

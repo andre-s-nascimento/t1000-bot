@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -13,11 +13,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
 
       - name: Generate changelog
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@v4
+        uses: mikepenz/release-changelog-builder-action@e996d773a759f3d545d46a1b7f696c7be617051b
         with:
           configurationJson: |
             {
@@ -29,6 +29,6 @@ jobs:
             }
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@5a6f51711ce2ba103b78f5e9550f810679f11e0e
         with:
           body: ${{ steps.changelog.outputs.changelog }}
