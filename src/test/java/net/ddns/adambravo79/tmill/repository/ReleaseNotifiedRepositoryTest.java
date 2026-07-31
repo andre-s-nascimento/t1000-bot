@@ -111,8 +111,17 @@ class ReleaseNotifiedRepositoryTest {
                         anyString()))
                 .thenReturn(1);
 
-        repository.saveFullRelease(
-                TMDB_ID, MEDIA_TYPE, RELEASE_DATE, TITLE, OVERVIEW, RATING, PROVIDERS, POSTER_PATH);
+        FullRelease fullRelease =
+                new FullRelease(
+                        TMDB_ID,
+                        MEDIA_TYPE,
+                        RELEASE_DATE,
+                        TITLE,
+                        OVERVIEW,
+                        RATING,
+                        PROVIDERS,
+                        POSTER_PATH);
+        repository.saveFullRelease(fullRelease);
 
         verify(jdbcTemplate)
                 .update(
@@ -123,36 +132,6 @@ class ReleaseNotifiedRepositoryTest {
                         eq(TITLE),
                         eq(OVERVIEW),
                         eq(RATING),
-                        eq(PROVIDERS),
-                        eq(POSTER_PATH));
-    }
-
-    @Test
-    void saveFullRelease_comRatingNulo_deveInserirComNull() {
-        when(jdbcTemplate.update(
-                        anyString(),
-                        anyLong(),
-                        anyString(),
-                        anyString(),
-                        anyString(),
-                        anyString(),
-                        isNull(),
-                        anyString(),
-                        anyString()))
-                .thenReturn(1);
-
-        repository.saveFullRelease(
-                TMDB_ID, MEDIA_TYPE, RELEASE_DATE, TITLE, OVERVIEW, null, PROVIDERS, POSTER_PATH);
-
-        verify(jdbcTemplate)
-                .update(
-                        contains("INSERT INTO releases_notified"),
-                        eq(TMDB_ID),
-                        eq(MEDIA_TYPE),
-                        eq(RELEASE_DATE.toString()),
-                        eq(TITLE),
-                        eq(OVERVIEW),
-                        isNull(),
                         eq(PROVIDERS),
                         eq(POSTER_PATH));
     }

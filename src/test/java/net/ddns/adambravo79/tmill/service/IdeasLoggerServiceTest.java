@@ -11,14 +11,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
 
-class IdeasLoggerTest {
+class IdeasLoggerServiceTest {
 
     @TempDir Path tempDir;
 
     @Test
     void deveSalvarIdeiaEmArquivoDiario() throws Exception {
         // Arrange
-        IdeasLogger logger = new IdeasLogger();
+        IdeasLoggerService logger = new IdeasLoggerService();
         ReflectionTestUtils.setField(logger, "logDirectory", tempDir.toString());
 
         long userId = 123L;
@@ -48,7 +48,7 @@ class IdeasLoggerTest {
     void deveCriarDiretorioSeNaoExistir() {
         // Arrange
         Path deeperDir = tempDir.resolve("subdir").resolve("logs");
-        IdeasLogger logger = new IdeasLogger();
+        IdeasLoggerService logger = new IdeasLoggerService();
         ReflectionTestUtils.setField(logger, "logDirectory", deeperDir.toString());
 
         // Act
@@ -62,7 +62,7 @@ class IdeasLoggerTest {
     @Test
     void deveLidarComNomeVazio() throws Exception {
         // Arrange
-        IdeasLogger logger = new IdeasLogger();
+        IdeasLoggerService logger = new IdeasLoggerService();
         ReflectionTestUtils.setField(logger, "logDirectory", tempDir.toString());
 
         // Act
@@ -79,7 +79,7 @@ class IdeasLoggerTest {
     @Test
     void deveLidarComIdeiaVazia() throws Exception {
         // Arrange
-        IdeasLogger logger = new IdeasLogger();
+        IdeasLoggerService logger = new IdeasLoggerService();
         ReflectionTestUtils.setField(logger, "logDirectory", tempDir.toString());
 
         // Act

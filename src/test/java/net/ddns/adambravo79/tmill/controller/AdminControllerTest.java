@@ -62,6 +62,7 @@ class AdminControllerTest {
     @Mock private ReleaseNotifiedRepository releaseNotifiedRepository;
     @Mock private AzureTtsClient azureTtsClient;
     @Mock private PodcastPublisherService podcastPublisherService;
+    @Mock private TempDirService tempDirService;
 
     private AdminController adminController;
     private ObjectMapper objectMapperSpy;
@@ -91,7 +92,8 @@ class AdminControllerTest {
                         dailyReleasesService,
                         releaseNotifiedRepository,
                         azureTtsClient,
-                        podcastPublisherService);
+                        podcastPublisherService,
+                        tempDirService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
 

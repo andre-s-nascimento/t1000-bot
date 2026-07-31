@@ -25,6 +25,7 @@ public class PodcastPublisherService {
     private final PodcastScriptService scriptService;
     private final AzureTtsClient ttsClient;
     private final TelegramFacade telegramFacade;
+    private final TempDirService tempDirService;
 
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
@@ -82,7 +83,7 @@ public class PodcastPublisherService {
         // 4. Salva e envia
         Path tempFile = null;
         try {
-            tempFile = Files.createTempFile("podcast_", ".mp3");
+            tempFile = tempDirService.createTempFile("podcast_", ".mp3");
             Files.write(tempFile, audioData);
 
             // Move para o nome final (opcional, mas podemos renomear)
@@ -110,6 +111,8 @@ public class PodcastPublisherService {
                 try {
                     Files.deleteIfExists(tempFile);
                 } catch (IOException ignored) {
+                    // Falha ao deletar arquivo temporário – pode ser ignorado
+                    log.debug("Não foi possível deletar arquivo: {}", tempFile);
                 }
             }
         }

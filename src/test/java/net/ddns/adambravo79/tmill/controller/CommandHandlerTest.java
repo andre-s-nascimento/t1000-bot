@@ -55,7 +55,7 @@ class CommandHandlerTest {
     @Mock private AutoResponseService autoResponseService;
     @Mock private WeeklyReleasesService weeklyReleasesService;
     @Mock private WorldCupSchedulerService worldCupSchedulerService;
-    @Mock private IdeasLogger ideasLogger;
+    @Mock private IdeasLoggerService ideasLogger;
     @Mock private MessageStoreService messageStoreService;
     @Mock private TelegramFacade telegramFacade;
     @Mock private TelegramUtils utils;

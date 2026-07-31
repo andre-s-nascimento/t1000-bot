@@ -1,6 +1,5 @@
 package net.ddns.adambravo79.tmill.service;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -18,6 +17,7 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 public class TelegramFileService {
 
     private final TelegramFacade telegramFacade;
+    private final TempDirService tempDirService;
 
     private static final int MAX_ATTEMPTS = 3;
     private static final long INITIAL_BACKOFF_MS = 1000;
@@ -62,11 +62,11 @@ public class TelegramFileService {
         File tgFile = telegramFacade.getFile(fileId);
         byte[] data = telegramFacade.downloadFile(tgFile);
         try {
-            Path tempFile = Files.createTempFile("audio", ".oga");
+            Path tempFile = tempDirService.createTempFile("audio", ".oga");
             Files.write(tempFile, data);
             log.info("Arquivo baixado: {}", tempFile);
             return tempFile.toFile();
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Falha ao salvar arquivo temporário", e);
         }
     }

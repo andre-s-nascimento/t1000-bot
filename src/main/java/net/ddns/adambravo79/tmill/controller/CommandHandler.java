@@ -55,7 +55,7 @@ public class CommandHandler {
     private final AutoResponseService autoResponseService;
     private final WeeklyReleasesService weeklyReleasesService;
     private final WorldCupSchedulerService worldCupSchedulerService;
-    private final IdeasLogger ideasLogger;
+    private final IdeasLoggerService ideasLogger;
     private final MessageStoreService messageStoreService;
     private final TelegramFacade telegramFacade;
     private final TelegramUtils utils;

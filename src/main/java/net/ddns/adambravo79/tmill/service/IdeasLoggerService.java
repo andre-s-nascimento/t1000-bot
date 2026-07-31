@@ -6,8 +6,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -17,7 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
-public class IdeasLogger {
+public class IdeasLoggerService {
 
     @Value("${ideas.log.directory:logs}")
     private String logDirectory;
@@ -27,11 +27,13 @@ public class IdeasLogger {
 
     public void saveIdea(long userId, String userName, long chatId, String idea, String groupName) {
         try {
-            String today = LocalDate.now().format(DATE_FORMATTER);
+            String today = LocalDateTime.now(ZoneId.of("America/Sao_Paulo")).format(DATE_FORMATTER);
             Path logFile = Paths.get(logDirectory, "ideas_" + today + ".txt");
             Files.createDirectories(logFile.getParent());
 
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            String timestamp =
+                    LocalDateTime.now(ZoneId.of("America/Sao_Paulo"))
+                            .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             String line =
                     String.format(
                             "%s | userId=%d | name=%s | chatId=%d | chatName=%s | idea=%s%n",
