@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Administrativo - T-Mill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            background: #f8f9fa;
+            padding-top: 70px;
+        }
+
+        .container {
+            max-width: 1400px;
+        }
+
+        .card {
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            background-color: #e9ecef;
+            font-weight: 500;
+        }
+
+        .flash-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 250px;
+        }
+
+        .spinner {
+            display: none;
+        }
+
+        .loading .spinner {
+            display: inline-block;
+        }
+
+        .nav-tabs .nav-link {
+            color: #495057;
+        }
+
+        .nav-tabs .nav-link.active {
+            font-weight: 600;
+        }
+
+        .btn-group-sm>.btn {
+            margin-right: 0.25rem;
+        }
+
+        .section-badge {
+            font-size: 0.8rem;
+            background: #6c757d;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="bi bi-robot"></i> T-Mill Admin</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="#" onclick="location.reload();"><i
+                                class="bi bi-arrow-clockwise"></i> Recarregar</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/logout"><i class="bi bi-box-arrow-right"></i>
+                            Sair</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Status -->
+        <div class="text-muted mb-3">
+            <span th:text="'🕒 ' + ${now}"></span> |
+            <span th:text="'⚽ Copa: ' + (${worldcupEnabled} ? '✅ Ativada' : '❌ Desativada')"></span> |
+            <span th:text="'👤 Owner ID: ' + ${ownerId}"></span> |
+            <span th:text="'🎙️ Publish Chat: ' + ${publishChatId}"></span>
+        </div>
+
+        <!-- Mensagens flash -->
+        <div th:if="${success}" class="alert alert-success flash-message alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle"></i> <span th:text="${success}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <div th:if="${error}" class="alert alert-danger flash-message alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
+        <!-- Tabs -->
+        <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+            <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#mensagens">📨 Mensagens</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#copa">⚽ Copa</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#digest">📰 Digest</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#lembretes">📅 Lembretes</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#auto">🤖 Auto-Response</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#admin">⚙️ Admin</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#monitor">📊 Monitor</a></li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- ============================================================ -->
+            <!-- ABA MENSAGENS -->
+            <!-- ============================================================ -->
+            <div class="tab-pane active" id="mensagens">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header"><i class="bi bi-chat"></i> Enviar Mensagem (Texto)</div>
+                            <div class="card-body">
+                                <form id="falaForm" onsubmit="submitAction(event, '/admin-web/fala-t1000', this)">
+                                    <div class="mb-2">
+                                        <label class="form-label">Mensagem</label>
+                                        <textarea class="form-control" name="message" rows="2" required></textarea>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Chat ID (opcional)</label>
+                                        <input type="number" class="form-control" name="chatId" value="-1003703557250">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Modo</label>
+                                        <select class="form-select" name="parseMode">
+                                            <option value="HTML">HTML</option>
+                                            <option value="TEXT">TEXT</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Enviar</button>
+                                    <div class="spinner-border spinner text-primary ms-2" role="status"></div>
+                                </form>
+                                <div id="falaResult" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header"><i class="bi bi-mic"></i> Sintetizar e Enviar Áudio (TTS)</div>
+                            <div class="card-body">
+                                <form id="ttsForm" onsubmit="submitAction(event, '/admin-web/fala-t1000-tts', this)">
+                                    <div class="mb-2">
+                                        <label class="form-label">Texto</label>
+                                        <textarea class="form-control" name="message" rows="2" required></textarea>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Chat ID (opcional)</label>
+                                        <input type="number" class="form-control" name="chatId">
+                                    </div>
+                                    <button type="submit" class="btn btn-success">Gerar e Enviar</button>
+                                    <div class="spinner-border spinner text-success ms-2" role="status"></div>
+                                </form>
+                                <div id="ttsResult" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-6">
+                        <form th:action="@{/admin-web/test-azure-tts}" method="post">
+                            <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-cloud"></i> Testar
+                                Azure TTS (fixo)</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- ABA COPA -->
+            <!-- ============================================================ -->
+            <div class="tab-pane" id="copa">
+                <div class="row">
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-worldcup}" method="post">
+                            <button type="submit" class="btn btn-warning" th:disabled="${!worldcupEnabled}">Enviar
+                                Manual (todos)</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-worldcup-showcase}" method="post" class="row g-1">
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-warning"
+                                    th:disabled="${!worldcupEnabled}">Showcase</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/reload-worldcup}" method="post">
+                            <button type="submit" class="btn btn-info">Recarregar Dados</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/reload-worldcup-showcase}" method="post" class="row g-1">
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-info">Reload + Notificar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-worldcup-noon}" method="post">
+                            <button type="submit" class="btn btn-secondary"
+                                th:disabled="${!worldcupEnabled}">Meio-dia</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-worldcup-noon-showcase}" method="post" class="row g-1">
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-secondary"
+                                    th:disabled="${!worldcupEnabled}">Meio-dia Showcase</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-worldcup-evening}" method="post">
+                            <button type="submit" class="btn btn-secondary"
+                                th:disabled="${!worldcupEnabled}">Noite</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-worldcup-evening-showcase}" method="post" class="row g-1">
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-secondary" th:disabled="${!worldcupEnabled}">Noite
+                                    Showcase</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-6">
+                        <form th:action="@{/admin-web/test-worldcup-results}" method="post" class="row g-2">
+                            <div class="col-auto">
+                                <input type="text" class="form-control" name="dateParam"
+                                    placeholder="Data (ex: ontem, 2026-07-22)" value="ontem">
+                            </div>
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-dark" th:disabled="${!worldcupEnabled}">Enviar
+                                    Resultados</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- ABA DIGEST -->
+            <!-- ============================================================ -->
+            <div class="tab-pane" id="digest">
+                <div class="row">
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-morning-digest}" method="post">
+                            <button type="submit" class="btn btn-outline-primary">Morning Digest</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-evening-digest}" method="post">
+                            <button type="submit" class="btn btn-outline-primary">Evening Digest</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-daily-releases}" method="post">
+                            <button type="submit" class="btn btn-outline-success">Daily Releases</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/test-weekly-digest}" method="post">
+                            <button type="submit" class="btn btn-outline-success">Weekly Digest</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-6">
+                        <form th:action="@{/admin-web/custom-digest}" method="post" class="row g-2">
+                            <div class="col-auto">
+                                <input type="date" class="form-control" name="start" required>
+                            </div>
+                            <div class="col-auto">
+                                <input type="date" class="form-control" name="end" required>
+                            </div>
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-outline-info">Custom Digest</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- ABA LEMBRETES -->
+            <!-- ============================================================ -->
+            <div class="tab-pane" id="lembretes">
+                <div class="row">
+                    <div class="col-md-4">
+                        <form th:action="@{/admin-web/test-weekly-reminder}" method="post">
+                            <button type="submit" class="btn btn-outline-warning">Lembrete Semanal (padrão)</button>
+                        </form>
+                    </div>
+                    <div class="col-md-8">
+                        <form th:action="@{/admin-web/test-weekly-reminder-showcase}" method="post" class="row g-2">
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-outline-warning">Enviar para Chat
+                                    específico</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- ABA AUTO-RESPONSE -->
+            <!-- ============================================================ -->
+            <div class="tab-pane" id="auto">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header"><i class="bi bi-robot"></i> Testar Auto-Response</div>
+                            <div class="card-body">
+                                <form id="autoTestForm"
+                                    onsubmit="submitAction(event, '/admin-web/test-auto-response', this)">
+                                    <div class="mb-2">
+                                        <label class="form-label">User ID (opcional)</label>
+                                        <input type="number" class="form-control" name="userId">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Mensagem</label>
+                                        <input type="text" class="form-control" name="message" required>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Chat ID (opcional)</label>
+                                        <input type="number" class="form-control" name="chatId">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Horário simulado (HH:mm)</label>
+                                        <input type="text" class="form-control" name="time" placeholder="ex: 14:30">
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Testar</button>
+                                    <div class="spinner-border spinner text-primary ms-2" role="status"></div>
+                                </form>
+                                <div id="autoTestResult" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header"><i class="bi bi-search"></i> Debug Auto-Response</div>
+                            <div class="card-body">
+                                <form id="debugForm" onsubmit="debugAutoResponse(event, this)">
+                                    <div class="mb-2">
+                                        <label class="form-label">User ID (opcional)</label>
+                                        <input type="number" class="form-control" name="userId" id="debugUserId">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Mensagem</label>
+                                        <input type="text" class="form-control" name="message" id="debugMessage"
+                                            required>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label">Horário simulado (HH:mm)</label>
+                                        <input type="text" class="form-control" name="time" id="debugTime"
+                                            placeholder="ex: 14:30">
+                                    </div>
+                                    <button type="submit" class="btn btn-info">Debug</button>
+                                </form>
+                                <div id="debugResult" class="mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-md-12">
+                        <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-secondary">
+                            <i class="bi bi-list"></i> Listar Regras (JSON)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- ABA ADMIN -->
+            <!-- ============================================================ -->
+            <div class="tab-pane" id="admin">
+                <div class="row">
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/clear-releases}" method="post"
+                            onsubmit="return confirm('Tem certeza que deseja limpar a tabela de releases?')">
+                            <button type="submit" class="btn btn-danger">Limpar Releases</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/clear-all-data}" method="post"
+                            onsubmit="return confirm('Isso apagará TODOS os dados. Continuar?')">
+                            <button type="submit" class="btn btn-danger">Limpar Todos os Dados</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/reload-auto-responses}" method="post">
+                            <button type="submit" class="btn btn-secondary">Recarregar Auto-Responses</button>
+                        </form>
+                    </div>
+                    <div class="col-md-3">
+                        <form th:action="@{/admin-web/reload-easter-eggs}" method="post">
+                            <button type="submit" class="btn btn-secondary">Recarregar Easter Eggs</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <form th:action="@{/admin-web/test-podcast}" method="post" class="row g-2">
+                            <div class="col-auto">
+                                <input type="date" class="form-control" name="start" placeholder="Início">
+                            </div>
+                            <div class="col-auto">
+                                <input type="date" class="form-control" name="end" placeholder="Fim">
+                            </div>
+                            <div class="col-auto">
+                                <input type="number" class="form-control" name="chatId"
+                                    placeholder="Chat ID (opcional)">
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-outline-dark"><i class="bi bi-podcast"></i> Gerar
+                                    Podcast</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- ABA MONITOR -->
+            <!-- ============================================================ -->
+            <div class="tab-pane" id="monitor">
+                <div class="row">
+                    <div class="col-md-3">
+                        <a href="/admin-web/cache-stats" target="_blank" class="btn btn-outline-info"><i
+                                class="bi bi-database"></i> Cache Stats</a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="/admin-web/properties" target="_blank" class="btn btn-outline-info"><i
+                                class="bi bi-gear"></i> Propriedades</a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="/admin-web/config-files" target="_blank" class="btn btn-outline-info"><i
+                                class="bi bi-file-earmark-code"></i> Arquivos de Config</a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-info"><i
+                                class="bi bi-list-ul"></i> Regras Auto-Response</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <hr>
+        <footer class="text-muted text-center py-3">
+            <small>&copy; 2026 T-Mill Bot - Painel Administrativo Completo</small>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Fecha mensagens flash após 5 segundos
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(() => {
+                document.querySelectorAll('.flash-message').forEach(el => {
+                    const alert = bootstrap.Alert.getInstance(el);
+                    if (alert) alert.close();
+                });
+            }, 5000);
+        });
+
+        // Função AJAX genérica
+        async function submitAction(event, url, form) {
+            event.preventDefault();
+            const formData = new FormData(form);
+            const params = new URLSearchParams(formData);
+            const resultDiv = form.parentElement.querySelector('[id$="Result"]');
+            const spinner = form.querySelector('.spinner');
+
+            if (spinner) spinner.style.display = 'inline-block';
+            if (resultDiv) resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+
+            try {
+                const response = await fetch(url + '?' + params.toString(), { method: 'POST' });
+                const text = await response.text();
+                if (resultDiv) {
+                    resultDiv.innerHTML = `<div class="alert alert-info">${text}</div>`;
+                }
+            } catch (error) {
+                if (resultDiv) {
+                    resultDiv.innerHTML = `<div class="alert alert-danger">Erro: ${error.message}</div>`;
+                }
+            } finally {
+                if (spinner) spinner.style.display = 'none';
+            }
+        }
+
+        // Debug Auto-Response (GET JSON)
+        async function debugAutoResponse(event, form) {
+            event.preventDefault();
+            const userId = document.getElementById('debugUserId').value;
+            const message = document.getElementById('debugMessage').value;
+            const time = document.getElementById('debugTime').value;
+            const params = new URLSearchParams({ userId, message, time });
+            const resultDiv = document.getElementById('debugResult');
+
+            resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+
+            try {
+                const response = await fetch('/admin-web/debug-auto-response?' + params.toString());
+                const data = await response.json();
+                resultDiv.innerHTML = `<pre class="bg-light p-2 rounded">${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="alert alert-danger">Erro: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+
+</html>
