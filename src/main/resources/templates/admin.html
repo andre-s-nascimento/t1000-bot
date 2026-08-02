@@ -1,40 +1,154 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html xmlns:th="http://www.thymeleaf.org" lang="pt-BR">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Painel Administrativo - T-Mill</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
+        /* Otimizações responsivas e acessibilidade */
         body {
             background: #f8f9fa;
-            padding-top: 70px;
+            padding-top: 65px;
+            font-size: 0.95rem;
         }
 
         .container {
             max-width: 1400px;
+            padding-left: 12px;
+            padding-right: 12px;
         }
 
+        /* Navbar mais compacta em mobile */
+        .navbar-brand {
+            font-size: 1.2rem;
+        }
+
+        .navbar-brand i {
+            font-size: 1.5rem;
+        }
+
+        /* Cards */
         .card {
             box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-            margin-bottom: 20px;
+            margin-bottom: 1rem;
+            border-radius: 0.5rem;
         }
 
         .card-header {
             background-color: #e9ecef;
             font-weight: 500;
+            padding: 0.6rem 1rem;
+            border-radius: 0.5rem 0.5rem 0 0;
         }
 
+        .card-body {
+            padding: 1rem;
+        }
+
+        /* Status bar */
+        .status-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem 1rem;
+            font-size: 0.85rem;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: #fff;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.05);
+        }
+
+        .status-bar span {
+            white-space: nowrap;
+        }
+
+        /* Tabs mais compactas e com rolagem horizontal em mobile */
+        .nav-tabs {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            /* Firefox */
+            gap: 0.1rem;
+            padding-bottom: 0.2rem;
+        }
+
+        .nav-tabs::-webkit-scrollbar {
+            display: none;
+            /* Chrome/Safari */
+        }
+
+        .nav-tabs .nav-item {
+            flex-shrink: 0;
+        }
+
+        .nav-tabs .nav-link {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            border-radius: 0.4rem 0.4rem 0 0;
+            border: 1px solid transparent;
+            background: transparent;
+            color: #495057;
+        }
+
+        .nav-tabs .nav-link.active {
+            background: #fff;
+            border-color: #dee2e6 #dee2e6 #fff;
+            font-weight: 600;
+            color: #0d6efd;
+        }
+
+        .nav-tabs .nav-link:focus-visible {
+            outline: 2px solid #0d6efd;
+            outline-offset: -2px;
+        }
+
+        /* Botões em mobile - largura total e empilhados */
+        .btn-group-vertical-mobile {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .btn-group-vertical-mobile .btn {
+            width: 100%;
+            text-align: left;
+            justify-content: flex-start;
+        }
+
+        .btn-group-vertical-mobile .btn i {
+            margin-right: 0.5rem;
+        }
+
+        /* Em telas médias+, volta ao layout horizontal */
+        @media (min-width: 768px) {
+            .btn-group-vertical-mobile {
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+
+            .btn-group-vertical-mobile .btn {
+                width: auto;
+                min-width: 120px;
+            }
+        }
+
+        /* Flash messages */
         .flash-message {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            top: 75px;
+            right: 12px;
             z-index: 9999;
-            min-width: 250px;
+            max-width: 90%;
+            min-width: 200px;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
         }
 
+        /* Spinner */
         .spinner {
             display: none;
         }
@@ -43,452 +157,575 @@
             display: inline-block;
         }
 
-        .nav-tabs .nav-link {
-            color: #495057;
+        /* Botões com ícones e texto */
+        .btn i {
+            margin-right: 0.3rem;
         }
 
-        .nav-tabs .nav-link.active {
-            font-weight: 600;
+        /* Ajustes para inputs em mobile */
+        .form-control,
+        .form-select {
+            font-size: 0.95rem;
+            padding: 0.5rem 0.75rem;
         }
 
-        .btn-group-sm>.btn {
-            margin-right: 0.25rem;
+        /* Resultados de ações */
+        .result-box {
+            margin-top: 0.75rem;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 0.25rem;
+            border-left: 3px solid #0d6efd;
+            font-size: 0.9rem;
         }
 
-        .section-badge {
+        .result-box.error {
+            border-left-color: #dc3545;
+        }
+
+        /* Footer */
+        footer {
             font-size: 0.8rem;
-            background: #6c757d;
-            color: white;
-            border-radius: 10px;
-            padding: 2px 10px;
+            opacity: 0.7;
+        }
+
+        /* Acessibilidade: focus visível */
+        *:focus-visible {
+            outline: 2px solid #0d6efd;
+            outline-offset: 2px;
+        }
+
+        /* Melhoria para leitores de tela */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
+
+        /* Estilo para links sem underline no hover */
+        a {
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
 
 <body>
 
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+    <!-- ===== NAVBAR ===== -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top" aria-label="Navegação principal">
         <div class="container">
-            <a class="navbar-brand" href="#"><i class="bi bi-robot"></i> T-Mill Admin</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <a class="navbar-brand" href="#" aria-label="Página inicial do painel">
+                <i class="bi bi-robot" aria-hidden="true"></i> T-Mill Admin
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Alternar navegação">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
-                    <li class="nav-item"><a class="nav-link" href="#" onclick="location.reload();"><i
-                                class="bi bi-arrow-clockwise"></i> Recarregar</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/logout"><i class="bi bi-box-arrow-right"></i>
-                            Sair</a></li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="location.reload();" aria-label="Recarregar página">
+                            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Recarregar
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/logout" aria-label="Sair do sistema">
+                            <i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sair
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>
     </nav>
 
-    <div class="container">
-        <!-- Status -->
-        <div class="text-muted mb-3">
-            <span th:text="'🕒 ' + ${now}"></span> |
-            <span th:text="'⚽ Copa: ' + (${worldcupEnabled} ? '✅ Ativada' : '❌ Desativada')"></span> |
-            <span th:text="'👤 Owner ID: ' + ${ownerId}"></span> |
+    <!-- ===== CONTEÚDO ===== -->
+    <div class="container" role="main" aria-label="Painel administrativo">
+
+        <!-- Barra de status -->
+        <div class="status-bar" aria-live="polite" aria-atomic="true">
+            <span th:text="'🕒 ' + ${now}"></span>
+            <span th:text="'⚽ Copa: ' + (${worldcupEnabled} ? '✅ Ativada' : '❌ Desativada')"></span>
+            <span th:text="'👤 Owner ID: ' + ${ownerId}"></span>
             <span th:text="'🎙️ Publish Chat: ' + ${publishChatId}"></span>
         </div>
 
         <!-- Mensagens flash -->
-        <div th:if="${success}" class="alert alert-success flash-message alert-dismissible fade show" role="alert">
-            <i class="bi bi-check-circle"></i> <span th:text="${success}"></span>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <div th:if="${success}" class="alert alert-success flash-message alert-dismissible fade show" role="alert"
+            aria-live="assertive">
+            <i class="bi bi-check-circle" aria-hidden="true"></i>
+            <span th:text="${success}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar mensagem"></button>
         </div>
-        <div th:if="${error}" class="alert alert-danger flash-message alert-dismissible fade show" role="alert">
-            <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}"></span>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <div th:if="${error}" class="alert alert-danger flash-message alert-dismissible fade show" role="alert"
+            aria-live="assertive">
+            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+            <span th:text="${error}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar mensagem"></button>
         </div>
 
-        <!-- Tabs -->
-        <ul class="nav nav-tabs" id="adminTabs" role="tablist">
-            <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#mensagens">📨 Mensagens</a></li>
-            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#copa">⚽ Copa</a></li>
-            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#digest">📰 Digest</a></li>
-            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#lembretes">📅 Lembretes</a></li>
-            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#auto">🤖 Auto-Response</a></li>
-            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#admin">⚙️ Admin</a></li>
-            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#monitor">📊 Monitor</a></li>
+        <!-- ===== TABS ===== -->
+        <ul class="nav nav-tabs" id="adminTabs" role="tablist" aria-label="Navegação por abas">
+            <li class="nav-item" role="presentation">
+                <a class="nav-link active" id="tab-mensagens" data-bs-toggle="tab" href="#mensagens" role="tab"
+                    aria-controls="mensagens" aria-selected="true">
+                    📨 Mensagens
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-copa" data-bs-toggle="tab" href="#copa" role="tab" aria-controls="copa"
+                    aria-selected="false">
+                    ⚽ Copa
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-digest" data-bs-toggle="tab" href="#digest" role="tab"
+                    aria-controls="digest" aria-selected="false">
+                    📰 Digest
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-lembretes" data-bs-toggle="tab" href="#lembretes" role="tab"
+                    aria-controls="lembretes" aria-selected="false">
+                    📅 Lembretes
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-auto" data-bs-toggle="tab" href="#auto" role="tab" aria-controls="auto"
+                    aria-selected="false">
+                    🤖 Auto-Response
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-admin" data-bs-toggle="tab" href="#admin" role="tab" aria-controls="admin"
+                    aria-selected="false">
+                    ⚙️ Admin
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-monitor" data-bs-toggle="tab" href="#monitor" role="tab"
+                    aria-controls="monitor" aria-selected="false">
+                    📊 Monitor
+                </a>
+            </li>
         </ul>
 
+        <!-- ===== CONTEÚDO DAS ABAS ===== -->
         <div class="tab-content">
-            <!-- ============================================================ -->
+
             <!-- ABA MENSAGENS -->
-            <!-- ============================================================ -->
-            <div class="tab-pane active" id="mensagens">
-                <div class="row">
-                    <div class="col-md-6">
+            <div class="tab-pane active" id="mensagens" role="tabpanel" aria-labelledby="tab-mensagens">
+                <div class="row g-3">
+                    <!-- Card Enviar Mensagem -->
+                    <div class="col-12 col-md-6">
                         <div class="card">
-                            <div class="card-header"><i class="bi bi-chat"></i> Enviar Mensagem (Texto)</div>
+                            <div class="card-header"><i class="bi bi-chat" aria-hidden="true"></i> Enviar Mensagem
+                                (Texto)</div>
                             <div class="card-body">
-                                <form id="falaForm" onsubmit="submitAction(event, '/admin-web/fala-t1000', this)">
+                                <form id="falaForm" onsubmit="submitAction(event, '/admin-web/fala-t1000', this)"
+                                    aria-label="Formulário de envio de mensagem">
                                     <div class="mb-2">
-                                        <label class="form-label">Mensagem</label>
-                                        <textarea class="form-control" name="message" rows="2" required></textarea>
+                                        <label for="falaMsg" class="form-label">Mensagem</label>
+                                        <textarea class="form-control" id="falaMsg" name="message" rows="2" required
+                                            aria-required="true"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Chat ID (opcional)</label>
-                                        <input type="number" class="form-control" name="chatId" value="-1003703557250">
+                                        <label for="falaChat" class="form-label">Chat ID (opcional)</label>
+                                        <input type="number" class="form-control" id="falaChat" name="chatId"
+                                            value="-1003703557250" aria-describedby="chatHelp">
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Modo</label>
-                                        <select class="form-select" name="parseMode">
+                                        <label for="falaMode" class="form-label">Modo</label>
+                                        <select class="form-select" id="falaMode" name="parseMode">
                                             <option value="HTML">HTML</option>
                                             <option value="TEXT">TEXT</option>
                                         </select>
                                     </div>
-                                    <button type="submit" class="btn btn-primary">Enviar</button>
-                                    <div class="spinner-border spinner text-primary ms-2" role="status"></div>
+                                    <button type="submit" class="btn btn-primary" aria-label="Enviar mensagem">
+                                        <i class="bi bi-send" aria-hidden="true"></i> Enviar
+                                    </button>
+                                    <div class="spinner-border spinner text-primary ms-2" role="status"
+                                        aria-hidden="true"></div>
+                                    <span class="sr-only">Enviando...</span>
                                 </form>
-                                <div id="falaResult" class="mt-2"></div>
+                                <div id="falaResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <!-- Card TTS -->
+                    <div class="col-12 col-md-6">
                         <div class="card">
-                            <div class="card-header"><i class="bi bi-mic"></i> Sintetizar e Enviar Áudio (TTS)</div>
+                            <div class="card-header"><i class="bi bi-mic" aria-hidden="true"></i> Sintetizar e Enviar
+                                Áudio (TTS)</div>
                             <div class="card-body">
-                                <form id="ttsForm" onsubmit="submitAction(event, '/admin-web/fala-t1000-tts', this)">
+                                <form id="ttsForm" onsubmit="submitAction(event, '/admin-web/fala-t1000-tts', this)"
+                                    aria-label="Formulário de síntese de áudio">
                                     <div class="mb-2">
-                                        <label class="form-label">Texto</label>
-                                        <textarea class="form-control" name="message" rows="2" required></textarea>
+                                        <label for="ttsMsg" class="form-label">Texto</label>
+                                        <textarea class="form-control" id="ttsMsg" name="message" rows="2" required
+                                            aria-required="true"></textarea>
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Chat ID (opcional)</label>
-                                        <input type="number" class="form-control" name="chatId">
+                                        <label for="ttsChat" class="form-label">Chat ID (opcional)</label>
+                                        <input type="number" class="form-control" id="ttsChat" name="chatId">
                                     </div>
-                                    <button type="submit" class="btn btn-success">Gerar e Enviar</button>
-                                    <div class="spinner-border spinner text-success ms-2" role="status"></div>
+                                    <button type="submit" class="btn btn-success" aria-label="Gerar e enviar áudio">
+                                        <i class="bi bi-file-earmark-play" aria-hidden="true"></i> Gerar e Enviar
+                                    </button>
+                                    <div class="spinner-border spinner text-success ms-2" role="status"
+                                        aria-hidden="true"></div>
+                                    <span class="sr-only">Processando áudio...</span>
                                 </form>
-                                <div id="ttsResult" class="mt-2"></div>
+                                <div id="ttsResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="row mt-2">
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <form th:action="@{/admin-web/test-azure-tts}" method="post">
-                            <button type="submit" class="btn btn-outline-secondary"><i class="bi bi-cloud"></i> Testar
-                                Azure TTS (fixo)</button>
+                            <button type="submit" class="btn btn-outline-secondary"
+                                aria-label="Testar Azure TTS com mensagem fixa">
+                                <i class="bi bi-cloud" aria-hidden="true"></i> Testar Azure TTS (fixo)
+                            </button>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <!-- ============================================================ -->
             <!-- ABA COPA -->
-            <!-- ============================================================ -->
-            <div class="tab-pane" id="copa">
-                <div class="row">
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-worldcup}" method="post">
-                            <button type="submit" class="btn btn-warning" th:disabled="${!worldcupEnabled}">Enviar
-                                Manual (todos)</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-worldcup-showcase}" method="post" class="row g-1">
-                            <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-warning"
-                                    th:disabled="${!worldcupEnabled}">Showcase</button>
-                            </div>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/reload-worldcup}" method="post">
-                            <button type="submit" class="btn btn-info">Recarregar Dados</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/reload-worldcup-showcase}" method="post" class="row g-1">
-                            <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-info">Reload + Notificar</button>
-                            </div>
-                        </form>
-                    </div>
+            <div class="tab-pane" id="copa" role="tabpanel" aria-labelledby="tab-copa">
+                <div class="btn-group-vertical-mobile mb-2" role="group" aria-label="Ações da Copa">
+                    <form th:action="@{/admin-web/test-worldcup}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-warning" th:disabled="${!worldcupEnabled}"
+                            aria-label="Enviar manual para todos os chats">
+                            <i class="bi bi-send" aria-hidden="true"></i> Enviar Manual (todos)
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/test-worldcup-showcase}" method="post" class="d-inline-block">
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" class="form-control form-control-sm" name="chatId"
+                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            <button type="submit" class="btn btn-warning btn-sm" th:disabled="${!worldcupEnabled}"
+                                aria-label="Enviar manual para showcase">
+                                <i class="bi bi-star" aria-hidden="true"></i> Showcase
+                            </button>
+                        </div>
+                    </form>
+                    <form th:action="@{/admin-web/reload-worldcup}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-info" aria-label="Recarregar dados da Copa">
+                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Recarregar Dados
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/reload-worldcup-showcase}" method="post" class="d-inline-block">
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" class="form-control form-control-sm" name="chatId"
+                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            <button type="submit" class="btn btn-info btn-sm"
+                                aria-label="Recarregar e notificar showcase">
+                                <i class="bi bi-bell" aria-hidden="true"></i> Reload + Notificar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="btn-group-vertical-mobile mb-2" role="group" aria-label="Horários da Copa">
+                    <form th:action="@{/admin-web/test-worldcup-noon}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-secondary" th:disabled="${!worldcupEnabled}"
+                            aria-label="Enviar jogos do meio-dia">
+                            <i class="bi bi-sun" aria-hidden="true"></i> Meio-dia
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/test-worldcup-noon-showcase}" method="post" class="d-inline-block">
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" class="form-control form-control-sm" name="chatId"
+                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            <button type="submit" class="btn btn-secondary btn-sm" th:disabled="${!worldcupEnabled}"
+                                aria-label="Enviar meio-dia para showcase">
+                                <i class="bi bi-star" aria-hidden="true"></i> Meio-dia Showcase
+                            </button>
+                        </div>
+                    </form>
+                    <form th:action="@{/admin-web/test-worldcup-evening}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-secondary" th:disabled="${!worldcupEnabled}"
+                            aria-label="Enviar jogos da noite">
+                            <i class="bi bi-moon" aria-hidden="true"></i> Noite
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/test-worldcup-evening-showcase}" method="post" class="d-inline-block">
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" class="form-control form-control-sm" name="chatId"
+                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            <button type="submit" class="btn btn-secondary btn-sm" th:disabled="${!worldcupEnabled}"
+                                aria-label="Enviar noite para showcase">
+                                <i class="bi bi-star" aria-hidden="true"></i> Noite Showcase
+                            </button>
+                        </div>
+                    </form>
                 </div>
                 <div class="row mt-2">
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-worldcup-noon}" method="post">
-                            <button type="submit" class="btn btn-secondary"
-                                th:disabled="${!worldcupEnabled}">Meio-dia</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-worldcup-noon-showcase}" method="post" class="row g-1">
+                    <div class="col-12 col-md-6">
+                        <form th:action="@{/admin-web/test-worldcup-results}" method="post"
+                            class="row g-2 align-items-center">
                             <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
+                                <label for="dateParam" class="visually-hidden">Data</label>
+                                <input type="text" class="form-control" id="dateParam" name="dateParam"
+                                    placeholder="Data (ex: ontem, 2026-07-22)" value="ontem"
+                                    aria-label="Data para resultados">
                             </div>
                             <div class="col-auto">
-                                <button type="submit" class="btn btn-secondary"
-                                    th:disabled="${!worldcupEnabled}">Meio-dia Showcase</button>
-                            </div>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-worldcup-evening}" method="post">
-                            <button type="submit" class="btn btn-secondary"
-                                th:disabled="${!worldcupEnabled}">Noite</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-worldcup-evening-showcase}" method="post" class="row g-1">
-                            <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
+                                <label for="resultChat" class="visually-hidden">Chat ID</label>
+                                <input type="number" class="form-control" id="resultChat" name="chatId"
+                                    placeholder="Chat ID" aria-label="Chat ID opcional">
                             </div>
                             <div class="col-auto">
-                                <button type="submit" class="btn btn-secondary" th:disabled="${!worldcupEnabled}">Noite
-                                    Showcase</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-                <div class="row mt-2">
-                    <div class="col-md-6">
-                        <form th:action="@{/admin-web/test-worldcup-results}" method="post" class="row g-2">
-                            <div class="col-auto">
-                                <input type="text" class="form-control" name="dateParam"
-                                    placeholder="Data (ex: ontem, 2026-07-22)" value="ontem">
-                            </div>
-                            <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-dark" th:disabled="${!worldcupEnabled}">Enviar
-                                    Resultados</button>
+                                <button type="submit" class="btn btn-dark" th:disabled="${!worldcupEnabled}"
+                                    aria-label="Enviar resultados">
+                                    <i class="bi bi-list-ul" aria-hidden="true"></i> Enviar Resultados
+                                </button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <!-- ============================================================ -->
             <!-- ABA DIGEST -->
-            <!-- ============================================================ -->
-            <div class="tab-pane" id="digest">
-                <div class="row">
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-morning-digest}" method="post">
-                            <button type="submit" class="btn btn-outline-primary">Morning Digest</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-evening-digest}" method="post">
-                            <button type="submit" class="btn btn-outline-primary">Evening Digest</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-daily-releases}" method="post">
-                            <button type="submit" class="btn btn-outline-success">Daily Releases</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/test-weekly-digest}" method="post">
-                            <button type="submit" class="btn btn-outline-success">Weekly Digest</button>
-                        </form>
-                    </div>
+            <div class="tab-pane" id="digest" role="tabpanel" aria-labelledby="tab-digest">
+                <div class="btn-group-vertical-mobile mb-2" role="group" aria-label="Ações de Digest">
+                    <form th:action="@{/admin-web/test-morning-digest}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-outline-primary" aria-label="Disparar resumo da manhã">
+                            <i class="bi bi-sunrise" aria-hidden="true"></i> Morning Digest
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/test-evening-digest}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-outline-primary" aria-label="Disparar resumo da noite">
+                            <i class="bi bi-moon-stars" aria-hidden="true"></i> Evening Digest
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/test-daily-releases}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-outline-success"
+                            aria-label="Executar verificação de lançamentos diários">
+                            <i class="bi bi-calendar-day" aria-hidden="true"></i> Daily Releases
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/test-weekly-digest}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-outline-success" aria-label="Executar giro semanal">
+                            <i class="bi bi-calendar-week" aria-hidden="true"></i> Weekly Digest
+                        </button>
+                    </form>
                 </div>
                 <div class="row mt-2">
-                    <div class="col-md-6">
-                        <form th:action="@{/admin-web/custom-digest}" method="post" class="row g-2">
+                    <div class="col-12 col-md-6">
+                        <form th:action="@{/admin-web/custom-digest}" method="post" class="row g-2 align-items-center">
                             <div class="col-auto">
-                                <input type="date" class="form-control" name="start" required>
+                                <label for="customStart" class="visually-hidden">Data início</label>
+                                <input type="date" class="form-control" id="customStart" name="start" required
+                                    aria-label="Data início">
                             </div>
                             <div class="col-auto">
-                                <input type="date" class="form-control" name="end" required>
+                                <label for="customEnd" class="visually-hidden">Data fim</label>
+                                <input type="date" class="form-control" id="customEnd" name="end" required
+                                    aria-label="Data fim">
                             </div>
                             <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
+                                <label for="customChat" class="visually-hidden">Chat ID</label>
+                                <input type="number" class="form-control" id="customChat" name="chatId"
+                                    placeholder="Chat ID" aria-label="Chat ID opcional">
                             </div>
                             <div class="col-auto">
-                                <button type="submit" class="btn btn-outline-info">Custom Digest</button>
+                                <button type="submit" class="btn btn-outline-info"
+                                    aria-label="Gerar digest personalizado">
+                                    <i class="bi bi-pencil-square" aria-hidden="true"></i> Custom Digest
+                                </button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <!-- ============================================================ -->
             <!-- ABA LEMBRETES -->
-            <!-- ============================================================ -->
-            <div class="tab-pane" id="lembretes">
-                <div class="row">
-                    <div class="col-md-4">
-                        <form th:action="@{/admin-web/test-weekly-reminder}" method="post">
-                            <button type="submit" class="btn btn-outline-warning">Lembrete Semanal (padrão)</button>
-                        </form>
-                    </div>
-                    <div class="col-md-8">
-                        <form th:action="@{/admin-web/test-weekly-reminder-showcase}" method="post" class="row g-2">
-                            <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-outline-warning">Enviar para Chat
-                                    específico</button>
-                            </div>
-                        </form>
-                    </div>
+            <div class="tab-pane" id="lembretes" role="tabpanel" aria-labelledby="tab-lembretes">
+                <div class="btn-group-vertical-mobile mb-2" role="group" aria-label="Ações de lembretes">
+                    <form th:action="@{/admin-web/test-weekly-reminder}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-outline-warning"
+                            aria-label="Disparar lembrete semanal padrão">
+                            <i class="bi bi-bell" aria-hidden="true"></i> Lembrete Semanal (padrão)
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/test-weekly-reminder-showcase}" method="post" class="d-inline-block">
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" class="form-control form-control-sm" name="chatId"
+                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            <button type="submit" class="btn btn-outline-warning btn-sm"
+                                aria-label="Enviar lembrete para chat específico">
+                                <i class="bi bi-envelope" aria-hidden="true"></i> Enviar para Chat específico
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
-            <!-- ============================================================ -->
             <!-- ABA AUTO-RESPONSE -->
-            <!-- ============================================================ -->
-            <div class="tab-pane" id="auto">
-                <div class="row">
-                    <div class="col-md-6">
+            <div class="tab-pane" id="auto" role="tabpanel" aria-labelledby="tab-auto">
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
                         <div class="card">
-                            <div class="card-header"><i class="bi bi-robot"></i> Testar Auto-Response</div>
+                            <div class="card-header"><i class="bi bi-robot" aria-hidden="true"></i> Testar Auto-Response
+                            </div>
                             <div class="card-body">
                                 <form id="autoTestForm"
-                                    onsubmit="submitAction(event, '/admin-web/test-auto-response', this)">
+                                    onsubmit="submitAction(event, '/admin-web/test-auto-response', this)"
+                                    aria-label="Formulário de teste de auto-resposta">
                                     <div class="mb-2">
-                                        <label class="form-label">User ID (opcional)</label>
-                                        <input type="number" class="form-control" name="userId">
+                                        <label for="autoUserId" class="form-label">User ID (opcional)</label>
+                                        <input type="number" class="form-control" id="autoUserId" name="userId">
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Mensagem</label>
-                                        <input type="text" class="form-control" name="message" required>
+                                        <label for="autoMessage" class="form-label">Mensagem</label>
+                                        <input type="text" class="form-control" id="autoMessage" name="message" required
+                                            aria-required="true">
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Chat ID (opcional)</label>
-                                        <input type="number" class="form-control" name="chatId">
+                                        <label for="autoChat" class="form-label">Chat ID (opcional)</label>
+                                        <input type="number" class="form-control" id="autoChat" name="chatId">
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Horário simulado (HH:mm)</label>
-                                        <input type="text" class="form-control" name="time" placeholder="ex: 14:30">
+                                        <label for="autoTime" class="form-label">Horário simulado (HH:mm)</label>
+                                        <input type="text" class="form-control" id="autoTime" name="time"
+                                            placeholder="ex: 14:30">
                                     </div>
-                                    <button type="submit" class="btn btn-primary">Testar</button>
-                                    <div class="spinner-border spinner text-primary ms-2" role="status"></div>
+                                    <button type="submit" class="btn btn-primary" aria-label="Testar auto-resposta">
+                                        <i class="bi bi-play" aria-hidden="true"></i> Testar
+                                    </button>
+                                    <div class="spinner-border spinner text-primary ms-2" role="status"
+                                        aria-hidden="true"></div>
+                                    <span class="sr-only">Testando...</span>
                                 </form>
-                                <div id="autoTestResult" class="mt-2"></div>
+                                <div id="autoTestResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <div class="card">
-                            <div class="card-header"><i class="bi bi-search"></i> Debug Auto-Response</div>
+                            <div class="card-header"><i class="bi bi-search" aria-hidden="true"></i> Debug Auto-Response
+                            </div>
                             <div class="card-body">
-                                <form id="debugForm" onsubmit="debugAutoResponse(event, this)">
+                                <form id="debugForm" onsubmit="debugAutoResponse(event, this)"
+                                    aria-label="Formulário de depuração de auto-resposta">
                                     <div class="mb-2">
-                                        <label class="form-label">User ID (opcional)</label>
-                                        <input type="number" class="form-control" name="userId" id="debugUserId">
+                                        <label for="debugUserId" class="form-label">User ID (opcional)</label>
+                                        <input type="number" class="form-control" id="debugUserId" name="userId">
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Mensagem</label>
-                                        <input type="text" class="form-control" name="message" id="debugMessage"
-                                            required>
+                                        <label for="debugMessage" class="form-label">Mensagem</label>
+                                        <input type="text" class="form-control" id="debugMessage" name="message"
+                                            required aria-required="true">
                                     </div>
                                     <div class="mb-2">
-                                        <label class="form-label">Horário simulado (HH:mm)</label>
-                                        <input type="text" class="form-control" name="time" id="debugTime"
+                                        <label for="debugTime" class="form-label">Horário simulado (HH:mm)</label>
+                                        <input type="text" class="form-control" id="debugTime" name="time"
                                             placeholder="ex: 14:30">
                                     </div>
-                                    <button type="submit" class="btn btn-info">Debug</button>
+                                    <button type="submit" class="btn btn-info" aria-label="Executar depuração">
+                                        <i class="bi bi-bug" aria-hidden="true"></i> Debug
+                                    </button>
                                 </form>
-                                <div id="debugResult" class="mt-2"></div>
+                                <div id="debugResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="row mt-2">
-                    <div class="col-md-12">
-                        <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-secondary">
-                            <i class="bi bi-list"></i> Listar Regras (JSON)
+                    <div class="col-12">
+                        <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-secondary"
+                            aria-label="Listar regras de auto-resposta (abre em nova aba)">
+                            <i class="bi bi-list" aria-hidden="true"></i> Listar Regras (JSON)
                         </a>
                     </div>
                 </div>
             </div>
 
-            <!-- ============================================================ -->
             <!-- ABA ADMIN -->
-            <!-- ============================================================ -->
-            <div class="tab-pane" id="admin">
-                <div class="row">
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/clear-releases}" method="post"
-                            onsubmit="return confirm('Tem certeza que deseja limpar a tabela de releases?')">
-                            <button type="submit" class="btn btn-danger">Limpar Releases</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/clear-all-data}" method="post"
-                            onsubmit="return confirm('Isso apagará TODOS os dados. Continuar?')">
-                            <button type="submit" class="btn btn-danger">Limpar Todos os Dados</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/reload-auto-responses}" method="post">
-                            <button type="submit" class="btn btn-secondary">Recarregar Auto-Responses</button>
-                        </form>
-                    </div>
-                    <div class="col-md-3">
-                        <form th:action="@{/admin-web/reload-easter-eggs}" method="post">
-                            <button type="submit" class="btn btn-secondary">Recarregar Easter Eggs</button>
-                        </form>
-                    </div>
+            <div class="tab-pane" id="admin" role="tabpanel" aria-labelledby="tab-admin">
+                <div class="btn-group-vertical-mobile mb-2" role="group" aria-label="Ações administrativas">
+                    <form th:action="@{/admin-web/clear-releases}" method="post"
+                        onsubmit="return confirm('Tem certeza que deseja limpar a tabela de releases?')"
+                        class="d-inline-block">
+                        <button type="submit" class="btn btn-danger" aria-label="Limpar tabela de releases">
+                            <i class="bi bi-trash3" aria-hidden="true"></i> Limpar Releases
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/clear-all-data}" method="post"
+                        onsubmit="return confirm('Isso apagará TODOS os dados. Continuar?')" class="d-inline-block">
+                        <button type="submit" class="btn btn-danger" aria-label="Limpar todos os dados do sistema">
+                            <i class="bi bi-database-x" aria-hidden="true"></i> Limpar Todos os Dados
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/reload-auto-responses}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-secondary" aria-label="Recarregar regras de auto-resposta">
+                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Recarregar Auto-Responses
+                        </button>
+                    </form>
+                    <form th:action="@{/admin-web/reload-easter-eggs}" method="post" class="d-inline-block">
+                        <button type="submit" class="btn btn-secondary" aria-label="Recarregar easter eggs">
+                            <i class="bi bi-emoji-smile" aria-hidden="true"></i> Recarregar Easter Eggs
+                        </button>
+                    </form>
                 </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <form th:action="@{/admin-web/test-podcast}" method="post" class="row g-2">
+                <div class="row mt-2">
+                    <div class="col-12 col-md-6">
+                        <form th:action="@{/admin-web/test-podcast}" method="post" class="row g-2 align-items-center">
                             <div class="col-auto">
-                                <input type="date" class="form-control" name="start" placeholder="Início">
+                                <label for="podcastStart" class="visually-hidden">Data início</label>
+                                <input type="date" class="form-control" id="podcastStart" name="start"
+                                    aria-label="Data início do podcast">
                             </div>
                             <div class="col-auto">
-                                <input type="date" class="form-control" name="end" placeholder="Fim">
+                                <label for="podcastEnd" class="visually-hidden">Data fim</label>
+                                <input type="date" class="form-control" id="podcastEnd" name="end"
+                                    aria-label="Data fim do podcast">
                             </div>
                             <div class="col-auto">
-                                <input type="number" class="form-control" name="chatId"
-                                    placeholder="Chat ID (opcional)">
+                                <label for="podcastChat" class="visually-hidden">Chat ID</label>
+                                <input type="number" class="form-control" id="podcastChat" name="chatId"
+                                    placeholder="Chat ID" aria-label="Chat ID opcional">
                             </div>
                             <div class="col-auto">
-                                <button type="submit" class="btn btn-outline-dark"><i class="bi bi-podcast"></i> Gerar
-                                    Podcast</button>
+                                <button type="submit" class="btn btn-outline-dark" aria-label="Gerar podcast">
+                                    <i class="bi bi-podcast" aria-hidden="true"></i> Gerar Podcast
+                                </button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
 
-            <!-- ============================================================ -->
             <!-- ABA MONITOR -->
-            <!-- ============================================================ -->
-            <div class="tab-pane" id="monitor">
-                <div class="row">
-                    <div class="col-md-3">
-                        <a href="/admin-web/cache-stats" target="_blank" class="btn btn-outline-info"><i
-                                class="bi bi-database"></i> Cache Stats</a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="/admin-web/properties" target="_blank" class="btn btn-outline-info"><i
-                                class="bi bi-gear"></i> Propriedades</a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="/admin-web/config-files" target="_blank" class="btn btn-outline-info"><i
-                                class="bi bi-file-earmark-code"></i> Arquivos de Config</a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-info"><i
-                                class="bi bi-list-ul"></i> Regras Auto-Response</a>
-                    </div>
+            <div class="tab-pane" id="monitor" role="tabpanel" aria-labelledby="tab-monitor">
+                <div class="btn-group-vertical-mobile" role="group" aria-label="Monitoramento">
+                    <a href="/admin-web/cache-stats" target="_blank" class="btn btn-outline-info"
+                        aria-label="Ver estatísticas de cache (abre em nova aba)">
+                        <i class="bi bi-database" aria-hidden="true"></i> Cache Stats
+                    </a>
+                    <a href="/admin-web/properties" target="_blank" class="btn btn-outline-info"
+                        aria-label="Ver propriedades do sistema (abre em nova aba)">
+                        <i class="bi bi-gear" aria-hidden="true"></i> Propriedades
+                    </a>
+                    <a href="/admin-web/config-files" target="_blank" class="btn btn-outline-info"
+                        aria-label="Ver arquivos de configuração (abre em nova aba)">
+                        <i class="bi bi-file-earmark-code" aria-hidden="true"></i> Arquivos de Config
+                    </a>
+                    <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-info"
+                        aria-label="Ver regras de auto-resposta (abre em nova aba)">
+                        <i class="bi bi-list-ul" aria-hidden="true"></i> Regras Auto-Response
+                    </a>
                 </div>
             </div>
         </div>
@@ -502,61 +739,74 @@
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Fecha mensagens flash após 5 segundos
-        document.addEventListener('DOMContentLoaded', function () {
-            setTimeout(() => {
-                document.querySelectorAll('.flash-message').forEach(el => {
-                    const alert = bootstrap.Alert.getInstance(el);
-                    if (alert) alert.close();
-                });
-            }, 5000);
-        });
+        (function () {
+            "use strict";
 
-        // Função AJAX genérica
-        async function submitAction(event, url, form) {
-            event.preventDefault();
-            const formData = new FormData(form);
-            const params = new URLSearchParams(formData);
-            const resultDiv = form.parentElement.querySelector('[id$="Result"]');
-            const spinner = form.querySelector('.spinner');
+            // Fecha mensagens flash após 5 segundos
+            document.addEventListener('DOMContentLoaded', function () {
+                setTimeout(function () {
+                    document.querySelectorAll('.flash-message').forEach(function (el) {
+                        var alert = bootstrap.Alert.getInstance(el);
+                        if (alert) alert.close();
+                    });
+                }, 5000);
+            });
 
-            if (spinner) spinner.style.display = 'inline-block';
-            if (resultDiv) resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+            // Função AJAX genérica com feedback de acessibilidade
+            window.submitAction = async function (event, url, form) {
+                event.preventDefault();
+                var formData = new FormData(form);
+                var params = new URLSearchParams(formData);
+                var resultDiv = form.parentElement.querySelector('[id$="Result"]');
+                var spinner = form.querySelector('.spinner');
 
-            try {
-                const response = await fetch(url + '?' + params.toString(), { method: 'POST' });
-                const text = await response.text();
-                if (resultDiv) {
-                    resultDiv.innerHTML = `<div class="alert alert-info">${text}</div>`;
+                if (spinner) {
+                    spinner.style.display = 'inline-block';
+                    form.setAttribute('aria-busy', 'true');
                 }
-            } catch (error) {
                 if (resultDiv) {
-                    resultDiv.innerHTML = `<div class="alert alert-danger">Erro: ${error.message}</div>`;
+                    resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status" aria-hidden="true"></div><span class="sr-only">Carregando...</span>';
                 }
-            } finally {
-                if (spinner) spinner.style.display = 'none';
-            }
-        }
 
-        // Debug Auto-Response (GET JSON)
-        async function debugAutoResponse(event, form) {
-            event.preventDefault();
-            const userId = document.getElementById('debugUserId').value;
-            const message = document.getElementById('debugMessage').value;
-            const time = document.getElementById('debugTime').value;
-            const params = new URLSearchParams({ userId, message, time });
-            const resultDiv = document.getElementById('debugResult');
+                try {
+                    var response = await fetch(url + '?' + params.toString(), { method: 'POST' });
+                    var text = await response.text();
+                    if (resultDiv) {
+                        resultDiv.innerHTML = '<div class="alert alert-info" role="status">' + text + '</div>';
+                    }
+                } catch (error) {
+                    if (resultDiv) {
+                        resultDiv.innerHTML = '<div class="alert alert-danger" role="alert">Erro: ' + error.message + '</div>';
+                    }
+                } finally {
+                    if (spinner) {
+                        spinner.style.display = 'none';
+                        form.removeAttribute('aria-busy');
+                    }
+                }
+            };
 
-            resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+            // Debug Auto-Response (GET JSON)
+            window.debugAutoResponse = async function (event, form) {
+                event.preventDefault();
+                var userId = document.getElementById('debugUserId').value;
+                var message = document.getElementById('debugMessage').value;
+                var time = document.getElementById('debugTime').value;
+                var params = new URLSearchParams({ userId: userId, message: message, time: time });
+                var resultDiv = document.getElementById('debugResult');
 
-            try {
-                const response = await fetch('/admin-web/debug-auto-response?' + params.toString());
-                const data = await response.json();
-                resultDiv.innerHTML = `<pre class="bg-light p-2 rounded">${JSON.stringify(data, null, 2)}</pre>`;
-            } catch (error) {
-                resultDiv.innerHTML = `<div class="alert alert-danger">Erro: ${error.message}</div>`;
-            }
-        }
+                resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status" aria-hidden="true"></div><span class="sr-only">Carregando...</span>';
+
+                try {
+                    var response = await fetch('/admin-web/debug-auto-response?' + params.toString());
+                    var data = await response.json();
+                    resultDiv.innerHTML = '<pre class="bg-light p-2 rounded">' + JSON.stringify(data, null, 2) + '</pre>';
+                } catch (error) {
+                    resultDiv.innerHTML = '<div class="alert alert-danger" role="alert">Erro: ' + error.message + '</div>';
+                }
+            };
+
+        })();
     </script>
 </body>
 
