@@ -56,8 +56,10 @@ dependencies {
 
     // ========== Azure Speech SDK (para TTS) ==========
     // SDK oficial da Microsoft para Java (TTS, STT, etc.)
-    
-implementation 'com.azure:azure-core:1.54.1'   // para suporte HTTP (já deve estar presente via outras dependências)
+    implementation 'com.azure:azure-core:1.54.1'  
+
+    // HTML
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok:1.18.34'
@@ -67,6 +69,7 @@ implementation 'com.azure:azure-core:1.54.1'   // para suporte HTTP (já deve es
 
     // Testes
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.mockito:mockito-core'
     testImplementation 'org.mockito:mockito-junit-jupiter'
     testImplementation 'org.assertj:assertj-core'
