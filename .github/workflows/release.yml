@@ -29,6 +29,6 @@ jobs:
             }
 
       - name: Create Release
-        uses: softprops/action-gh-release@5a6f51711ce2ba103b78f5e9550f810679f11e0e
+        uses: softprops/action-gh-release@77fb938f2f95e717ce6705d2909af527263360a0
         with:
           body: ${{ steps.changelog.outputs.changelog }}
