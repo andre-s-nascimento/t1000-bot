@@ -59,7 +59,6 @@ Exemplo:
 # ----------------------------------------------------------------
 # Processa a mensagem (interpreta escapes como \n, \t, etc.)
 # ----------------------------------------------------------------
-# PowerShell já interpreta escapes em strings, mas para manter compatibilidade:
 $ProcessedMessage = $Message -replace '\\n', "`n" -replace '\\t', "`t" -replace '\\r', "`r"
 
 # ----------------------------------------------------------------
@@ -67,8 +66,6 @@ $ProcessedMessage = $Message -replace '\\n', "`n" -replace '\\t', "`t" -replace 
 # ----------------------------------------------------------------
 function UrlEncode {
     param([string]$Text)
-    
-    # Usa [System.Uri]::EscapeDataString para encoding
     return [System.Uri]::EscapeDataString($Text)
 }
 
@@ -82,20 +79,19 @@ $URL = "${BaseUrl}${ENDPOINT}?message=${MessageEncoded}&chatId=${ChatIdEncoded}&
 # ----------------------------------------------------------------
 # Executa a requisição
 # ----------------------------------------------------------------
-Write-Host "📤 Enviando requisição para:" -ForegroundColor Cyan
+Write-Host "Enviando requisicao para:" -ForegroundColor Cyan
 Write-Host "$URL" -ForegroundColor Yellow
 Write-Host ""
 
 try {
-    $response = Invoke-WebRequest -Uri $URL -Method Post -ContentType "application/x-www-form-urlencoded" -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri $URL -Method Post -ContentType "application/x-www-form-urlencoded" -ErrorAction Stop -UseBasicParsing
     
-    Write-Host "✅ Status: $($response.StatusCode)" -ForegroundColor Green
-    Write-Host "📝 Resposta: $($response.Content)" -ForegroundColor Gray
-    
+    Write-Host "Status: $($response.StatusCode)" -ForegroundColor Green
+    Write-Host "Resposta: $($response.Content)" -ForegroundColor Gray
 } catch {
-    Write-Host "❌ Erro: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Erro: $($_.Exception.Message)" -ForegroundColor Red
     if ($_.Exception.Response) {
-        Write-Host "   Status: $([int]$_.Exception.Response.StatusCode)" -ForegroundColor Red
+        Write-Host "Status: $([int]$_.Exception.Response.StatusCode)" -ForegroundColor Red
     }
     exit 1
 }

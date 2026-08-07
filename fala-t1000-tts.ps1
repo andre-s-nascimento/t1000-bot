@@ -55,8 +55,6 @@ Exemplo:
 # ----------------------------------------------------------------
 function UrlEncode {
     param([string]$Text)
-    
-    # Usa [System.Uri]::EscapeDataString para encoding
     return [System.Uri]::EscapeDataString($Text)
 }
 
@@ -69,34 +67,31 @@ $URL = "${BaseUrl}${ENDPOINT}?message=${MessageEncoded}&chatId=${ChatIdEncoded}"
 # ----------------------------------------------------------------
 # Executa a requisição
 # ----------------------------------------------------------------
-Write-Host "🎤 Gerando áudio para:" -ForegroundColor Cyan
+Write-Host "Gerando audio para:" -ForegroundColor Cyan
 Write-Host "$Message" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "📤 Enviando para chat: $ChatId" -ForegroundColor Cyan
+Write-Host "Enviando para chat: $ChatId" -ForegroundColor Cyan
 Write-Host ""
 
 try {
-    $response = Invoke-WebRequest -Uri $URL -Method Post -ContentType "application/x-www-form-urlencoded" -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri $URL -Method Post -ContentType "application/x-www-form-urlencoded" -ErrorAction Stop -UseBasicParsing
     
-    Write-Host "✅ Status: $($response.StatusCode)" -ForegroundColor Green
+    Write-Host "Status: $($response.StatusCode)" -ForegroundColor Green
     
-    # Verifica se é um arquivo de áudio
     $contentType = $response.Headers["Content-Type"]
     if ($contentType -and $contentType.Contains("audio")) {
-        Write-Host "📥 Áudio recebido! Tamanho: $($response.Content.Length) bytes" -ForegroundColor Cyan
+        Write-Host "Audio recebido! Tamanho: $($response.Content.Length) bytes" -ForegroundColor Cyan
         
-        # Salva o áudio
         $outputFile = "audio-$(Get-Date -Format 'yyyyMMdd-HHmmss').mp3"
         [System.IO.File]::WriteAllBytes($outputFile, $response.Content)
-        Write-Host "💾 Áudio salvo em: $outputFile" -ForegroundColor Green
+        Write-Host "Audio salvo em: $outputFile" -ForegroundColor Green
     } else {
-        Write-Host "📝 Resposta: $($response.Content)" -ForegroundColor Gray
+        Write-Host "Resposta: $($response.Content)" -ForegroundColor Gray
     }
-    
 } catch {
-    Write-Host "❌ Erro: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Erro: $($_.Exception.Message)" -ForegroundColor Red
     if ($_.Exception.Response) {
-        Write-Host "   Status: $([int]$_.Exception.Response.StatusCode)" -ForegroundColor Red
+        Write-Host "Status: $([int]$_.Exception.Response.StatusCode)" -ForegroundColor Red
     }
     exit 1
 }
