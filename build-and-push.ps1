@@ -1,190 +1,423 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 
 <#
 .SYNOPSIS
-    Script para build e push de imagem Docker para o Docker Hub
+    Script para build e push de imagem Docker para o Docker Hub com timestamp e output em tempo real
 #>
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
-# Cores
-$GREEN = "`e[0;32m"
-$RED = "`e[0;31m"
-$YELLOW = "`e[0;33m"
-$NC = "`e[0m"
+# Força o BuildKit a exibir progresso em texto simples
+$env:DOCKER_BUILDKIT = "1"
 
+# ============================================================
+# Configurações de Cores e Logging com Timestamp
+# ============================================================
+function Get-TimeStamp {
+    return Get-Date -Format "HH:mm:ss"
+}
+
+function Write-Success {
+    param([string]$Message)
+    $ts = Get-TimeStamp
+    Write-Host "$ts-[SUCESSO]" -ForegroundColor Green -NoNewline
+    Write-Host " $Message"
+}
+
+function Write-ErrorMsg {
+    param([string]$Message)
+    $ts = Get-TimeStamp
+    Write-Host "$ts-[ERRO]" -ForegroundColor Red -NoNewline
+    Write-Host " $Message"
+}
+
+function Write-Info {
+    param([string]$Message)
+    $ts = Get-TimeStamp
+    Write-Host "$ts-[INFO]" -ForegroundColor Cyan -NoNewline
+    Write-Host " $Message"
+}
+
+function Write-Warning {
+    param([string]$Message)
+    $ts = Get-TimeStamp
+    Write-Host "$ts-[AVISO]" -ForegroundColor Yellow -NoNewline
+    Write-Host " $Message"
+}
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Magenta
+    Write-Host " $Message" -ForegroundColor Magenta
+    Write-Host "========================================" -ForegroundColor Magenta
+}
+
+# ============================================================
+# Configurações
+# ============================================================
 $IMAGE_NAME = "andresnascimento/t1000-bot"
 $VERSION_TAG = Get-Date -Format "yyyyMMdd-HHmmss"
 $LATEST_TAG = "latest"
-
-function Log-Info {
-    param([string]$Message)
-    Write-Host "$GREEN[INFO]$NC $Message"
-}
-
-function Log-Error {
-    param([string]$Message)
-    Write-Host "$RED[ERRO]$NC $Message"
-    exit 1
-}
-
-function Log-Warning {
-    param([string]$Message)
-    Write-Host "$YELLOW[AVISO]$NC $Message"
-}
+$MAX_RETRIES = 3
+$RETRY_DELAY = 5
 
 # ============================================================
-# 0. Verificar se o Docker está disponível
+# Funções de Utilidade
 # ============================================================
-Log-Info "Verificando instalação do Docker..."
+function Test-DockerInstalled {
+    try {
+        $dockerPath = (Get-Command docker -ErrorAction SilentlyContinue).Source
+        if ($dockerPath) {
+            return $true
+        }
+        
+        $commonPaths = @(
+            "C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+            "$env:USERPROFILE\AppData\Local\Programs\Docker\Docker\resources\bin\docker.exe",
+            "C:\Program Files\Docker\Docker\docker.exe"
+        )
+        
+        foreach ($path in $commonPaths) {
+            if (Test-Path $path) {
+                $dockerDir = Split-Path $path
+                $env:Path += ";$dockerDir"
+                return $true
+            }
+        }
+        return $false
+    } catch {
+        return $false
+    }
+}
 
-# Tenta encontrar o Docker no PATH
-$dockerPath = (Get-Command docker -ErrorAction SilentlyContinue).Source
-
-if (-not $dockerPath) {
-    Log-Warning "Docker não encontrado no PATH!"
-    Log-Warning "Verificando locais comuns de instalação..."
+function Start-DockerDesktop {
+    Write-Info "Tentando iniciar o Docker Desktop..."
     
-    $possiblePaths = @(
-        "C:\Program Files\Docker\Docker\resources\bin\docker.exe",
-        "C:\Program Files\Docker\Docker\resources\bin\docker",
-        "$env:USERPROFILE\AppData\Local\Programs\Docker\Docker\resources\bin\docker.exe"
+    $dockerPaths = @(
+        "C:\Program Files\Docker\Docker\Docker Desktop.exe",
+        "C:\Program Files\Docker\Docker\Docker.exe",
+        "$env:USERPROFILE\AppData\Local\Programs\Docker\Docker\Docker Desktop.exe"
     )
     
-    foreach ($path in $possiblePaths) {
+    $started = $false
+    foreach ($path in $dockerPaths) {
         if (Test-Path $path) {
-            $dockerPath = $path
-            Log-Info "Docker encontrado em: $dockerPath"
-            # Adiciona ao PATH para esta sessão
-            $dockerDir = Split-Path $dockerPath
-            $env:Path += ";$dockerDir"
-            break
+            Write-Info "Iniciando Docker Desktop: $path"
+            try {
+                Start-Process -FilePath $path -WindowStyle Minimized
+                $started = $true
+                break
+            } catch {
+                Write-Warning "Falha ao iniciar: $path"
+            }
         }
     }
     
-    if (-not $dockerPath) {
-        Log-Error @"
-Docker não encontrado!
-
-Para instalar o Docker Desktop no Windows:
-
-1. Via Winget (recomendado):
-   winget install Docker.DockerDesktop
-
-2. Baixar manualmente:
-   https://www.docker.com/products/docker-desktop/
-
-3. Via Chocolatey:
-   choco install docker-desktop
-
-Após a instalação, reinicie o PowerShell e execute este script novamente.
-"@
-    }
-}
-
-# Verifica se o Docker está rodando
-Log-Info "Verificando se o Docker Desktop está rodando..."
-try {
-    docker info 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Log-Warning "Docker Desktop não está rodando!"
-        Log-Info "Iniciando Docker Desktop..."
-        Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe" -ErrorAction SilentlyContinue
-        Log-Info "Aguardando o Docker iniciar (30 segundos)..."
-        Start-Sleep -Seconds 30
-        
-        # Verifica novamente
-        docker info 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Log-Error "Não foi possível iniciar o Docker. Inicie manualmente e tente novamente."
+    if (-not $started) {
+        try {
+            $service = Get-Service -Name "com.docker.service" -ErrorAction SilentlyContinue
+            if ($service) {
+                Write-Info "Iniciando serviço do Docker..."
+                Start-Service -Name "com.docker.service"
+                $started = $true
+            }
+        } catch {
+            Write-Warning "Não foi possível iniciar o serviço do Docker"
         }
     }
-} catch {
-    Log-Warning "Não foi possível verificar o status do Docker."
+    
+    return $started
 }
 
-Log-Info "✅ Docker está pronto para uso!"
+function Test-DockerDaemon {
+    param([int]$TimeoutSeconds = 60)
+    
+    Write-Info "Verificando conexão com o daemon do Docker..."
+    
+    $startTime = Get-Date
+    $attempt = 0
+    
+    do {
+        $attempt++
+        try {
+            $result = docker version --format '{{.Server.Version}}' 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Docker daemon conectado! Versão: $result"
+                return $true
+            }
+        } catch {
+        }
+        
+        if ($attempt -lt $MAX_RETRIES) {
+            Write-Warning "Tentativa $attempt falhou. Aguardando $RETRY_DELAY segundos..."
+            Start-Sleep -Seconds $RETRY_DELAY
+        }
+        
+        $elapsed = (Get-Date) - $startTime
+    } while ($attempt -lt $MAX_RETRIES -and $elapsed.TotalSeconds -lt $TimeoutSeconds)
+    
+    return $false
+}
 
-# ============================================================
-# 1. Login no Docker Hub
-# ============================================================
-Log-Info "Fazendo login no Docker Hub (use suas credenciais)..."
-
-# Verifica se já está logado
-$loggedIn = docker info 2>$null | Select-String "Username"
-if (-not $loggedIn) {
-    docker login
-    if ($LASTEXITCODE -ne 0) {
-        Log-Error "Falha no login. Execute 'docker login' manualmente."
+function Wait-ForDocker {
+    param([int]$MaxWaitSeconds = 90)
+    
+    Write-Info "Aguardando o Docker iniciar (máximo $MaxWaitSeconds segundos)..."
+    
+    $waited = 0
+    while ($waited -lt $MaxWaitSeconds) {
+        try {
+            docker version 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Docker está pronto!"
+                return $true
+            }
+        } catch {
+        }
+        
+        if ($waited % 10 -eq 0 -and $waited -gt 0) {
+            Write-Info "Aguardando... ($waited/$MaxWaitSeconds segundos)"
+        }
+        
+        Start-Sleep -Seconds 2
+        $waited += 2
     }
-} else {
-    Log-Info "✅ Já está logado no Docker Hub."
+    
+    return $false
 }
 
-# ============================================================
-# 2. Gerar arquivo de build info
-# ============================================================
-$BUILD_DATE = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+function Ensure-DockerRunning {
+    Write-Step "VERIFICANDO DOCKER"
+    
+    if (-not (Test-DockerInstalled)) {
+        Write-ErrorMsg @"
+Docker não encontrado!
+"@
+        return $false
+    }
+    Write-Success "Docker instalado"
+    
+    if (Test-DockerDaemon -TimeoutSeconds 10) {
+        Write-Success "Docker já está rodando"
+        return $true
+    }
+    
+    Write-Warning "Docker não está rodando. Tentando iniciar..."
+    
+    if (Start-DockerDesktop) {
+        if (Wait-ForDocker -MaxWaitSeconds 90) {
+            Write-Success "Docker iniciado com sucesso!"
+            return $true
+        }
+    }
+    
+    Write-Info "Verificando serviços do Docker..."
+    try {
+        $services = Get-Service -Name "*docker*" -ErrorAction SilentlyContinue
+        foreach ($svc in $services) {
+            if ($svc.Status -eq 'Stopped') {
+                Write-Info "Iniciando serviço: $($svc.DisplayName)"
+                Start-Service -Name $svc.Name -ErrorAction SilentlyContinue
+            }
+        }
+        
+        if (Wait-ForDocker -MaxWaitSeconds 30) {
+            Write-Success "Docker iniciado via serviço!"
+            return $true
+        }
+    } catch {
+        Write-Warning "Erro ao verificar serviços: $_"
+    }
+    
+    return $false
+}
 
-# Verifica se está em um repositório Git
-try {
-    $GIT_BRANCH = git rev-parse --abbrev-ref HEAD 2>$null
-    $GIT_COMMIT = git rev-parse --short HEAD 2>$null
-} catch {
+function Test-DockerLogin {
+    $configPath = Join-Path $env:USERPROFILE ".docker\config.json"
+    if (Test-Path $configPath) {
+        try {
+            $config = Get-Content $configPath -Raw | ConvertFrom-Json
+            if ($config.auths -or $config.credsStore -or $config.credHelpers) {
+                Write-Success "Credenciais de login encontradas no Docker Config."
+                return $true
+            }
+        } catch {
+        }
+    }
+
+    try {
+        $info = docker info 2>$null
+        if ($info -match "Username") {
+            Write-Success "Logado no Docker Hub."
+            return $true
+        }
+    } catch {
+    }
+
+    return $false
+}
+
+function Generate-BuildInfo {
+    Write-Step "GERANDO INFORMAÇÕES DE BUILD"
+    
+    $BUILD_DATE = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    
     $GIT_BRANCH = "unknown"
     $GIT_COMMIT = "unknown"
-}
-
-# Criar diretório se não existir
-$buildInfoDir = "src/main/resources"
-if (-not (Test-Path $buildInfoDir)) {
-    New-Item -ItemType Directory -Path $buildInfoDir -Force | Out-Null
-}
-
-# Criar arquivo de propriedades
-$buildInfoContent = @"
+    
+    try {
+        $GIT_BRANCH = git rev-parse --abbrev-ref HEAD 2>$null
+        if (-not $GIT_BRANCH) { $GIT_BRANCH = "unknown" }
+        
+        $GIT_COMMIT = git rev-parse --short HEAD 2>$null
+        if (-not $GIT_COMMIT) { $GIT_COMMIT = "unknown" }
+    } catch {
+        Write-Warning "Não foi possível obter informações do Git"
+    }
+    
+    $buildInfoDir = "src/main/resources"
+    if (-not (Test-Path $buildInfoDir)) {
+        New-Item -ItemType Directory -Path $buildInfoDir -Force | Out-Null
+        Write-Info "Diretório criado: $buildInfoDir"
+    }
+    
+    $buildInfoContent = @"
 build.branch=${GIT_BRANCH}
 build.commit=${GIT_COMMIT}
 build.time=${BUILD_DATE}
+build.version=${VERSION_TAG}
 "@
+    
+    $buildInfoPath = Join-Path $buildInfoDir "build-info.properties"
+    $buildInfoContent | Out-File -FilePath $buildInfoPath -Encoding UTF8
+    
+    Write-Success "Build info gerado:"
+    Write-Info "   Branch: $GIT_BRANCH"
+    Write-Info "   Commit: $GIT_COMMIT"
+    Write-Info "   Data: $BUILD_DATE"
+    Write-Info "   Versão: $VERSION_TAG"
+}
 
-$buildInfoPath = Join-Path $buildInfoDir "build-info.properties"
-$buildInfoContent | Out-File -FilePath $buildInfoPath -Encoding UTF8
+function Build-DockerImage {
+    Write-Step "CONSTRUINDO IMAGEM DOCKER"
+    
+    Write-Info "Imagem: ${IMAGE_NAME}"
+    Write-Info "Tags: ${LATEST_TAG}, ${VERSION_TAG}"
+    
+    $nowStr = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    
+    Write-Info "Executando: docker build --progress=plain -t ${IMAGE_NAME}:${LATEST_TAG} -t ${IMAGE_NAME}:${VERSION_TAG} --build-arg BUILD_VERSION=${VERSION_TAG} --build-arg ""BUILD_TIME=$nowStr"" ."
+    Write-Host ""
+    
+    # Chamada nativa sem Start-Process para repassar os argumentos com espaço perfeitamente
+    & docker build --progress=plain -t "${IMAGE_NAME}:${LATEST_TAG}" -t "${IMAGE_NAME}:${VERSION_TAG}" --build-arg "BUILD_VERSION=${VERSION_TAG}" --build-arg "BUILD_TIME=$nowStr" .
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorMsg "Falha no build da imagem!"
+        return $false
+    }
+    
+    Write-Success "Imagem construída com sucesso!"
+    return $true
+}
 
-Log-Info "Build info gerado: branch=${GIT_BRANCH}, commit=${GIT_COMMIT}, data=${BUILD_DATE}"
-
-# ============================================================
-# 3. Build da imagem Docker
-# ============================================================
-Log-Info "Construindo imagem: ${IMAGE_NAME}:${LATEST_TAG}"
-
-docker build -t "${IMAGE_NAME}:${LATEST_TAG}" -t "${IMAGE_NAME}:${VERSION_TAG}" .
-
-if ($LASTEXITCODE -ne 0) {
-    Log-Error "Falha no build da imagem Docker!"
+function Push-DockerImage {
+    param([string]$Tag)
+    
+    Write-Info "Enviando tag: $Tag"
+    
+    $maxRetries = 3
+    $retryCount = 0
+    
+    do {
+        & docker push "${IMAGE_NAME}:${Tag}"
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "Push da tag $Tag concluído!"
+            return $true
+        }
+        
+        $retryCount++
+        if ($retryCount -lt $maxRetries) {
+            Write-Warning "Falha no push (tentativa $retryCount/$maxRetries). Tentando novamente em 5 segundos..."
+            Start-Sleep -Seconds 5
+        }
+    } while ($retryCount -lt $maxRetries)
+    
+    Write-ErrorMsg "Falha ao enviar tag $Tag após $maxRetries tentativas"
+    return $false
 }
 
 # ============================================================
-# 4. Push das tags
+# SCRIPT PRINCIPAL
 # ============================================================
-Log-Info "Enviando tag ${VERSION_TAG}..."
-docker push "${IMAGE_NAME}:${VERSION_TAG}"
+Write-Host ""
+Write-Host "╔═══════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║       BUILD AND PUSH DOCKER IMAGE                 ║" -ForegroundColor Cyan
+Write-Host "╚═══════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host ""
 
-if ($LASTEXITCODE -ne 0) {
-    Log-Error "Falha no push da tag ${VERSION_TAG}!"
+# 1. Verifica Docker
+if (-not (Ensure-DockerRunning)) {
+    exit 1
 }
 
-Log-Info "Enviando tag latest..."
-docker push "${IMAGE_NAME}:${LATEST_TAG}"
+# 2. Login no Docker Hub
+Write-Step "LOGIN NO DOCKER HUB"
 
-if ($LASTEXITCODE -ne 0) {
-    Log-Error "Falha no push da tag latest!"
+if (-not (Test-DockerLogin)) {
+    Write-Info "Fazendo login no Docker Hub..."
+    docker login
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorMsg "Falha no login!"
+        exit 1
+    }
 }
 
-# ============================================================
-# 5. Conclusão
-# ============================================================
-Log-Info "✅ Build e push concluídos!"
-Log-Info "No servidor, execute: docker pull ${IMAGE_NAME}:latest && ./deploy.sh restart"
+# 3. Gera informações de build
+Generate-BuildInfo
 
-exit 0
+# 4. Build da imagem
+if (-not (Build-DockerImage)) {
+    exit 1
+}
+
+# 5. Push das tags
+Write-Step "ENVIANDO IMAGENS PARA O DOCKER HUB"
+
+$pushSuccess = $true
+
+if (-not (Push-DockerImage -Tag $VERSION_TAG)) {
+    $pushSuccess = $false
+}
+
+if (-not (Push-DockerImage -Tag $LATEST_TAG)) {
+    $pushSuccess = $false
+}
+
+# 6. Conclusão
+Write-Step "CONCLUSÃO"
+
+if ($pushSuccess) {
+    Write-Host ""
+    Write-Host "✅ BUILD E PUSH CONCLUÍDOS COM SUCESSO!" -ForegroundColor Green
+    Write-Host ""
+    Write-Info "Imagem: $IMAGE_NAME"
+    Write-Info "Tags: $LATEST_TAG, $VERSION_TAG"
+    Write-Host ""
+    Write-Info "No servidor, execute:"
+    Write-Host "  docker pull ${IMAGE_NAME}:latest" -ForegroundColor Yellow
+    Write-Host "  ./deploy.sh restart" -ForegroundColor Yellow
+    Write-Host ""
+    exit 0
+} else {
+    Write-Host ""
+    Write-Host "❌ BUILD OU PUSH FALHOU" -ForegroundColor Red
+    Write-Host ""
+    Write-Info "Verifique os erros acima e tente novamente."
+    Write-Host ""
+    exit 1
+}

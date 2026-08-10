@@ -47,16 +47,16 @@ public class DatabaseInitializer {
     private void criarTabelaTranscripts() {
         String sql =
                 """
-        CREATE TABLE IF NOT EXISTS transcripts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            user_name TEXT,
-            text TEXT NOT NULL,
-            raw_text TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-        """;
+                CREATE TABLE IF NOT EXISTS transcripts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    user_name TEXT,
+                    text TEXT NOT NULL,
+                    raw_text TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """;
         try {
             jdbcTemplate.execute(sql);
         } catch (Exception e) {
@@ -67,18 +67,18 @@ public class DatabaseInitializer {
     private void criarTabelaReleasesNotified() {
         String sql =
                 """
-        CREATE TABLE IF NOT EXISTS releases_notified (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tmdb_id INTEGER NOT NULL,
-            media_type TEXT NOT NULL,
-            release_date TEXT NOT NULL,
-            title TEXT,
-            overview TEXT,
-            rating REAL,
-            providers TEXT,
-            poster_path TEXT
-        )
-        """;
+                CREATE TABLE IF NOT EXISTS releases_notified (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tmdb_id INTEGER NOT NULL,
+                    media_type TEXT NOT NULL,
+                    release_date TEXT NOT NULL,
+                    title TEXT,
+                    overview TEXT,
+                    rating REAL,
+                    providers TEXT,
+                    poster_path TEXT
+                )
+                """;
         try {
             jdbcTemplate.execute(sql);
         } catch (Exception e) {

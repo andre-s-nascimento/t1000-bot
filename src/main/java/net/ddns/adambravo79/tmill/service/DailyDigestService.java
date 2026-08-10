@@ -225,24 +225,24 @@ public class DailyDigestService {
         List<Map<String, Object>> messages =
                 jdbcTemplate.queryForList(
                         """
-            SELECT user_name, text, timestamp
-            FROM messages
-            WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
-            AND ignore_in_digest = 0
-            ORDER BY timestamp ASC
-            """,
+                        SELECT user_name, text, timestamp
+                        FROM messages
+                        WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
+                        AND ignore_in_digest = 0
+                        ORDER BY timestamp ASC
+                        """,
                         fromStr,
                         toStr);
 
         List<Map<String, Object>> transcripts =
                 jdbcTemplate.queryForList(
                         """
-            SELECT user_name, text, timestamp
-            FROM transcripts
-            WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
-            AND ignore_in_digest = 0
-            ORDER BY timestamp ASC
-            """,
+                        SELECT user_name, text, timestamp
+                        FROM transcripts
+                        WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
+                        AND ignore_in_digest = 0
+                        ORDER BY timestamp ASC
+                        """,
                         fromStr,
                         toStr);
 
@@ -381,10 +381,10 @@ public class DailyDigestService {
     private String buildHeader(String periodLabel, LocalDateTime from, LocalDateTime to) {
         return String.format(
                 """
-        <b>📊 %s</b>
-        <i>Período: %s - %s</i>
+                <b>📊 %s</b>
+                <i>Período: %s - %s</i>
 
-        """,
+                """,
                 periodLabel, from.format(HEADER_FORMAT), to.format(HEADER_FORMAT));
     }
 

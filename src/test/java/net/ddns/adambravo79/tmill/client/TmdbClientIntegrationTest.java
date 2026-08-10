@@ -52,21 +52,21 @@ class TmdbClientIntegrationTest {
     void discoverMoviesByDate_deveRetornarResposta() {
         String json =
                 """
-        {
-            "page": 1,
-            "results": [
                 {
-                    "id": 1,
-                    "title": "Filme Teste",
-                    "release_date": "2026-07-01",
-                    "vote_average": 8.5,
-                    "popularity": 10.0
+                    "page": 1,
+                    "results": [
+                        {
+                            "id": 1,
+                            "title": "Filme Teste",
+                            "release_date": "2026-07-01",
+                            "vote_average": 8.5,
+                            "popularity": 10.0
+                        }
+                    ],
+                    "total_pages": 1,
+                    "total_results": 1
                 }
-            ],
-            "total_pages": 1,
-            "total_results": 1
-        }
-        """;
+                """;
         mockWebServer.enqueue(
                 new MockResponse.Builder()
                         .code(200)
@@ -96,21 +96,21 @@ class TmdbClientIntegrationTest {
     void discoverTvByDate_deveRetornarResposta() {
         String json =
                 """
-        {
-            "page": 1,
-            "results": [
                 {
-                    "id": 2,
-                    "name": "Serie Teste",
-                    "first_air_date": "2026-07-01",
-                    "vote_average": 8.0,
-                    "popularity": 15.0
+                    "page": 1,
+                    "results": [
+                        {
+                            "id": 2,
+                            "name": "Serie Teste",
+                            "first_air_date": "2026-07-01",
+                            "vote_average": 8.0,
+                            "popularity": 15.0
+                        }
+                    ],
+                    "total_pages": 1,
+                    "total_results": 1
                 }
-            ],
-            "total_pages": 1,
-            "total_results": 1
-        }
-        """;
+                """;
         mockWebServer.enqueue(
                 new MockResponse.Builder()
                         .code(200)
@@ -139,18 +139,18 @@ class TmdbClientIntegrationTest {
     void buscarDetalhes_deveRetornarFilme() {
         String json =
                 """
-        {
-            "id": 1,
-            "title": "Batman",
-            "original_title": "The Batman",
-            "release_date": "2022-03-01",
-            "overview": "Sinopse",
-            "popularity": 88.0,
-            "vote_average": 7.9,
-            "poster_path": "/poster.jpg",
-            "origin_country": ["US"]
-        }
-        """;
+                {
+                    "id": 1,
+                    "title": "Batman",
+                    "original_title": "The Batman",
+                    "release_date": "2022-03-01",
+                    "overview": "Sinopse",
+                    "popularity": 88.0,
+                    "vote_average": 7.9,
+                    "poster_path": "/poster.jpg",
+                    "origin_country": ["US"]
+                }
+                """;
         mockWebServer.enqueue(
                 new MockResponse.Builder()
                         .code(200)
@@ -179,15 +179,15 @@ class TmdbClientIntegrationTest {
     void buscarDetalhesSerie_deveRetornarSerie() {
         String json =
                 """
-        {
-            "id": 2,
-            "name": "Serie A",
-            "overview": "Overview da serie",
-            "vote_average": 8.0,
-            "first_air_date": "2026-01-01",
-            "poster_path": "/poster.jpg"
-        }
-        """;
+                {
+                    "id": 2,
+                    "name": "Serie A",
+                    "overview": "Overview da serie",
+                    "vote_average": 8.0,
+                    "first_air_date": "2026-01-01",
+                    "poster_path": "/poster.jpg"
+                }
+                """;
         mockWebServer.enqueue(
                 new MockResponse.Builder()
                         .code(200)
@@ -218,15 +218,15 @@ class TmdbClientIntegrationTest {
         // Para fins de cobertura, usamos um JSON que se encaixa no DTO.
         String json =
                 """
-        {
-            "results": {
-                "1": {
-                    "provider_name": "Netflix",
-                    "provider_id": 1
+                {
+                    "results": {
+                        "1": {
+                            "provider_name": "Netflix",
+                            "provider_id": 1
+                        }
+                    }
                 }
-            }
-        }
-        """;
+                """;
         mockWebServer.enqueue(
                 new MockResponse.Builder()
                         .code(200)
@@ -246,16 +246,16 @@ class TmdbClientIntegrationTest {
     void buscarOndeAssistirFilme_deveRetornarProvedores() {
         String json =
                 """
-        {
-            "results": {
-                "BR": {
-                    "flatrate": [
-                        { "provider_name": "Netflix", "provider_id": 1, "logo_path": "/logo.png" }
-                    ]
-                }
-            }
+{
+    "results": {
+        "BR": {
+            "flatrate": [
+                { "provider_name": "Netflix", "provider_id": 1, "logo_path": "/logo.png" }
+            ]
         }
-        """;
+    }
+}
+""";
         mockWebServer.enqueue(
                 new MockResponse.Builder()
                         .code(200)
@@ -271,16 +271,16 @@ class TmdbClientIntegrationTest {
     void buscarOndeAssistirSerie_deveRetornarProvedores() {
         String json =
                 """
-        {
-            "results": {
-                "BR": {
-                    "flatrate": [
-                        { "provider_name": "Disney+", "provider_id": 2, "logo_path": "/logo.png" }
-                    ]
-                }
-            }
+{
+    "results": {
+        "BR": {
+            "flatrate": [
+                { "provider_name": "Disney+", "provider_id": 2, "logo_path": "/logo.png" }
+            ]
         }
-        """;
+    }
+}
+""";
         mockWebServer.enqueue(
                 new MockResponse.Builder()
                         .code(200)

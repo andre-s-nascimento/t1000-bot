@@ -57,10 +57,10 @@ public class WeeklyReminderService {
 
         String message =
                 """
-        <i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
+<i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
 
-        <b>Muito Prazer (1979) - David Neves</b>
-        """;
+<b>Muito Prazer (1979) - David Neves</b>
+""";
 
         for (Long groupId : allowedGroups) {
             try {
@@ -84,10 +84,10 @@ public class WeeklyReminderService {
         }
         String message =
                 """
-        <i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
+<i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
 
-        <b>Muito Prazer (1979) - David Neves</b>
-        """;
+<b>Muito Prazer (1979) - David Neves</b>
+""";
 
         try {
             if (mediaFilePath != null && !mediaFilePath.isBlank()) {

@@ -32,11 +32,11 @@ public class PodcastScriptService {
         // Busca textos da semana (ordenados por data)
         String sql =
                 """
-            SELECT text FROM transcripts
-            WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
-            AND text IS NOT NULL AND TRIM(text) != ''
-            ORDER BY timestamp ASC
-        """;
+                    SELECT text FROM transcripts
+                    WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
+                    AND text IS NOT NULL AND TRIM(text) != ''
+                    ORDER BY timestamp ASC
+                """;
         List<String> messages =
                 jdbcTemplate.queryForList(sql, String.class, targetUserId, start, end);
 
@@ -61,20 +61,20 @@ public class PodcastScriptService {
         // Prompt do sistema (mais conciso para economizar tokens)
         String systemPrompt =
                 """
-        Você é T-1000 e é apresentador do podcast chamado "Silas Cast",
-        que faz um resumo dos áudios do nosso querido Silas Bezerra.
-        Crie um roteiro narrado e fluido baseado nas mensagens abaixo.
-        O texto deve ser escrito para ser lido em voz alta (TTS).
-        Regras:
-        - Use linguagem natural, coloquial e envolvente.
-        - NÃO use asteriscos (*), underscores (_), markdown ou formatação especial.
-        - NÃO use tópicos numerados ou bullet points.
-        - Escreva como se estivesse contando uma história ou comentando os assuntos da semana.
-        - Inclua uma introdução e um encerramento.
-        - Encerre sempre com uma variação da citação do Show de Truman: "E caso eu não veja vocês, bom dia, boa noite e boa noite!"
-        - Resuma os temas principais sem repetir mensagem por mensagem.
-        - Mantenha o texto entre 800 e 1500 palavras (cerca de 4000 caracteres).
-        """;
+Você é T-1000 e é apresentador do podcast chamado "Silas Cast",
+que faz um resumo dos áudios do nosso querido Silas Bezerra.
+Crie um roteiro narrado e fluido baseado nas mensagens abaixo.
+O texto deve ser escrito para ser lido em voz alta (TTS).
+Regras:
+- Use linguagem natural, coloquial e envolvente.
+- NÃO use asteriscos (*), underscores (_), markdown ou formatação especial.
+- NÃO use tópicos numerados ou bullet points.
+- Escreva como se estivesse contando uma história ou comentando os assuntos da semana.
+- Inclua uma introdução e um encerramento.
+- Encerre sempre com uma variação da citação do Show de Truman: "E caso eu não veja vocês, bom dia, boa noite e boa noite!"
+- Resuma os temas principais sem repetir mensagem por mensagem.
+- Mantenha o texto entre 800 e 1500 palavras (cerca de 4000 caracteres).
+""";
 
         String userPrompt = "Aqui estão as mensagens da semana passada:\n\n" + combined;
 

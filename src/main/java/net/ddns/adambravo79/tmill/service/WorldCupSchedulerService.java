@@ -153,10 +153,10 @@ public class WorldCupSchedulerService {
         // Use a text block for the multi-line message
         String message =
                 """
-        <b>⏰ Faltam 30 minutos para o inicio do jogo!</b>
+                <b>⏰ Faltam 30 minutos para o inicio do jogo!</b>
 
-        ⚽ %s (%s) x (%s) %s - %s
-        """
+                ⚽ %s (%s) x (%s) %s - %s
+                """
                         .formatted(
                                 translateTeam(match.homeTeam()),
                                 flagEmoji(match.homeTeam()),

@@ -19,9 +19,6 @@
     }
   },
   "lint-staged": {
-    "*.java": [
-      "cmd /c \"gradlew spotlessApply --no-configuration-cache > nul\""
-    ],
     "*.{json,md,yml}": [
       "prettier --write"
     ]

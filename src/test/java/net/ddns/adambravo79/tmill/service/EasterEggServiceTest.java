@@ -32,11 +32,11 @@ class EasterEggServiceTest {
 
     private static final String JSON_VALIDO =
             """
-      {
-        "123": "Easter egg do filme 123",
-        "456": "Easter egg do filme 456"
-      }
-      """;
+            {
+              "123": "Easter egg do filme 123",
+              "456": "Easter egg do filme 456"
+            }
+            """;
 
     @BeforeEach
     void setUp() {
@@ -115,11 +115,12 @@ class EasterEggServiceTest {
         carregarComSucesso();
         assertThat(service.getEasterEgg(123)).isPresent();
 
-        String novoJson = """
-        {
-          "789": "Novo easter egg"
-        }
-        """;
+        String novoJson =
+                """
+                {
+                  "789": "Novo easter egg"
+                }
+                """;
         when(resourceLoader.getResource(anyString())).thenReturn(resource);
         when(resource.exists()).thenReturn(true);
         when(resource.getInputStream())

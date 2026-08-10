@@ -145,7 +145,7 @@ check.dependsOn jacocoTestCoverageVerification
 spotless {
     java {
         target 'src/**/*.java'
-        googleJavaFormat('1.19.2').aosp().reflowLongStrings().formatJavadoc(false).reorderImports(false).groupArtifact('com.google.googlejavaformat:google-java-format') 
+        googleJavaFormat('1.24.0').aosp().reflowLongStrings().formatJavadoc(false).reorderImports(false).groupArtifact('com.google.googlejavaformat:google-java-format') 
         removeUnusedImports()
         importOrder('java', 'javax', 'org', 'com', '')
         trimTrailingWhitespace()

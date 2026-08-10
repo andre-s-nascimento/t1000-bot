@@ -8,22 +8,60 @@
       "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/xuxa-aham.gif"
     },
     "saudacao": {
-      "triggers": ["bom dia"],
+      "triggers": [
+        "bom dia",
+        "bom diaa",
+        "bom diaaa",
+        "bom diaaaa",
+        "bom diaaaaa",
+        "bom diaaaaaa",
+        "bom diaaaaaaa",
+        "bom diaaaaaaaaa",
+        "bom diaaaaaaaaaa",
+        "boa dia",
+        "bom dia galera",
+        "bom dia pessoal",
+        "bom dia a todos",
+        "bom dia família",
+        "bom dia rapaziada",
+        "bom dia turma",
+        "bom dia grupo",
+        "bão dia"
+      ],
       "response": "BOOOOOM DIAAAAAA... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
       "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
       "timeRange": {
         "start": "06:00",
-        "end": "12:00"
+        "end": "23:00"
       },
       "userResponse": {
-        "1241644136": " AQUI É FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)"
+        "1241644136": " AQUI É FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)",
+        "262774657": "Bom dia..."
       },
       "userAnimation": {
-        "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif"
+        "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif",
+        "262774657": "https://andre-s-nascimento.github.io/t1000-bot/media/not-today-satan.gif"
       }
     },
-    "saudacion": {
-      "triggers": ["buenos dias", "buen dia", "buenos días"],
+    "saudacao-pt": {
+      "triggers": ["boa tarde"],
+      "response": "Olá! Tenha uma excelente tarde! 🌅",
+      "animation": null,
+      "timeRange": {
+        "start": "12:00",
+        "end": "17:59"
+      }
+    },
+    "saudacao-es": {
+      "triggers": [
+        "buenos dias",
+        "buen dia",
+        "buenos días",
+        "bueeenos diaaaaas",
+        "buen día",
+        "buen día a todos",
+        "buen día familia"
+      ],
       "response": "BUUEEENOS DIAAAAAAS... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
       "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
       "timeRange": {
@@ -37,13 +75,300 @@
         "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif"
       }
     },
+    "saudacao-en": {
+      "triggers": [
+        "good morning",
+        "good morning everyone",
+        "morning",
+        "good mornin",
+        "g'morning"
+      ],
+      "response": "GOOOOOD MORNING... VIETNAAAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-fr": {
+      "triggers": [
+        "bonjour",
+        "bonjour tout le monde",
+        "bonjour à tous",
+        "bonjour le groupe",
+        "bonjour la famille",
+        "bon matin"
+      ],
+      "response": "BOOOONJOUR... VIEEEETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-de": {
+      "triggers": [
+        "guten morgen",
+        "guten morgen zusammen",
+        "guten tag",
+        "guten morgen alle",
+        "gutentag"
+      ],
+      "response": "GUUUUTEN MORGEN... VIEEEETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-it": {
+      "triggers": [
+        "buongiorno",
+        "buon giorno",
+        "buongiorno a tutti",
+        "buon giorno a tutti"
+      ],
+      "response": "BUONGIORNOOO... VIEEEETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-ru": {
+      "triggers": [
+        "доброе утро",
+        "добрый день",
+        "добро утро",
+        "с добрым утром",
+        "утро доброе",
+        "dobroye utro",
+        "dobroye utrooo",
+        "dobriy den",
+        "dobryj den",
+        "dobro utro"
+      ],
+      "response": "ДОБРОЕ УТРООО... ВЬЕТНАААААМ! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-ja": {
+      "triggers": [
+        "おはよう",
+        "おはようございます",
+        "おはよう皆さん",
+        "おはようみんな",
+        "おはようございます皆さん",
+        "ohayou",
+        "ohayou gozaimasu",
+        "ohayo",
+        "ohayo gozaimasu",
+        "ohayou gozaimas"
+      ],
+      "response": "おはようございます... ベトナム！ ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-ko": {
+      "triggers": [
+        "좋은 아침",
+        "좋은아침",
+        "안녕하세요 아침",
+        "좋은 아침입니다",
+        "아침 인사",
+        "joeun achim",
+        "joeunachim",
+        "joeun achimimnida",
+        "choun achim"
+      ],
+      "response": "좋은 아침... 베트남! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-zh": {
+      "triggers": [
+        "早上好",
+        "早安",
+        "早晨",
+        "大家早上好",
+        "早安各位",
+        "zao an",
+        "zaoan",
+        "zao shang hao",
+        "zaoshanghao",
+        "zao"
+      ],
+      "response": "早上好... 越南！ ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-ar": {
+      "triggers": [
+        "صباح الخير",
+        "صباح النور",
+        "السلام عليكم صباح",
+        "صباح الورد",
+        "sabah al khair",
+        "sabah al khayr",
+        "sabah el kher",
+        "sabah an noor",
+        "sabah al nour"
+      ],
+      "response": "صباح الخير... فيتنام! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-fa": {
+      "triggers": [
+        "صبح بخیر",
+        "صبح به خیر",
+        "صبحتون بخیر",
+        "sobhtak kher",
+        "sobhad kher",
+        "sobh bekheyr",
+        "sobh be kheyrm",
+        "sobhtun bekheyr"
+      ],
+      "response": "صبح بخیر... ویتنام! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-sv": {
+      "triggers": ["god morgon", "godmorgon", "goddag", "god morgon alla"],
+      "response": "GOOD MORGON... VIETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-da": {
+      "triggers": ["god morgen", "goddag", "god morgen alle"],
+      "response": "GOD MORGEN... VIETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-no": {
+      "triggers": ["god morgen", "god dag", "god morgen alle"],
+      "response": "GOD MORGEN... VIETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-fi": {
+      "triggers": ["hyvää huomenta", "huomenta", "hyvää päivää"],
+      "response": "HYVÄÄ HUOMENTA... VIETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-tr": {
+      "triggers": [
+        "günaydın",
+        "hayırlı sabahlar",
+        "gün aydın",
+        "selam sabah",
+        "gunaydin"
+      ],
+      "response": "GÜNAYDIN... VIETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-nl": {
+      "triggers": ["goedemorgen", "goede morgen", "morgen", "goedemiddag"],
+      "response": "GOEDEMORGEN... VIETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-pl": {
+      "triggers": ["dzień dobry", "dzien dobry", "dobry poranek"],
+      "response": "DZIEŃ DOBRY... VIETNAAAAM! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
+    "saudacao-hi": {
+      "triggers": [
+        "शुभ प्रभात",
+        "सुप्रभात",
+        "नमस्ते सुबह",
+        "shubh prabhat",
+        "suprabhat",
+        "shubho probhat"
+      ],
+      "response": "शुभ प्रभात... वियतनाम! ☀️",
+      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "timeRange": {
+        "start": "06:00",
+        "end": "12:00"
+      }
+    },
     "tchau": {
-      "triggers": ["tchau", "ate logo", "flw"],
-      "response": "Hasta la vista, baby! 👋😎"
+      "triggers": [
+        "tchau",
+        "ate logo",
+        "flw",
+        "até logo",
+        "até mais",
+        "até breve",
+        "até amanhã",
+        "falou",
+        "xau",
+        "tchau tchau",
+        "tchauzinho"
+      ],
+      "response": "Hasta la vista, baby! 👋😎",
+      "animation": null
     },
     "obrigado": {
-      "triggers": ["obrigado", "valeu", "obg", "vlw", "obrigada"],
-      "response": "Por nada! Isto fica feliz em ser útil. 🤖"
+      "triggers": [
+        "obrigado",
+        "valeu",
+        "obg",
+        "vlw",
+        "obrigada",
+        "brigado",
+        "brigada",
+        "muito obrigado",
+        "obrigadão",
+        "vlwzao",
+        "agradeço"
+      ],
+      "response": "Por nada! Isto fica feliz em ser útil. 🤖",
+      "animation": null
     }
   }
 }

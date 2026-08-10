@@ -38,65 +38,65 @@ class StaticWorldCupServiceTest {
     // JSON real com dados válidos (trecho do worldcup2026.json)
     private static final String JSON_VALIDO =
             """
-      {
-        "name": "World Cup 2026",
-        "matches": [
-          {
-            "round": "Matchday 1",
-            "date": "2026-06-11",
-            "time": "13:00 UTC-6",
-            "team1": "Mexico",
-            "team2": "South Africa",
-            "score": { "ft": [2, 0], "ht": [1, 0] },
-            "goals1": [
-              { "name": "Julián Quiñones", "minute": "9" },
-              { "name": "Raúl Jiménez", "minute": "67" }
-            ],
-            "goals2": [],
-            "group": "Group A",
-            "ground": "Mexico City"
-          },
-          {
-            "round": "Round of 32",
-            "num": 74,
-            "date": "2026-06-29",
-            "time": "16:30 UTC-4",
-            "team1": "Germany",
-            "team2": "Paraguay",
-            "score": { "p": [3, 4], "et": [1, 1], "ft": [1, 1], "ht": [0, 1] },
-            "goals1": [{ "name": "Kai Havertz", "minute": "54" }],
-            "goals2": [{ "name": "Julio Enciso", "minute": "42" }],
-            "ground": "Boston (Foxborough)"
-          }
-        ]
-      }
-      """;
+            {
+              "name": "World Cup 2026",
+              "matches": [
+                {
+                  "round": "Matchday 1",
+                  "date": "2026-06-11",
+                  "time": "13:00 UTC-6",
+                  "team1": "Mexico",
+                  "team2": "South Africa",
+                  "score": { "ft": [2, 0], "ht": [1, 0] },
+                  "goals1": [
+                    { "name": "Julián Quiñones", "minute": "9" },
+                    { "name": "Raúl Jiménez", "minute": "67" }
+                  ],
+                  "goals2": [],
+                  "group": "Group A",
+                  "ground": "Mexico City"
+                },
+                {
+                  "round": "Round of 32",
+                  "num": 74,
+                  "date": "2026-06-29",
+                  "time": "16:30 UTC-4",
+                  "team1": "Germany",
+                  "team2": "Paraguay",
+                  "score": { "p": [3, 4], "et": [1, 1], "ft": [1, 1], "ht": [0, 1] },
+                  "goals1": [{ "name": "Kai Havertz", "minute": "54" }],
+                  "goals2": [{ "name": "Julio Enciso", "minute": "42" }],
+                  "ground": "Boston (Foxborough)"
+                }
+              ]
+            }
+            """;
 
     private static final String JSON_VAZIO =
             """
-      {
-        "name": "World Cup 2026",
-        "matches": []
-      }
-      """;
+            {
+              "name": "World Cup 2026",
+              "matches": []
+            }
+            """;
 
     private static final String JSON_MALFORMADO =
             """
-      {
-        "name": "World Cup 2026",
-        "matches": [
-          {
-            "round": "Matchday 1",
-            "date": "2026-06-11",
-            "time": "13:00 UTC-6",
-            "team1": "Mexico",
-            "team2": "South Africa",
-            "score": { "ft": [2, 0] },
-            "goals1": [ { "name": "Julián Quiñones" } ],
-            "goals2": []
-          }
-        ]
-      """; // falta fechamento
+            {
+              "name": "World Cup 2026",
+              "matches": [
+                {
+                  "round": "Matchday 1",
+                  "date": "2026-06-11",
+                  "time": "13:00 UTC-6",
+                  "team1": "Mexico",
+                  "team2": "South Africa",
+                  "score": { "ft": [2, 0] },
+                  "goals1": [ { "name": "Julián Quiñones" } ],
+                  "goals2": []
+                }
+              ]
+            """; // falta fechamento
 
     @BeforeEach
     void setUp() {
@@ -342,24 +342,24 @@ class StaticWorldCupServiceTest {
         // Novo JSON com dados diferentes
         String novoJson =
                 """
-        {
-          "name": "World Cup 2026",
-          "matches": [
-            {
-              "round": "New Round",
-              "date": "2026-07-20",
-              "time": "22:00 UTC",
-              "team1": "Team X",
-              "team2": "Team Y",
-              "score": { "ft": [0, 0] },
-              "goals1": [],
-              "goals2": [],
-              "group": "Z",
-              "ground": "Stadium Z"
-            }
-          ]
-        }
-        """;
+                {
+                  "name": "World Cup 2026",
+                  "matches": [
+                    {
+                      "round": "New Round",
+                      "date": "2026-07-20",
+                      "time": "22:00 UTC",
+                      "team1": "Team X",
+                      "team2": "Team Y",
+                      "score": { "ft": [0, 0] },
+                      "goals1": [],
+                      "goals2": [],
+                      "group": "Z",
+                      "ground": "Stadium Z"
+                    }
+                  ]
+                }
+                """;
         when(resourceLoader.getResource(anyString())).thenReturn(resource);
         when(resource.exists()).thenReturn(true);
         when(resource.getInputStream())

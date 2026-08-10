@@ -42,20 +42,20 @@ class WatchmodeClientTest {
     void getProviders_comMovie_deveRetornarProvedores() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 12345 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 12345 }
+                  ]
+                }
+                """;
         String sourcesJson =
                 """
-        [
-          { "region": "BR", "name": "Netflix" },
-          { "region": "US", "name": "HBO Max" },
-          { "region": "BR", "name": "Prime Video" }
-        ]
-        """;
+                [
+                  { "region": "BR", "name": "Netflix" },
+                  { "region": "US", "name": "HBO Max" },
+                  { "region": "BR", "name": "Prime Video" }
+                ]
+                """;
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -71,19 +71,19 @@ class WatchmodeClientTest {
     void getProviders_comTv_deveRetornarProvedores() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 67890 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 67890 }
+                  ]
+                }
+                """;
         String sourcesJson =
                 """
-        [
-          { "region": "BR", "name": "Disney+" },
-          { "region": "BR", "name": "Star+" }
-        ]
-        """;
+                [
+                  { "region": "BR", "name": "Disney+" },
+                  { "region": "BR", "name": "Star+" }
+                ]
+                """;
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(2L, "tv");
@@ -100,20 +100,20 @@ class WatchmodeClientTest {
     void getProviders_comMovie_ignoraProvedorComNomeVazio() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 12345 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 12345 }
+                  ]
+                }
+                """;
         String sourcesJson =
                 """
-        [
-          { "region": "BR", "name": "Netflix" },
-          { "region": "BR", "name": "" },
-          { "region": "BR", "name": "Prime Video" }
-        ]
-        """;
+                [
+                  { "region": "BR", "name": "Netflix" },
+                  { "region": "BR", "name": "" },
+                  { "region": "BR", "name": "Prime Video" }
+                ]
+                """;
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -125,19 +125,19 @@ class WatchmodeClientTest {
     void getProviders_comMovie_ignoraProvedorComNomeNull() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 12345 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 12345 }
+                  ]
+                }
+                """;
         String sourcesJson =
                 """
-        [
-          { "region": "BR", "name": null },
-          { "region": "BR", "name": "Prime Video" }
-        ]
-        """;
+                [
+                  { "region": "BR", "name": null },
+                  { "region": "BR", "name": "Prime Video" }
+                ]
+                """;
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -151,19 +151,19 @@ class WatchmodeClientTest {
     void getProviders_semProvedorBR_retornaNull() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 999 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 999 }
+                  ]
+                }
+                """;
         String sourcesJson =
                 """
-        [
-          { "region": "US", "name": "HBO Max" },
-          { "region": "UK", "name": "Sky" }
-        ]
-        """;
+                [
+                  { "region": "US", "name": "HBO Max" },
+                  { "region": "UK", "name": "Sky" }
+                ]
+                """;
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -175,11 +175,12 @@ class WatchmodeClientTest {
 
     @Test
     void getProviders_buscaSemResultado_retornaNull() {
-        String searchJson = """
-        {
-          "title_results": []
-        }
-        """;
+        String searchJson =
+                """
+                {
+                  "title_results": []
+                }
+                """;
         doReturn(searchJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -204,12 +205,12 @@ class WatchmodeClientTest {
     void getProviders_sourcesResponseNula_retornaNull() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 123 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 123 }
+                  ]
+                }
+                """;
         doReturn(searchJson).doReturn(null).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -223,15 +224,16 @@ class WatchmodeClientTest {
     void getProviders_sourcesNaoArray_retornaNull() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 123 }
-          ]
-        }
-        """;
-        String sourcesJson = """
-        { "invalid": "object" }
-        """;
+                {
+                  "title_results": [
+                    { "id": 123 }
+                  ]
+                }
+                """;
+        String sourcesJson =
+                """
+                { "invalid": "object" }
+                """;
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
         String result = watchmodeClient.getProviders(1L, "movie");
@@ -245,12 +247,12 @@ class WatchmodeClientTest {
     void getProviders_sourcesVazio_retornaNull() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 123 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 123 }
+                  ]
+                }
+                """;
         String sourcesJson = "[]";
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
@@ -265,12 +267,12 @@ class WatchmodeClientTest {
     void getProviders_sourcesJsonInvalido_retornaNull() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { "id": 123 }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { "id": 123 }
+                  ]
+                }
+                """;
         String sourcesJson = "{ invalid json }";
         doReturn(searchJson).doReturn(sourcesJson).when(responseSpec).body(String.class);
 
@@ -313,12 +315,12 @@ class WatchmodeClientTest {
     void getProviders_comMovie_semId_retornaNull() {
         String searchJson =
                 """
-        {
-          "title_results": [
-            { }
-          ]
-        }
-        """;
+                {
+                  "title_results": [
+                    { }
+                  ]
+                }
+                """;
         // Não precisa de sourcesJson porque vai retornar null antes
         doReturn(searchJson).when(responseSpec).body(String.class);
 

@@ -407,10 +407,10 @@ public class AudioHandler {
 
             String mensagem =
                     """
-          🎧 Áudio de <b>%s</b> (%s%s) processado!
+                    🎧 Áudio de <b>%s</b> (%s%s) processado!
 
-          Clique num botão para receber a transcrição no seu privado:
-          """
+                    Clique num botão para receber a transcrição no seu privado:
+                    """
                             .formatted(utils.escapeHtml(senderName), duracao, hint);
 
             InlineKeyboardMarkup markup =

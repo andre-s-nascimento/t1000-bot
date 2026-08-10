@@ -1,5 +1,6 @@
 package net.ddns.adambravo79.tmill.service;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -35,6 +36,9 @@ public class AutoResponseService {
 
     @Value("${auto.response.file:classpath:auto-responses.json}")
     private String configFile;
+
+    // Mapa: userId -> (trigger -> último horário de resposta)
+    private final Map<Long, Map<String, LocalDate>> userTriggerCooldown = new HashMap<>();
 
     public AutoResponseService(ResourceLoader resourceLoader, ObjectMapper objectMapper) {
         this.resourceLoader = resourceLoader;
@@ -79,6 +83,29 @@ public class AutoResponseService {
         }
     }
 
+    private void recordResponse(Long userId, String trigger) {
+        if (userId == null) return;
+
+        userTriggerCooldown
+                .computeIfAbsent(userId, k -> new HashMap<>())
+                .put(trigger, LocalDate.now(BRAZIL_ZONE));
+    }
+
+    private boolean shouldSuppressResponse(Long userId, String trigger) {
+        if (userId == null) return false; // não suprime para usuários anônimos
+
+        // Pega o mapa de triggers para este usuário
+        Map<String, LocalDate> userTriggers = userTriggerCooldown.get(userId);
+        if (userTriggers == null) return false;
+
+        // Verifica se este trigger foi ativado hoje
+        LocalDate lastResponse = userTriggers.get(trigger);
+        if (lastResponse == null) return false;
+
+        // Se foi hoje, suprime a resposta
+        return lastResponse.equals(LocalDate.now(BRAZIL_ZONE));
+    }
+
     private void processRuleEntry(String ruleName, AutoResponseRuleEntry entry) {
         if (entry.triggers() == null || entry.response() == null) {
             log.warn("Regra '{}' ignorada: triggers ou response nulos", ruleName);
@@ -116,7 +143,8 @@ public class AutoResponseService {
     }
 
     /**
-     * Builds a map of user-specific overrides. Uses computeIfAbsent to avoid explicit
+     * Builds a map of user-specific overrides. Uses computeIfAbsent to avoid
+     * explicit
      * containsKey+put.
      */
     private Map<String, AutoResponseOverride> buildOverrides(AutoResponseRuleEntry entry) {
@@ -184,22 +212,43 @@ public class AutoResponseService {
                                         now,
                                         entry.getValue().startTime(),
                                         entry.getValue().endTime()))
-                .map(
+                .findFirst()
+                .flatMap(
                         entry -> {
-                            String userIdKey = userId != null ? String.valueOf(userId) : null;
+                            String trigger = entry.getKey();
                             AutoResponseRule rule = entry.getValue();
+
+                            // 👇 VERIFICA SE DEVE SUPRIMIR
+                            if (shouldSuppressResponse(userId, trigger)) {
+                                log.debug(
+                                        "⏭️ Resposta suprimida para userId={}, trigger='{}' (já"
+                                                + " recebeu hoje)",
+                                        userId,
+                                        trigger);
+                                return Optional.empty();
+                            }
+
+                            String userIdKey = userId != null ? String.valueOf(userId) : null;
+                            AutoResponseOverride override = null;
 
                             if (userIdKey != null
                                     && rule.userOverrides() != null
                                     && rule.userOverrides().containsKey(userIdKey)) {
+                                override = rule.userOverrides().get(userIdKey);
                                 log.info("🎯 Usando resposta personalizada para userId={}", userId);
-                                return rule.userOverrides().get(userIdKey);
                             }
 
-                            log.info("✅ Trigger '{}' ativado (horário: {})", entry.getKey(), now);
-                            return new AutoResponseOverride(rule.response(), rule.animation());
-                        })
-                .findFirst();
+                            if (override == null) {
+                                override =
+                                        new AutoResponseOverride(rule.response(), rule.animation());
+                            }
+
+                            // 👇 REGISTRA QUE O USUÁRIO RECEBEU A RESPOSTA
+                            recordResponse(userId, trigger);
+                            log.info("✅ Trigger '{}' ativado (horário: {})", trigger, now);
+
+                            return Optional.of(override);
+                        });
     }
 
     public Optional<AutoResponseOverride> getResponseRule(Long userId, String message) {
@@ -210,7 +259,8 @@ public class AutoResponseService {
         loadResponses();
     }
 
-    // ========================= MÉTODOS DE ESTATÍSTICA E DEBUG =========================
+    // ========================= MÉTODOS DE ESTATÍSTICA E DEBUG
+    // =========================
 
     public boolean isEnabled() {
         return enabled;

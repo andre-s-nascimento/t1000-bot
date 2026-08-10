@@ -277,17 +277,17 @@ public class DailyReleasesService {
         String nota = item.rating > 0 ? String.format("%.1f/10", item.rating) : "N/A";
         return String.format(
                 """
-        <b>%s</b>
+                <b>%s</b>
 
-        <b>JÁ DISPONÍVEL</b>
+                <b>JÁ DISPONÍVEL</b>
 
-        ⭐ %s
-        📝 %s
+                ⭐ %s
+                📝 %s
 
-        ⭐ <b>Nota:</b> %s
+                ⭐ <b>Nota:</b> %s
 
-        📺 <b>Onde assistir:</b> %s
-        """,
+                📺 <b>Onde assistir:</b> %s
+                """,
                 item.title,
                 item.title,
                 item.overview != null && !item.overview.isBlank()

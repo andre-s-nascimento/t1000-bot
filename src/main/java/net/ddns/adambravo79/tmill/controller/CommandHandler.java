@@ -160,19 +160,19 @@ public class CommandHandler {
     private void sendWelcome(long chatId, String firstName) {
         String saudacao =
                 """
-        🤖 Olá, <b>%s</b>! Eu sou o <b>Tmill Bot</b>, o robô de metal líquido das transcrições e buscas.
+🤖 Olá, <b>%s</b>! Eu sou o <b>Tmill Bot</b>, o robô de metal líquido das transcrições e buscas.
 
-        📌 <b>O que posso fazer?</b>
-        🎬 Buscar filmes: <code>t1000 buscar &lt;nome do filme&gt;</code>
-        🎙️ Transcrever áudios: envie uma mensagem de voz ou áudio.
+📌 <b>O que posso fazer?</b>
+🎬 Buscar filmes: <code>t1000 buscar &lt;nome do filme&gt;</code>
+🎙️ Transcrever áudios: envie uma mensagem de voz ou áudio.
 
-        💡 <b>Em grupos/canais:</b>
-        Ao enviar um áudio, aparecerão botões para você escolher a transcrição bruta ou refinada.
+💡 <b>Em grupos/canais:</b>
+Ao enviar um áudio, aparecerão botões para você escolher a transcrição bruta ou refinada.
 
-        💡 Anotar sugestões: <code>t1000 anotar ideia Achar os pais adotivos do John Connor...</code>
+💡 Anotar sugestões: <code>t1000 anotar ideia Achar os pais adotivos do John Connor...</code>
 
-        Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
-        """
+Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
+"""
                         .formatted(utils.escapeHtml(firstName));
         telegramFacade.enviarMensagemHtml(chatId, saudacao);
     }
@@ -238,12 +238,12 @@ public class CommandHandler {
         // Mensagem para o administrador usando Text Block
         String adminMsg =
                 """
-        💡 <b>Nova ideia</b>
-        📝 <i>%s</i>
-        👤 <b>Usuário:</b> %s
-        📍 <b>Local:</b> %s
-        🕒 %s
-        """
+                💡 <b>Nova ideia</b>
+                📝 <i>%s</i>
+                👤 <b>Usuário:</b> %s
+                📍 <b>Local:</b> %s
+                🕒 %s
+                """
                         .formatted(
                                 utils.escapeHtml(idea),
                                 utils.buildUserMention(from),
