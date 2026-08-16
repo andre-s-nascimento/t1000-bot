@@ -59,3 +59,4 @@ OPERATION-v2.md
 temp/**
 **/temp/
 *.mp3
+data/t1000.db

@@ -17,6 +17,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -75,15 +76,18 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Controller administrativo para testes, limpeza de dados e monitoramento.
  *
- * <p>Exception handling strategy:
+ * <p>
+ * Exception handling strategy:
  *
  * <ul>
- *   <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
- *   <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem apropriada.
- *   <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe detalhes).
- *   <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
- *   <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
- *   <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
+ * <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
+ * <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem
+ * apropriada.
+ * <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe
+ * detalhes).
+ * <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
+ * <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
+ * <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
  * </ul>
  */
 @RestController
@@ -93,8 +97,7 @@ import tools.jackson.databind.ObjectMapper;
 public class AdminController {
 
     private static final long SHOWCASE_CHAT_ID = -5283244164L;
-    private static final String MSG_ERRO_INTERNO =
-            "Erro interno do servidor. Contate o administrador.";
+    private static final String MSG_ERRO_INTERNO = "Erro interno do servidor. Contate o administrador.";
 
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
@@ -246,8 +249,7 @@ public class AdminController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(MSG_ERRO_INTERNO);
         }
 
-        String message =
-                "Resumo personalizado gerado para período: " + startDate + " até " + endDate;
+        String message = "Resumo personalizado gerado para período: " + startDate + " até " + endDate;
         if (chatId != null) {
             message += " (enviado apenas para o chat " + chatId + ")";
         } else {
@@ -327,10 +329,9 @@ public class AdminController {
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         staticWorldCupService.reload();
 
-        String msg =
-                "✅ Dados da Copa recarregados do arquivo JSON às "
-                        + LocalDateTime.now(ZoneId.of(BRAZIL_ZONE))
-                                .format(DateTimeFormatter.ofPattern(FMT_HH_MM_SS));
+        String msg = "✅ Dados da Copa recarregados do arquivo JSON às "
+                + LocalDateTime.now(ZoneId.of(BRAZIL_ZONE))
+                        .format(DateTimeFormatter.ofPattern(FMT_HH_MM_SS));
 
         try {
             telegramFacade.enviarMensagemHtml(targetChatId, msg);
@@ -427,7 +428,7 @@ public class AdminController {
     @GetMapping("/config-files")
     public ResponseEntity<Map<String, Object>> getConfigFiles() {
         Map<String, Object> result = new LinkedHashMap<>();
-        String[] files = {"easter-eggs.json", "auto-responses.json", "worldcup2026.json"};
+        String[] files = { "easter-eggs.json", "auto-responses.json", "worldcup2026.json" };
 
         for (String fileName : files) {
             try {
@@ -474,8 +475,8 @@ public class AdminController {
         long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
         LocalTime simulatedTime = parseTime(time);
 
-        Optional<AutoResponseOverride> responseOpt =
-                autoResponseService.getResponseRule(userId, message, simulatedTime);
+        Optional<AutoResponseOverride> responseOpt = autoResponseService.getResponseRule(userId, message,
+                simulatedTime);
 
         if (responseOpt.isEmpty()) {
             return ResponseEntity.ok(
@@ -502,8 +503,8 @@ public class AdminController {
         }
 
         LocalTime simulatedTime = parseTime(time);
-        Optional<AutoResponseOverride> responseOpt =
-                autoResponseService.getResponseRule(userId, message, simulatedTime);
+        Optional<AutoResponseOverride> responseOpt = autoResponseService.getResponseRule(userId, message,
+                simulatedTime);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("userId", userId);
@@ -580,9 +581,8 @@ public class AdminController {
         if (publishChatId == 0) {
             return ResponseEntity.badRequest().body("❌ podcast.publish.chat-id não configurado.");
         }
-        String text =
-                "Bem vindos ao espetacular... ah deixa de papo furado. Dadinho é o cara leo, meu"
-                        + " nome agora é Zé Pequeno.";
+        String text = "Bem vindos ao espetacular... ah deixa de papo furado. Dadinho é o cara leo, meu"
+                + " nome agora é Zé Pequeno.";
         byte[] audio = azureTtsClient.synthesizeFullText(text);
         if (audio.length > 0) {
             try {
@@ -599,55 +599,57 @@ public class AdminController {
         return ResponseEntity.status(500).body("Falha na síntese (áudio vazio).");
     }
 
-    @GetMapping("/test-podcast")
-    public ResponseEntity<String> testPodcast(
-            @RequestParam(required = false) String start,
-            @RequestParam(required = false) String end,
-            @RequestParam(required = false) Long chatId) {
+    // @GetMapping("/test-podcast")
+    // public ResponseEntity<String> testPodcast(
+    // @RequestParam(required = false) String start,
+    // @RequestParam(required = false) String end,
+    // @RequestParam(required = false) Long chatId) {
 
-        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
-        LocalDate endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) : today;
-        LocalDate startDate =
-                (start != null && !start.isBlank()) ? LocalDate.parse(start) : today.minusDays(7);
+    // LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+    // LocalDate endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) :
+    // today;
+    // LocalDate startDate =
+    // (start != null && !start.isBlank()) ? LocalDate.parse(start) :
+    // today.minusDays(7);
 
-        if (startDate.isAfter(endDate)) {
-            return ResponseEntity.badRequest()
-                    .body("❌ Data de início não pode ser posterior à data de fim.");
-        }
+    // if (startDate.isAfter(endDate)) {
+    // return ResponseEntity.badRequest()
+    // .body("❌ Data de início não pode ser posterior à data de fim.");
+    // }
 
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+    // long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
 
-        // 🔁 Processa em background
-        CompletableFuture.runAsync(
-                () -> {
-                    try {
-                        log.info(
-                                "📥 Iniciando geração assíncrona do podcast para chat {}",
-                                targetChatId);
-                        podcastPublisherService.generateAndSendPodcast(
-                                startDate, endDate, targetChatId);
-                        log.info("✅ Podcast assíncrono finalizado para chat {}", targetChatId);
-                    } catch (Exception e) {
-                        log.error(
-                                "❌ Erro assíncrono ao gerar podcast para chat {}", targetChatId, e);
-                        try {
-                            telegramFacade.enviarMensagem(
-                                    targetChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
-                        } catch (Exception ignored) {
-                            // Falha ao deletar arquivo temporário – pode ser ignorado
-                            log.debug("Não foi possível gerar arquivo");
-                        }
-                    }
-                });
+    // // 🔁 Processa em background
+    // CompletableFuture.runAsync(
+    // () -> {
+    // try {
+    // log.info(
+    // "📥 Iniciando geração assíncrona do podcast para chat {}",
+    // targetChatId);
+    // podcastPublisherService.generateAndSendPodcast(
+    // startDate, endDate, targetChatId);
+    // log.info("✅ Podcast assíncrono finalizado para chat {}", targetChatId);
+    // } catch (Exception e) {
+    // log.error(
+    // "❌ Erro assíncrono ao gerar podcast para chat {}", targetChatId, e);
+    // try {
+    // telegramFacade.enviarMensagem(
+    // targetChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
+    // } catch (Exception ignored) {
+    // // Falha ao deletar arquivo temporário – pode ser ignorado
+    // log.debug("Não foi possível gerar arquivo");
+    // }
+    // }
+    // });
 
-        // Retorna imediatamente
-        return ResponseEntity.accepted()
-                .body(
-                        String.format(
-                                "🔄 Podcast agendado para o período de %s a %s. Você receberá em"
-                                        + " breve no chat %d.",
-                                startDate, endDate, targetChatId));
-    }
+    // // Retorna imediatamente
+    // return ResponseEntity.accepted()
+    // .body(
+    // String.format(
+    // "🔄 Podcast agendado para o período de %s a %s. Você receberá em"
+    // + " breve no chat %d.",
+    // startDate, endDate, targetChatId));
+    // }
 
     @PostMapping("/fala-t1000-tts")
     public ResponseEntity<String> testAzureTts(
@@ -688,8 +690,7 @@ public class AdminController {
         Path tempFile = null;
         try {
             // Gera um nome único com timestamp
-            String fileName =
-                    String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
+            String fileName = String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
             tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
             Path finalFile = tempFile.resolveSibling(fileName);
             Files.write(tempFile, audio);
@@ -720,9 +721,13 @@ public class AdminController {
         }
     }
 
-    // ========================= MÉTODOS AUXILIARES PRIVADOS =========================
+    // ========================= MÉTODOS AUXILIARES PRIVADOS
+    // =========================
 
-    /** Carrega e parseia um arquivo de configuração do classpath ou do diretório /app/config/. */
+    /**
+     * Carrega e parseia um arquivo de configuração do classpath ou do diretório
+     * /app/config/.
+     */
     private Object loadConfigFile(String fileName) throws IOException {
         Resource resource = resourceLoader.getResource("classpath:" + fileName);
         if (!resource.exists()) {
@@ -786,7 +791,8 @@ public class AdminController {
     }
 
     private LocalDate parseDateParam(String param) {
-        if (param == null || param.isBlank()) return null;
+        if (param == null || param.isBlank())
+            return null;
         String lower = param.toLowerCase().trim();
         if (lower.equals("hoje") || lower.equals("de hoje"))
             return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
@@ -795,28 +801,29 @@ public class AdminController {
 
         String cleaned = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
         LocalDate parsed = tryParseWithPattern(cleaned);
-        if (parsed != null) return parsed;
+        if (parsed != null)
+            return parsed;
 
         // fallback attempts
         parsed = tryParseFallback(param, "dd/MM", "dd-MM");
-        if (parsed != null) return parsed;
+        if (parsed != null)
+            return parsed;
         return null;
     }
 
     private LocalDate tryParseWithPattern(String cleaned) {
-        Pattern pattern =
-                Pattern.compile("\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
+        Pattern pattern = Pattern.compile("\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
         Matcher m = pattern.matcher(cleaned);
         if (m.find()) {
             String dateStr = m.group(1).trim();
             try {
-                if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}")) return LocalDate.parse(dateStr);
+                if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}"))
+                    return LocalDate.parse(dateStr);
                 if (dateStr.matches("\\d{1,2}[/-]\\d{2}")) {
-                    DateTimeFormatter fmt =
-                            new DateTimeFormatterBuilder()
-                                    .appendPattern(dateStr.contains("/") ? "dd/MM" : "dd-MM")
-                                    .parseDefaulting(ChronoField.YEAR, 2026)
-                                    .toFormatter();
+                    DateTimeFormatter fmt = new DateTimeFormatterBuilder()
+                            .appendPattern(dateStr.contains("/") ? "dd/MM" : "dd-MM")
+                            .parseDefaulting(ChronoField.YEAR, 2026)
+                            .toFormatter();
                     return LocalDate.parse(dateStr, fmt);
                 }
             } catch (DateTimeParseException ignored) {
@@ -829,11 +836,10 @@ public class AdminController {
     private LocalDate tryParseFallback(String param, String... patterns) {
         for (String p : patterns) {
             try {
-                DateTimeFormatter fmt =
-                        new DateTimeFormatterBuilder()
-                                .appendPattern(p)
-                                .parseDefaulting(ChronoField.YEAR, 2026)
-                                .toFormatter();
+                DateTimeFormatter fmt = new DateTimeFormatterBuilder()
+                        .appendPattern(p)
+                        .parseDefaulting(ChronoField.YEAR, 2026)
+                        .toFormatter();
                 return LocalDate.parse(param, fmt);
             } catch (DateTimeParseException ignored) {
                 /* continue */
@@ -843,12 +849,12 @@ public class AdminController {
     }
 
     private LocalDate[] parseDateRange(String startDate, String endDate) {
-        for (String pattern : new String[] {FMT_YYYY_MM_DD, FMT_DD_MM_YYYY_HYPHEN}) {
+        for (String pattern : new String[] { FMT_YYYY_MM_DD, FMT_DD_MM_YYYY_HYPHEN }) {
             try {
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
                 LocalDate start = LocalDate.parse(startDate, formatter);
                 LocalDate end = LocalDate.parse(endDate, formatter);
-                return new LocalDate[] {start, end};
+                return new LocalDate[] { start, end };
             } catch (DateTimeParseException ignored) {
                 // tenta próximo padrão
             }
@@ -887,5 +893,154 @@ public class AdminController {
         } catch (URISyntaxException e) {
             return false;
         }
+    }
+
+    // ========================= PODCAST MANUAL =========================
+
+    /**
+     * Endpoint para gerar podcast manualmente com parâmetros personalizados.
+     *
+     * Exemplos de uso:
+     * - GET /admin/test-podcast -> gera da semana passada para o showcase
+     * - GET /admin/test-podcast?chatId=123456&start=2026-08-01&end=2026-08-07
+     * - GET /admin/test-podcast?chatId=123456&periodo=7 -> últimos 7 dias
+     *
+     * @param chatId  ID do chat para envio (opcional, padrão: showcase)
+     * @param start   Data de início (opcional, formato: yyyy-MM-dd)
+     * @param end     Data de fim (opcional, formato: yyyy-MM-dd)
+     * @param periodo Número de dias para trás (opcional, padrão: 7)
+     * @return Status da operação
+     */
+    @GetMapping("/test-podcast")
+    public ResponseEntity<String> testPodcast(
+            @RequestParam(required = false) Long chatId,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end,
+            @RequestParam(required = false) Integer periodo) {
+
+        // Define o chat alvo
+        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+
+        // Calcula o período
+        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate endDate;
+        LocalDate startDate;
+
+        if (start != null && !start.isBlank() && end != null && !end.isBlank()) {
+            // Usa datas fornecidas
+            try {
+                startDate = LocalDate.parse(start);
+                endDate = LocalDate.parse(end);
+            } catch (DateTimeParseException e) {
+                return ResponseEntity.badRequest()
+                        .body("❌ Formato de data inválido. Use yyyy-MM-dd");
+            }
+        } else if (periodo != null && periodo > 0) {
+            // Usa período em dias
+            endDate = today;
+            startDate = today.minusDays(periodo);
+        } else {
+            // Padrão: última semana completa (segunda a domingo)
+            endDate = today.with(DayOfWeek.SUNDAY).minusWeeks(1);
+            startDate = endDate.with(DayOfWeek.MONDAY);
+        }
+
+        // Validação
+        if (startDate.isAfter(endDate)) {
+            return ResponseEntity.badRequest()
+                    .body("❌ Data de início não pode ser posterior à data de fim.");
+        }
+
+        // Verifica se o chatId é válido
+        if (targetChatId == 0) {
+            return ResponseEntity.badRequest()
+                    .body("❌ chatId inválido. Configure um chatId ou use o padrão.");
+        }
+
+        // 🔥 Processa em background para não bloquear a resposta
+        final long finalChatId = targetChatId;
+        final LocalDate finalStart = startDate;
+        final LocalDate finalEnd = endDate;
+
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        log.info(
+                                "📥 Iniciando geração assíncrona do podcast para chat {}",
+                                finalChatId);
+                        log.info("📅 Período: {} a {}", finalStart, finalEnd);
+
+                        podcastPublisherService.generateAndSendPodcast(
+                                finalStart, finalEnd, finalChatId);
+
+                        log.info("✅ Podcast assíncrono finalizado para chat {}", finalChatId);
+                    } catch (Exception e) {
+                        log.error(
+                                "❌ Erro assíncrono ao gerar podcast para chat {}", finalChatId, e);
+                        try {
+                            telegramFacade.enviarMensagem(
+                                    finalChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
+                        } catch (Exception ignored) {
+                            // Falha ao enviar mensagem de erro
+                            log.debug("Não foi possível enviar mensagem de erro");
+                        }
+                    }
+                });
+
+        // Retorna imediatamente
+        String responseMsg = String.format(
+                "🔄 Podcast agendado para o período de %s a %s.\n"
+                        + "📤 Será enviado para o chat %d.\n"
+                        + "⏳ O processamento pode levar alguns minutos.",
+                finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                finalChatId);
+
+        // Também envia uma mensagem no chat confirmando
+        try {
+            telegramFacade.enviarMensagemHtml(
+                    finalChatId,
+                    "<b>🎙️ Podcast solicitado manualmente</b>\n\n"
+                            + "📅 Período: "
+                            + finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                            + " a "
+                            + finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                            + "\n"
+                            + "⏳ Aguarde, estou gerando o áudio...");
+        } catch (Exception e) {
+            log.warn("Não foi possível enviar confirmação para o chat {}", finalChatId);
+        }
+
+        return ResponseEntity.accepted().body(responseMsg);
+    }
+
+    /**
+     * Endpoint para testar o podcast com período fixo (últimos 7 dias)
+     * Mais simples que o /test-podcast
+     */
+    @GetMapping("/test-podcast-latest")
+    public ResponseEntity<String> testPodcastLatest(@RequestParam(required = false) Long chatId) {
+
+        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate startDate = endDate.minusDays(7);
+
+        return testPodcast(chatId, startDate.toString(), endDate.toString(), null);
+    }
+
+    /**
+     * Endpoint para testar o podcast com período específico em dias
+     * Ex: /admin/test-podcast-days?days=3&chatId=123456
+     */
+    @GetMapping("/test-podcast-days")
+    public ResponseEntity<String> testPodcastDays(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) Long chatId) {
+
+        if (days <= 0 || days > 30) {
+            return ResponseEntity.badRequest().body("❌ O número de dias deve ser entre 1 e 30.");
+        }
+
+        return testPodcast(chatId, null, null, days);
     }
 }

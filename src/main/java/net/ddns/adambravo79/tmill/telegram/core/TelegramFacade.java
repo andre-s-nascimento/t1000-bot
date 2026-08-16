@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
+import okhttp3.OkHttpClient;
 
 @Slf4j
 @Component
@@ -32,9 +34,34 @@ public class TelegramFacade {
     @Value("${telegram.bot.token}")
     private String botToken;
 
+    // 🔥 NOVAS CONFIGURAÇÕES DE TIMEOUT
+    @Value("${telegram.bot.client.connect-timeout:60}")
+    private int connectTimeout;
+
+    @Value("${telegram.bot.client.read-timeout:120}")
+    private int readTimeout;
+
+    @Value("${telegram.bot.client.write-timeout:120}")
+    private int writeTimeout;
+
+    private OkHttpClient httpClient;
+
     @PostConstruct
     public void init() {
         log.info("🔑 Token carregado: {}", maskToken(botToken));
+        log.info(
+                "⏱️ Timeouts configurados: connect={}s, read={}s, write={}s",
+                connectTimeout,
+                readTimeout,
+                writeTimeout);
+
+        // 🔥 Cria cliente HTTP com timeouts configurados
+        this.httpClient =
+                new OkHttpClient.Builder()
+                        .connectTimeout(connectTimeout, TimeUnit.SECONDS)
+                        .readTimeout(readTimeout, TimeUnit.SECONDS)
+                        .writeTimeout(writeTimeout, TimeUnit.SECONDS)
+                        .build();
     }
 
     public void enviarMensagem(long chatId, String texto) {
@@ -194,7 +221,8 @@ public class TelegramFacade {
     }
 
     /**
-     * Baixa o arquivo usando a URL pública do Telegram. O {@link TelegramBotExecutor} não expõe
+     * Baixa o arquivo usando a URL pública do Telegram. O
+     * {@link TelegramBotExecutor} não expõe
      * {@code downloadFile}, então fazemos manualmente.
      */
     public byte[] downloadFile(File file) {
@@ -202,9 +230,10 @@ public class TelegramFacade {
         String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
         HttpURLConnection conn = null;
         try {
-            conn = (HttpURLConnection) URI.create(url).toURL().openConnection(); // corrigido
-            conn.setConnectTimeout(30_000);
-            conn.setReadTimeout(120_000);
+            conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            // 🔥 Usa os timeouts configurados
+            conn.setConnectTimeout(connectTimeout * 1000);
+            conn.setReadTimeout(readTimeout * 1000);
             try (InputStream is = conn.getInputStream()) {
                 return is.readAllBytes();
             }
@@ -215,7 +244,10 @@ public class TelegramFacade {
         }
     }
 
-    /** Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4 últimos caracteres. */
+    /**
+     * Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4
+     * últimos caracteres.
+     */
     private static String maskToken(String token) {
         if (token == null || token.length() < 8) {
             return "***";

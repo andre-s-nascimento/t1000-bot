@@ -28,8 +28,11 @@ public class PodcastScriptService {
     @Value("${groq.model.digest}") // ← usa o modelo configurado
     private String digestModel;
 
+    // 🔥 Limite de caracteres para o prompt
+    private static final int MAX_PROMPT_CHARS = 12000;
+    private static final int MAX_MESSAGES = 20;
+
     public String generateScript(LocalDate start, LocalDate end) {
-        // Busca textos da semana (ordenados por data)
         String sql =
                 """
                     SELECT text FROM transcripts
@@ -37,6 +40,7 @@ public class PodcastScriptService {
                     AND text IS NOT NULL AND TRIM(text) != ''
                     ORDER BY timestamp ASC
                 """;
+
         List<String> messages =
                 jdbcTemplate.queryForList(sql, String.class, targetUserId, start, end);
 
@@ -44,36 +48,41 @@ public class PodcastScriptService {
             return null;
         }
 
-        // --- NOVO: Limita o número de mensagens e o tamanho total ---
-        // Pega apenas as últimas 30 mensagens (as mais recentes)
-        if (messages.size() > 30) {
-            messages = messages.subList(messages.size() - 30, messages.size());
-            log.info("📊 Limitando a 30 mensagens mais recentes (total: {})", messages.size());
+        // 🔥 Limita para as últimas 20 mensagens (mais recentes)
+        if (messages.size() > MAX_MESSAGES) {
+            messages = messages.subList(messages.size() - MAX_MESSAGES, messages.size());
+            log.info(
+                    "📊 Limitando a {} mensagens mais recentes (total: {})",
+                    MAX_MESSAGES,
+                    messages.size());
         }
 
-        // Junta tudo e trunca para no máximo 18.000 caracteres
+        // Junta tudo
         String combined = String.join("\n---\n", messages);
-        if (combined.length() > 18000) {
-            combined = combined.substring(0, 20000) + "... [corte por limite de contexto]";
-            log.info("✂️ Prompt truncado para 18.000 caracteres.");
+
+        // 🔥 Trunca para 12.000 caracteres
+        if (combined.length() > MAX_PROMPT_CHARS) {
+            combined =
+                    combined.substring(0, MAX_PROMPT_CHARS) + "... [corte por limite de contexto]";
+            log.info("✂️ Prompt truncado para {} caracteres.", MAX_PROMPT_CHARS);
         }
 
-        // Prompt do sistema (mais conciso para economizar tokens)
+        // 🔥 Prompt mais conciso para reduzir saída
         String systemPrompt =
                 """
-Você é T-1000 e é apresentador do podcast chamado "Silas Cast",
-que faz um resumo dos áudios do nosso querido Silas Bezerra.
-Crie um roteiro narrado e fluido baseado nas mensagens abaixo.
-O texto deve ser escrito para ser lido em voz alta (TTS).
-Regras:
+Você é T-1000 e apresenta o "Silas Cast", resumo semanal dos áudios do Silas Bezerra.
+Crie um roteiro NARRADO e FLUIDO para ser lido em voz alta (TTS).
+
+REGRAS IMPORTANTES:
+- O áudio final deve ter NO MÁXIMO 8-10 MINUTOS (cerca de 600-800 palavras).
 - Use linguagem natural, coloquial e envolvente.
-- NÃO use asteriscos (*), underscores (_), markdown ou formatação especial.
+- NÃO use asteriscos (*), markdown ou formatação especial.
 - NÃO use tópicos numerados ou bullet points.
-- Escreva como se estivesse contando uma história ou comentando os assuntos da semana.
-- Inclua uma introdução e um encerramento.
-- Encerre sempre com uma variação da citação do Show de Truman: "E caso eu não veja vocês, bom dia, boa noite e boa noite!"
-- Resuma os temas principais sem repetir mensagem por mensagem.
-- Mantenha o texto entre 800 e 1500 palavras (cerca de 4000 caracteres).
+- Escreva como se estivesse contando uma história.
+- Inclua introdução breve e encerramento.
+- Encerre com: "E caso eu não veja vocês, bom dia, boa noite e boa noite!"
+- Resuma os temas principais, não repita mensagem por mensagem.
+- SEJA CONCISO. Prefira qualidade à quantidade.
 """;
 
         String userPrompt = "Aqui estão as mensagens da semana passada:\n\n" + combined;
@@ -85,13 +94,7 @@ Regras:
                 combined.length());
 
         String script =
-                groqClient.chatCompletion(
-                        systemPrompt,
-                        userPrompt,
-                        digestModel,
-                        0.7,
-                        maxTokens // max tokens de saída (reduzido)
-                        );
+                groqClient.chatCompletion(systemPrompt, userPrompt, digestModel, 0.7, maxTokens);
 
         log.info("✅ Roteiro gerado com {} caracteres.", script.length());
         return script;
