@@ -36,11 +36,11 @@
       },
       "userResponse": {
         "1241644136": " AQUI É FAMILYYYYYYYYY !!! ❤️ (#publi, que tal uma bela refeição em família no Outback?)",
-        "262774657": "Bom dia..."
+        "262774657": "Bom dia... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️"
       },
       "userAnimation": {
         "1241644136": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-familia.gif",
-        "262774657": "https://andre-s-nascimento.github.io/t1000-bot/media/not-today-satan.gif"
+        "262774657": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif"
       }
     },
     "saudacao-pt": {
@@ -356,7 +356,6 @@
     "obrigado": {
       "triggers": [
         "obrigado",
-        "valeu",
         "obg",
         "vlw",
         "obrigada",
