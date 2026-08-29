@@ -6,9 +6,10 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.3",
-    "@commitlint/config-conventional": "^20.5.3",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "commitizen": "^4.3.1",
+    "cross-env": "^7.0.3",
     "cz-conventional-changelog": "^3.3.0",
     "husky": "^9.1.7",
     "prettier": "^3.8.3"
@@ -19,6 +20,9 @@
     }
   },
   "lint-staged": {
+    "*.java": [
+      "gradlew spotlessApply --no-configuration-cache"
+    ],
     "*.{json,md,yml}": [
       "prettier --write"
     ]
