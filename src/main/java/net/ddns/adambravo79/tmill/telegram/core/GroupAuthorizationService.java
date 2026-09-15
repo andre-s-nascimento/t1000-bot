@@ -1,5 +1,6 @@
 package net.ddns.adambravo79.tmill.telegram.core;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -71,5 +72,10 @@ public class GroupAuthorizationService {
             }
         }
         return null;
+    }
+
+    /** Retorna a lista (imutável) de grupos autorizados. */
+    public Set<Long> getAllowedGroups() {
+        return Collections.unmodifiableSet(allowedGroups);
     }
 }

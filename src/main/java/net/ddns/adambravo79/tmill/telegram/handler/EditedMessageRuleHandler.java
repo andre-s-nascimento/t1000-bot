@@ -27,7 +27,6 @@ public class EditedMessageRuleHandler implements UpdateRule<Update>, UpdateHandl
     public void handle(Update update) {
         if (update.editedMessage() != null) {
             log.debug("📝 Mensagem editada recebida: {}", update.editedMessage().text());
-            // Adicione lógica adicional se desejar
         }
     }
 }

@@ -305,6 +305,12 @@
                 </a>
             </li>
             <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-aniversarios" data-bs-toggle="tab" href="#aniversarios" role="tab"
+                    aria-controls="aniversarios" aria-selected="false">
+                    🎂 Aniversários
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
                 <a class="nav-link" id="tab-admin" data-bs-toggle="tab" href="#admin" role="tab" aria-controls="admin"
                     aria-selected="false">
                     ⚙️ Admin
@@ -652,6 +658,69 @@
                 </div>
             </div>
 
+            <!-- ABA ANIVERSÁRIOS -->
+            <div class="tab-pane" id="aniversarios" role="tabpanel" aria-labelledby="tab-aniversarios">
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-cake2" aria-hidden="true"></i> Disparar Parabéns Manualmente
+                            </div>
+                            <div class="card-body">
+                                <form th:action="@{/admin-web/test-birthday}" method="post"
+                                    class="row g-2 align-items-center">
+                                    <div class="col-auto">
+                                        <label for="bdayDay" class="visually-hidden">Dia</label>
+                                        <input type="number" class="form-control" id="bdayDay" name="day"
+                                            min="1" max="31" placeholder="Dia" required>
+                                    </div>
+                                    <div class="col-auto">
+                                        <label for="bdayMonth" class="visually-hidden">Mês</label>
+                                        <input type="number" class="form-control" id="bdayMonth"
+                                            name="month" min="1" max="12" placeholder="Mês" required>
+                                    </div>
+                                    <div class="col-auto">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-send" aria-hidden="true"></i> Disparar
+                                        </button>
+                                    </div>
+                                </form>
+                                <div class="result-box">
+                                    Dispara os parabéns para quem faz aniversário em <b>DD/MM</b>.
+                                    Útil pra testar sem esperar o cron.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-list-ul" aria-hidden="true"></i> Aniversários Cadastrados
+                            </div>
+                            <div class="card-body">
+                                <div id="birthdaysList">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                    <span class="sr-only">Carregando...</span>
+                                </div>
+                                <div class="mt-2">
+                                    <a href="/admin-web/birthdays-json" target="_blank"
+                                        class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-file-earmark-code" aria-hidden="true"></i> Ver JSON
+                                    </a>
+                                    <form th:action="@{/admin-web/clear-birthdays}" method="post"
+                                        onsubmit="return confirm('Apagar TODOS os aniversários?')"
+                                        class="d-inline-block">
+                                        <button type="submit" class="btn btn-danger btn-sm">
+                                            <i class="bi bi-trash3" aria-hidden="true"></i> Limpar Todos
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- ABA ADMIN -->
             <div class="tab-pane" id="admin" role="tabpanel" aria-labelledby="tab-admin">
                 <div class="btn-group-vertical-mobile mb-2" role="group" aria-label="Ações administrativas">
@@ -805,6 +874,54 @@
                     resultDiv.innerHTML = '<div class="alert alert-danger" role="alert">Erro: ' + error.message + '</div>';
                 }
             };
+
+            // Carrega lista de aniversários
+            window.loadBirthdays = async function () {
+                var container = document.getElementById('birthdaysList');
+                if (!container) return;
+                try {
+                    var resp = await fetch('/admin-web/birthdays-json');
+                    var data = await resp.json();
+                    if (!data.birthdays || data.birthdays.length === 0) {
+                        container.innerHTML = '<p class="text-muted">Nenhum aniversário cadastrado.</p>';
+                        return;
+                    }
+                    var rows = data.birthdays.map(function (b) {
+                        var dia = String(b.day).padStart(2, '0');
+                        var mes = String(b.month).padStart(2, '0');
+                        return '<tr>' +
+                            '<td>' + b.userName + '</td>' +
+                            '<td>' + dia + '/' + mes + '</td>' +
+                            '<td>' + (b.lastSentYear || '-') + '</td>' +
+                            '<td>' +
+                            '<form action="/admin-web/delete-birthday" method="post" style="display:inline">' +
+                            '<input type="hidden" name="userId" value="' + b.userId + '">' +
+                            '<button type="submit" class="btn btn-sm btn-outline-danger" ' +
+                            'onclick="return confirm(\'Remover aniversário?\')">' +
+                            '<i class="bi bi-trash3"></i>' +
+                            '</button>' +
+                            '</form>' +
+                            '</td>' +
+                            '</tr>';
+                    }).join('');
+                    container.innerHTML =
+                        '<table class="table table-sm">' +
+                        '<thead><tr><th>Nome</th><th>Data</th><th>Último envio</th><th></th></tr></thead>' +
+                        '<tbody>' + rows + '</tbody></table>' +
+                        '<p class="text-muted small">Total: ' + data.total + '</p>';
+                } catch (e) {
+                    container.innerHTML = '<div class="alert alert-danger">Erro: ' + e.message + '</div>';
+                }
+            };
+
+            // Carrega ao abrir a aba
+            document.addEventListener('DOMContentLoaded', function () {
+                var tab = document.getElementById('tab-aniversarios');
+                if (tab) {
+                    tab.addEventListener('shown.bs.tab', loadBirthdays);
+                }
+                loadBirthdays();
+            });
 
         })();
     </script>
