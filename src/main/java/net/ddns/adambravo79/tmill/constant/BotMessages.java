@@ -91,6 +91,30 @@ public final class BotMessages {
     public static final String CHAT_ID_INVALIDO = "Chat ID invalido: {}";
 
     // =========================================================================
+    // ANIVERSÁRIOS
+    // =========================================================================
+
+    public static final String ANIVERSARIO_PEDE_DATA =
+            "🎂 Me diga sua data de nascimento no formato <code>DD/MM</code>.\n"
+                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+
+    public static final String ANIVERSARIO_FORMATO_INVALIDO =
+            "❌ Não entendi a data. Use o formato <code>DD/MM</code>.\n"
+                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+
+    public static final String ANIVERSARIO_DATA_INVALIDA =
+            "❌ Essa data não existe! Verifique o dia e o mês.\n"
+                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+
+    public static final String ANIVERSARIO_REGISTRADO =
+            "✅ <b>Aniversário registrado!</b>\n\n"
+                    + "📅 Data: <b>%s</b>\n\n"
+                    + "No dia, o T-1000 vai aparecer por aqui pra te desejar parabéns. 🎉🎬";
+
+    public static final String ANIVERSARIO_JA_ENVIADO_HOJE =
+            "🎂 Parabéns de hoje já foram enviados para este usuário.";
+
+    // =========================================================================
     // FORMATOS DE DATA/HORA
     // =========================================================================
 

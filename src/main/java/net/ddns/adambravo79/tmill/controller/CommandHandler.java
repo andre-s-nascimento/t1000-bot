@@ -51,6 +51,7 @@ public class CommandHandler {
         return sanitized;
     }
 
+    private final BirthdayService birthdayService;
     private final MovieService movieService;
     private final AutoResponseService autoResponseService;
     private final WeeklyReleasesService weeklyReleasesService;
@@ -152,6 +153,15 @@ public class CommandHandler {
             handleResultados(chatId, rawText);
             return true;
         }
+        if (normalized.startsWith("t1000 registrar aniversario")
+                || normalized.startsWith("t1000 registrar aniversário")
+                || normalized.startsWith("t1000 anotar aniversário")
+                || normalized.startsWith("t1000 anotar aniversário")
+                || normalized.startsWith("t1000 aniversario")
+                || normalized.startsWith("t1000 aniversário")) {
+            handleRegistrarAniversario(message, chatId, rawText);
+            return true;
+        }
         return false;
     }
 
@@ -170,6 +180,7 @@ public class CommandHandler {
 Ao enviar um áudio, aparecerão botões para você escolher a transcrição bruta ou refinada.
 
 💡 Anotar sugestões: <code>t1000 anotar ideia Achar os pais adotivos do John Connor...</code>
+🎂 Registrar aniversário: <code>t1000 anotar aniversário 05/10</code>
 
 Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
 """
@@ -254,6 +265,22 @@ Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
                                                         BotMessages.FMT_DD_MM_YYYY_HH_MM)));
         telegramFacade.enviarMensagemHtml(ownerId, adminMsg);
         telegramFacade.enviarMensagemHtml(chatId, BotMessages.IDEIA_REGISTRADA);
+    }
+
+    private void handleRegistrarAniversario(Message message, long chatId, String rawText) {
+        String dataTexto =
+                rawText.replaceFirst("(?i)^t1000\\s+(registrar\\s+)?anivers[aá]rio\\s*", "").trim();
+
+        if (dataTexto.isEmpty()) {
+            telegramFacade.enviarMensagemHtml(chatId, BotMessages.ANIVERSARIO_PEDE_DATA);
+            return;
+        }
+
+        long userId = message.from().id();
+        String userName = utils.buildFullName(message.from());
+
+        String resposta = birthdayService.registrar(userId, userName, dataTexto);
+        telegramFacade.enviarMensagemHtml(chatId, resposta);
     }
 
     private void handleBuscarFilme(long chatId, String nome) {

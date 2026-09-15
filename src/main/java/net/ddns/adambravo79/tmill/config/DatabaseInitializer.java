@@ -40,8 +40,33 @@ public class DatabaseInitializer {
     public void init() {
         criarTabelaTranscripts();
         criarTabelaReleasesNotified();
+        criarTabelaBirthdays();
         adicionarColunaRawText();
         adicionarColunasReleases();
+    }
+
+    private void criarTabelaBirthdays() {
+        String sql =
+                """
+                CREATE TABLE IF NOT EXISTS birthdays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL UNIQUE,
+                    user_name TEXT NOT NULL,
+                    day INTEGER NOT NULL CHECK (day BETWEEN 1 AND 31),
+                    month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+                    last_sent_year INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """;
+        try {
+            jdbcTemplate.execute(sql);
+            jdbcTemplate.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_birthdays_day_month ON birthdays(day, month)");
+            log.info("Tabela birthdays garantida.");
+        } catch (Exception e) {
+            log.error("Erro ao criar tabela birthdays", e);
+        }
     }
 
     private void criarTabelaTranscripts() {

@@ -42,7 +42,9 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -58,8 +60,10 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
+import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.AutoResponseService;
+import net.ddns.adambravo79.tmill.service.BirthdayService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
@@ -76,18 +80,15 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Controller administrativo para testes, limpeza de dados e monitoramento.
  *
- * <p>
- * Exception handling strategy:
+ * <p>Exception handling strategy:
  *
  * <ul>
- * <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
- * <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem
- * apropriada.
- * <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe
- * detalhes).
- * <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
- * <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
- * <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
+ *   <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
+ *   <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem apropriada.
+ *   <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe detalhes).
+ *   <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
+ *   <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
+ *   <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
  * </ul>
  */
 @RestController
@@ -116,6 +117,8 @@ public class AdminController {
     private final AzureTtsClient azureTtsClient;
     private final PodcastPublisherService podcastPublisherService;
     private final TempDirService tempDirService;
+    private final BirthdayService birthdayService;
+    private final BirthdayRepository birthdayRepository;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -726,13 +729,55 @@ public class AdminController {
         }
     }
 
+    // ========================= ANIVERSÁRIOS =========================
+
+    @GetMapping("/birthdays")
+    public ResponseEntity<java.util.List<net.ddns.adambravo79.tmill.model.Birthday>>
+            listBirthdays() {
+        return ResponseEntity.ok(birthdayRepository.findAll());
+    }
+
+    @GetMapping("/birthdays/count")
+    public ResponseEntity<Map<String, Object>> birthdaysCount() {
+        return ResponseEntity.ok(Map.of("total", birthdayRepository.count()));
+    }
+
+    @PostMapping("/birthdays/test/{day}/{month}")
+    public ResponseEntity<String> testBirthday(@PathVariable int day, @PathVariable int month) {
+        if (day < 1 || day > 31 || month < 1 || month > 12) {
+            return ResponseEntity.badRequest().body("❌ Dia/mês inválidos.");
+        }
+        int enviados = birthdayService.enviarParabensPara(day, month);
+        return ResponseEntity.ok(
+                "🎂 Parabéns disparados para " + day + "/" + month + ". Enviados: " + enviados);
+    }
+
+    @PostMapping("/birthdays/test-today")
+    public ResponseEntity<String> testBirthdayToday() {
+        birthdayService.enviarParabensDoDia();
+        return ResponseEntity.ok("🎂 Parabéns disparados para hoje.");
+    }
+
+    @DeleteMapping("/birthdays/{userId}")
+    public ResponseEntity<String> deleteBirthday(@PathVariable long userId) {
+        int deleted = birthdayRepository.deleteByUserId(userId);
+        if (deleted == 0) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("❌ Nenhum aniversário encontrado para userId=" + userId);
+        }
+        return ResponseEntity.ok("✅ Aniversário removido (userId=" + userId + ")");
+    }
+
+    @PostMapping("/birthdays/clear")
+    public ResponseEntity<String> clearBirthdays() {
+        int deleted = birthdayRepository.deleteAll();
+        return ResponseEntity.ok("✅ " + deleted + " aniversário(s) removido(s).");
+    }
+
     // ========================= MÉTODOS AUXILIARES PRIVADOS
     // =========================
 
-    /**
-     * Carrega e parseia um arquivo de configuração do classpath ou do diretório
-     * /app/config/.
-     */
+    /** Carrega e parseia um arquivo de configuração do classpath ou do diretório /app/config/. */
     private Object loadConfigFile(String fileName) throws IOException {
         Resource resource = resourceLoader.getResource("classpath:" + fileName);
         if (!resource.exists()) {
@@ -904,14 +949,13 @@ public class AdminController {
     /**
      * Endpoint para gerar podcast manualmente com parâmetros personalizados.
      *
-     * Exemplos de uso:
-     * - GET /admin/test-podcast -> gera da semana passada para o showcase
-     * - GET /admin/test-podcast?chatId=123456&start=2026-08-01&end=2026-08-07
-     * - GET /admin/test-podcast?chatId=123456&periodo=7 -> últimos 7 dias
+     * <p>Exemplos de uso: - GET /admin/test-podcast -> gera da semana passada para o showcase - GET
+     * /admin/test-podcast?chatId=123456&start=2026-08-01&end=2026-08-07 - GET
+     * /admin/test-podcast?chatId=123456&periodo=7 -> últimos 7 dias
      *
-     * @param chatId  ID do chat para envio (opcional, padrão: showcase)
-     * @param start   Data de início (opcional, formato: yyyy-MM-dd)
-     * @param end     Data de fim (opcional, formato: yyyy-MM-dd)
+     * @param chatId ID do chat para envio (opcional, padrão: showcase)
+     * @param start Data de início (opcional, formato: yyyy-MM-dd)
+     * @param end Data de fim (opcional, formato: yyyy-MM-dd)
      * @param periodo Número de dias para trás (opcional, padrão: 7)
      * @return Status da operação
      */
@@ -1020,8 +1064,8 @@ public class AdminController {
     }
 
     /**
-     * Endpoint para testar o podcast com período fixo (últimos 7 dias)
-     * Mais simples que o /test-podcast
+     * Endpoint para testar o podcast com período fixo (últimos 7 dias) Mais simples que o
+     * /test-podcast
      */
     @GetMapping("/test-podcast-latest")
     public ResponseEntity<String> testPodcastLatest(@RequestParam(required = false) Long chatId) {
@@ -1034,8 +1078,8 @@ public class AdminController {
     }
 
     /**
-     * Endpoint para testar o podcast com período específico em dias
-     * Ex: /admin/test-podcast-days?days=3&chatId=123456
+     * Endpoint para testar o podcast com período específico em dias Ex:
+     * /admin/test-podcast-days?days=3&chatId=123456
      */
     @GetMapping("/test-podcast-days")
     public ResponseEntity<String> testPodcastDays(

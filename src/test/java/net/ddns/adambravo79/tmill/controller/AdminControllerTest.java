@@ -38,6 +38,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
+import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
@@ -63,6 +64,8 @@ class AdminControllerTest {
     @Mock private AzureTtsClient azureTtsClient;
     @Mock private PodcastPublisherService podcastPublisherService;
     @Mock private TempDirService tempDirService;
+    @Mock private BirthdayService birthdayService;
+    @Mock private BirthdayRepository birthdayRepository;
 
     private AdminController adminController;
     private ObjectMapper objectMapperSpy;
@@ -93,7 +96,9 @@ class AdminControllerTest {
                         releaseNotifiedRepository,
                         azureTtsClient,
                         podcastPublisherService,
-                        tempDirService);
+                        tempDirService,
+                        birthdayService,
+                        birthdayRepository);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
 
