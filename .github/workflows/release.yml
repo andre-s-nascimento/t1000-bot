@@ -13,11 +13,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Generate changelog
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@0e97c5a6c98cfbe9b73edec147b0abc8fc4523a0
+        uses: mikepenz/release-changelog-builder-action@672b76c6fc0b7c640fe0fe8c83172e3367eda88a
         with:
           configurationJson: |
             {
@@ -29,6 +29,6 @@ jobs:
             }
 
       - name: Create Release
-        uses: softprops/action-gh-release@77fb938f2f95e717ce6705d2909af527263360a0
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           body: ${{ steps.changelog.outputs.changelog }}
