@@ -245,7 +245,7 @@ class TmdbClientIntegrationTest {
     @Test
     void buscarOndeAssistirFilme_deveRetornarProvedores() {
         String json =
-                """
+"""
 {
     "results": {
         "BR": {
@@ -270,7 +270,7 @@ class TmdbClientIntegrationTest {
     @Test
     void buscarOndeAssistirSerie_deveRetornarProvedores() {
         String json =
-                """
+"""
 {
     "results": {
         "BR": {

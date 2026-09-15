@@ -159,7 +159,7 @@ public class CommandHandler {
 
     private void sendWelcome(long chatId, String firstName) {
         String saudacao =
-                """
+"""
 🤖 Olá, <b>%s</b>! Eu sou o <b>Tmill Bot</b>, o robô de metal líquido das transcrições e buscas.
 
 📌 <b>O que posso fazer?</b>

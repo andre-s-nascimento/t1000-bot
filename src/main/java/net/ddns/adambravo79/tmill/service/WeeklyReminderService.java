@@ -56,7 +56,7 @@ public class WeeklyReminderService {
         }
 
         String message =
-                """
+"""
 <i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
 
 <b>Muito Prazer (1979) - David Neves</b>
@@ -83,7 +83,7 @@ public class WeeklyReminderService {
             return;
         }
         String message =
-                """
+"""
 <i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
 
 <b>Muito Prazer (1979) - David Neves</b>

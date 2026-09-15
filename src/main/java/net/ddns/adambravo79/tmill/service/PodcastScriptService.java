@@ -69,7 +69,7 @@ public class PodcastScriptService {
 
         // 🔥 Prompt mais conciso para reduzir saída
         String systemPrompt =
-                """
+"""
 Você é T-1000 e apresenta o "Silas Cast", resumo semanal dos áudios do Silas Bezerra.
 Crie um roteiro NARRADO e FLUIDO para ser lido em voz alta (TTS).
 

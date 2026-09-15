@@ -45,7 +45,7 @@ public class ReleaseNotifiedRepository {
 
     public void saveFullRelease(FullRelease release) {
         String sql =
-                """
+"""
     INSERT INTO releases_notified
     (tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -69,7 +69,7 @@ public class ReleaseNotifiedRepository {
     // Busca lançamentos completos entre duas datas
     public List<FullRelease> findFullReleasesBetween(LocalDate from, LocalDate to) {
         String sql =
-                """
+"""
     SELECT tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path
     FROM releases_notified
     WHERE date(notified_at) BETWEEN ? AND ?
