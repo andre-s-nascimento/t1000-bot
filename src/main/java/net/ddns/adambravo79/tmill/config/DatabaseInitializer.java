@@ -40,8 +40,33 @@ public class DatabaseInitializer {
     public void init() {
         criarTabelaTranscripts();
         criarTabelaReleasesNotified();
+        criarTabelaBirthdays();
         adicionarColunaRawText();
         adicionarColunasReleases();
+    }
+
+    private void criarTabelaBirthdays() {
+        String sql =
+                """
+                CREATE TABLE IF NOT EXISTS birthdays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL UNIQUE,
+                    user_name TEXT NOT NULL,
+                    day INTEGER NOT NULL CHECK (day BETWEEN 1 AND 31),
+                    month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+                    last_sent_year INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """;
+        try {
+            jdbcTemplate.execute(sql);
+            jdbcTemplate.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_birthdays_day_month ON birthdays(day, month)");
+            log.info("Tabela birthdays garantida.");
+        } catch (Exception e) {
+            log.error("Erro ao criar tabela birthdays", e);
+        }
     }
 
     private void criarTabelaTranscripts() {
@@ -122,14 +147,35 @@ public class DatabaseInitializer {
 
     /**
      * Executes a static ALTER TABLE statement and logs success/failure. This method contains its own
-     * try-catch, so the caller does not have a nested try block.
+     * try-catch, so the caller does not have a nested try block. Erros de "coluna já existente"
+     * (SQLITE_ERROR duplicate column name) são silenciados e logados como INFO, pois são esperados em
+     * migrações idempotentes.
      */
     private void executeAlterStatement(String columnName, String sql) {
         try {
             jdbcTemplate.execute(sql);
-            log.info("Coluna {} adicionada à tabela releases_notified", columnName);
+            log.info("Coluna {} adicionada à tabela", columnName);
+        } catch (org.springframework.jdbc.UncategorizedSQLException e) {
+            if (isDuplicateColumnError(e)) {
+                log.info("Coluna {} já existe (migração ignorada)", columnName);
+            } else {
+                log.error("Erro ao adicionar coluna {} em releases_notified", columnName, e);
+            }
         } catch (Exception e) {
             log.error("Erro ao adicionar coluna {} em releases_notified", columnName, e);
         }
+    }
+
+    /** Verifica se a exceção é do tipo "duplicate column name" do SQLite. */
+    private boolean isDuplicateColumnError(Throwable e) {
+        Throwable current = e;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null && msg.contains("duplicate column name")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

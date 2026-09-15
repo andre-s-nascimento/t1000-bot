@@ -41,6 +41,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
+import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
@@ -77,6 +78,8 @@ public class AdminWebController {
     private final ResourceLoader resourceLoader;
     private final ObjectMapper objectMapper;
     private final TempDirService tempDirService;
+    private final BirthdayService birthdayService;
+    private final BirthdayRepository birthdayRepository;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -571,6 +574,61 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
         }
         return REDIRECT_ADMIN_WEB;
+    }
+
+    // ========================= ANIVERSÁRIOS =========================
+
+    @PostMapping("/test-birthday")
+    public String testBirthday(
+            @RequestParam int day, @RequestParam int month, RedirectAttributes redirectAttrs) {
+        try {
+            int enviados = birthdayService.enviarParabensPara(day, month);
+            redirectAttrs.addFlashAttribute(
+                    SUCCESS,
+                    "🎂 Parabéns disparados para "
+                            + String.format("%02d/%02d", day, month)
+                            + " ("
+                            + enviados
+                            + " enviados)");
+        } catch (Exception e) {
+            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    @PostMapping("/delete-birthday")
+    public String deleteBirthday(@RequestParam long userId, RedirectAttributes redirectAttrs) {
+        try {
+            int deleted = birthdayRepository.deleteByUserId(userId);
+            if (deleted == 0) {
+                redirectAttrs.addFlashAttribute(ERROR, "Nenhum aniversário para userId=" + userId);
+            } else {
+                redirectAttrs.addFlashAttribute(SUCCESS, "✅ Aniversário removido.");
+            }
+        } catch (Exception e) {
+            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    @PostMapping("/clear-birthdays")
+    public String clearBirthdays(RedirectAttributes redirectAttrs) {
+        try {
+            int deleted = birthdayRepository.deleteAll();
+            redirectAttrs.addFlashAttribute(
+                    SUCCESS, "✅ " + deleted + " aniversário(s) removido(s).");
+        } catch (Exception e) {
+            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    @GetMapping("/birthdays-json")
+    @ResponseBody
+    public Map<String, Object> birthdaysJson() {
+        return Map.of(
+                "total", birthdayRepository.count(),
+                "birthdays", birthdayRepository.findAll());
     }
 
     // ========================= MONITORAMENTO =========================

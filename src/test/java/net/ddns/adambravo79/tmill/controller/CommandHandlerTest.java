@@ -59,6 +59,7 @@ class CommandHandlerTest {
     @Mock private MessageStoreService messageStoreService;
     @Mock private TelegramFacade telegramFacade;
     @Mock private TelegramUtils utils;
+    @Mock private BirthdayService birthdayService;
 
     @InjectMocks private CommandHandler commandHandler;
 
@@ -540,6 +541,7 @@ class CommandHandlerTest {
     void isValidUrl_esquemaInvalido_retornaFalse() {
         CommandHandler handler =
                 new CommandHandler(
+                        birthdayService,
                         movieService,
                         autoResponseService,
                         weeklyReleasesService,
@@ -558,6 +560,7 @@ class CommandHandlerTest {
     void isValidUrl_malformada_retornaFalse() {
         CommandHandler handler =
                 new CommandHandler(
+                        birthdayService,
                         movieService,
                         autoResponseService,
                         weeklyReleasesService,
