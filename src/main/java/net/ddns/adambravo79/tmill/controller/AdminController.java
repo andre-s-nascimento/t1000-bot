@@ -17,6 +17,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -75,15 +76,18 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Controller administrativo para testes, limpeza de dados e monitoramento.
  *
- * <p>Exception handling strategy:
+ * <p>
+ * Exception handling strategy:
  *
  * <ul>
- *   <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
- *   <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem apropriada.
- *   <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe detalhes).
- *   <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
- *   <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
- *   <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
+ * <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
+ * <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem
+ * apropriada.
+ * <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe
+ * detalhes).
+ * <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
+ * <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
+ * <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
  * </ul>
  */
 @RestController
@@ -599,55 +603,57 @@ public class AdminController {
         return ResponseEntity.status(500).body("Falha na síntese (áudio vazio).");
     }
 
-    @GetMapping("/test-podcast")
-    public ResponseEntity<String> testPodcast(
-            @RequestParam(required = false) String start,
-            @RequestParam(required = false) String end,
-            @RequestParam(required = false) Long chatId) {
+    // @GetMapping("/test-podcast")
+    // public ResponseEntity<String> testPodcast(
+    // @RequestParam(required = false) String start,
+    // @RequestParam(required = false) String end,
+    // @RequestParam(required = false) Long chatId) {
 
-        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
-        LocalDate endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) : today;
-        LocalDate startDate =
-                (start != null && !start.isBlank()) ? LocalDate.parse(start) : today.minusDays(7);
+    // LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+    // LocalDate endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) :
+    // today;
+    // LocalDate startDate =
+    // (start != null && !start.isBlank()) ? LocalDate.parse(start) :
+    // today.minusDays(7);
 
-        if (startDate.isAfter(endDate)) {
-            return ResponseEntity.badRequest()
-                    .body("❌ Data de início não pode ser posterior à data de fim.");
-        }
+    // if (startDate.isAfter(endDate)) {
+    // return ResponseEntity.badRequest()
+    // .body("❌ Data de início não pode ser posterior à data de fim.");
+    // }
 
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+    // long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
 
-        // 🔁 Processa em background
-        CompletableFuture.runAsync(
-                () -> {
-                    try {
-                        log.info(
-                                "📥 Iniciando geração assíncrona do podcast para chat {}",
-                                targetChatId);
-                        podcastPublisherService.generateAndSendPodcast(
-                                startDate, endDate, targetChatId);
-                        log.info("✅ Podcast assíncrono finalizado para chat {}", targetChatId);
-                    } catch (Exception e) {
-                        log.error(
-                                "❌ Erro assíncrono ao gerar podcast para chat {}", targetChatId, e);
-                        try {
-                            telegramFacade.enviarMensagem(
-                                    targetChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
-                        } catch (Exception ignored) {
-                            // Falha ao deletar arquivo temporário – pode ser ignorado
-                            log.debug("Não foi possível gerar arquivo");
-                        }
-                    }
-                });
+    // // 🔁 Processa em background
+    // CompletableFuture.runAsync(
+    // () -> {
+    // try {
+    // log.info(
+    // "📥 Iniciando geração assíncrona do podcast para chat {}",
+    // targetChatId);
+    // podcastPublisherService.generateAndSendPodcast(
+    // startDate, endDate, targetChatId);
+    // log.info("✅ Podcast assíncrono finalizado para chat {}", targetChatId);
+    // } catch (Exception e) {
+    // log.error(
+    // "❌ Erro assíncrono ao gerar podcast para chat {}", targetChatId, e);
+    // try {
+    // telegramFacade.enviarMensagem(
+    // targetChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
+    // } catch (Exception ignored) {
+    // // Falha ao deletar arquivo temporário – pode ser ignorado
+    // log.debug("Não foi possível gerar arquivo");
+    // }
+    // }
+    // });
 
-        // Retorna imediatamente
-        return ResponseEntity.accepted()
-                .body(
-                        String.format(
-                                "🔄 Podcast agendado para o período de %s a %s. Você receberá em"
-                                        + " breve no chat %d.",
-                                startDate, endDate, targetChatId));
-    }
+    // // Retorna imediatamente
+    // return ResponseEntity.accepted()
+    // .body(
+    // String.format(
+    // "🔄 Podcast agendado para o período de %s a %s. Você receberá em"
+    // + " breve no chat %d.",
+    // startDate, endDate, targetChatId));
+    // }
 
     @PostMapping("/fala-t1000-tts")
     public ResponseEntity<String> testAzureTts(
@@ -720,9 +726,13 @@ public class AdminController {
         }
     }
 
-    // ========================= MÉTODOS AUXILIARES PRIVADOS =========================
+    // ========================= MÉTODOS AUXILIARES PRIVADOS
+    // =========================
 
-    /** Carrega e parseia um arquivo de configuração do classpath ou do diretório /app/config/. */
+    /**
+     * Carrega e parseia um arquivo de configuração do classpath ou do diretório
+     * /app/config/.
+     */
     private Object loadConfigFile(String fileName) throws IOException {
         Resource resource = resourceLoader.getResource("classpath:" + fileName);
         if (!resource.exists()) {
@@ -887,5 +897,155 @@ public class AdminController {
         } catch (URISyntaxException e) {
             return false;
         }
+    }
+
+    // ========================= PODCAST MANUAL =========================
+
+    /**
+     * Endpoint para gerar podcast manualmente com parâmetros personalizados.
+     *
+     * Exemplos de uso:
+     * - GET /admin/test-podcast -> gera da semana passada para o showcase
+     * - GET /admin/test-podcast?chatId=123456&start=2026-08-01&end=2026-08-07
+     * - GET /admin/test-podcast?chatId=123456&periodo=7 -> últimos 7 dias
+     *
+     * @param chatId  ID do chat para envio (opcional, padrão: showcase)
+     * @param start   Data de início (opcional, formato: yyyy-MM-dd)
+     * @param end     Data de fim (opcional, formato: yyyy-MM-dd)
+     * @param periodo Número de dias para trás (opcional, padrão: 7)
+     * @return Status da operação
+     */
+    @GetMapping("/test-podcast")
+    public ResponseEntity<String> testPodcast(
+            @RequestParam(required = false) Long chatId,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end,
+            @RequestParam(required = false) Integer periodo) {
+
+        // Define o chat alvo
+        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+
+        // Calcula o período
+        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate endDate;
+        LocalDate startDate;
+
+        if (start != null && !start.isBlank() && end != null && !end.isBlank()) {
+            // Usa datas fornecidas
+            try {
+                startDate = LocalDate.parse(start);
+                endDate = LocalDate.parse(end);
+            } catch (DateTimeParseException e) {
+                return ResponseEntity.badRequest()
+                        .body("❌ Formato de data inválido. Use yyyy-MM-dd");
+            }
+        } else if (periodo != null && periodo > 0) {
+            // Usa período em dias
+            endDate = today;
+            startDate = today.minusDays(periodo);
+        } else {
+            // Padrão: última semana completa (segunda a domingo)
+            endDate = today.with(DayOfWeek.SUNDAY).minusWeeks(1);
+            startDate = endDate.with(DayOfWeek.MONDAY);
+        }
+
+        // Validação
+        if (startDate.isAfter(endDate)) {
+            return ResponseEntity.badRequest()
+                    .body("❌ Data de início não pode ser posterior à data de fim.");
+        }
+
+        // Verifica se o chatId é válido
+        if (targetChatId == 0) {
+            return ResponseEntity.badRequest()
+                    .body("❌ chatId inválido. Configure um chatId ou use o padrão.");
+        }
+
+        // 🔥 Processa em background para não bloquear a resposta
+        final long finalChatId = targetChatId;
+        final LocalDate finalStart = startDate;
+        final LocalDate finalEnd = endDate;
+
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        log.info(
+                                "📥 Iniciando geração assíncrona do podcast para chat {}",
+                                finalChatId);
+                        log.info("📅 Período: {} a {}", finalStart, finalEnd);
+
+                        podcastPublisherService.generateAndSendPodcast(
+                                finalStart, finalEnd, finalChatId);
+
+                        log.info("✅ Podcast assíncrono finalizado para chat {}", finalChatId);
+                    } catch (Exception e) {
+                        log.error(
+                                "❌ Erro assíncrono ao gerar podcast para chat {}", finalChatId, e);
+                        try {
+                            telegramFacade.enviarMensagem(
+                                    finalChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
+                        } catch (Exception ignored) {
+                            // Falha ao enviar mensagem de erro
+                            log.debug("Não foi possível enviar mensagem de erro");
+                        }
+                    }
+                });
+
+        // Retorna imediatamente
+        String responseMsg =
+                String.format(
+                        "🔄 Podcast agendado para o período de %s a %s.\n"
+                                + "📤 Será enviado para o chat %d.\n"
+                                + "⏳ O processamento pode levar alguns minutos.",
+                        finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                        finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                        finalChatId);
+
+        // Também envia uma mensagem no chat confirmando
+        try {
+            telegramFacade.enviarMensagemHtml(
+                    finalChatId,
+                    "<b>🎙️ Podcast solicitado manualmente</b>\n\n"
+                            + "📅 Período: "
+                            + finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                            + " a "
+                            + finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                            + "\n"
+                            + "⏳ Aguarde, estou gerando o áudio...");
+        } catch (Exception e) {
+            log.warn("Não foi possível enviar confirmação para o chat {}", finalChatId);
+        }
+
+        return ResponseEntity.accepted().body(responseMsg);
+    }
+
+    /**
+     * Endpoint para testar o podcast com período fixo (últimos 7 dias)
+     * Mais simples que o /test-podcast
+     */
+    @GetMapping("/test-podcast-latest")
+    public ResponseEntity<String> testPodcastLatest(@RequestParam(required = false) Long chatId) {
+
+        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate startDate = endDate.minusDays(7);
+
+        return testPodcast(chatId, startDate.toString(), endDate.toString(), null);
+    }
+
+    /**
+     * Endpoint para testar o podcast com período específico em dias
+     * Ex: /admin/test-podcast-days?days=3&chatId=123456
+     */
+    @GetMapping("/test-podcast-days")
+    public ResponseEntity<String> testPodcastDays(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) Long chatId) {
+
+        if (days <= 0 || days > 30) {
+            return ResponseEntity.badRequest().body("❌ O número de dias deve ser entre 1 e 30.");
+        }
+
+        return testPodcast(chatId, null, null, days);
     }
 }

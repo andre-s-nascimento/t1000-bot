@@ -1,5 +1,6 @@
 package net.ddns.adambravo79.tmill.client;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -20,6 +21,9 @@ public class AzureTtsClient {
 
     private final RestClient restClient;
     private final Path tempDir;
+
+    // 🔥 Tamanho máximo antes de comprimir (5MB)
+    private static final long MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
 
     public AzureTtsClient(
             @Value("${azure.speech.key}") String subscriptionKey,
@@ -74,10 +78,88 @@ public class AzureTtsClient {
         }
 
         if (audioParts.size() == 1) {
-            return audioParts.get(0);
+            byte[] result = audioParts.get(0);
+            // 🔥 Comprime se necessário
+            return compressIfNeeded(result);
         }
 
-        return concatenateMp3s(audioParts);
+        byte[] concatenated = concatenateMp3s(audioParts);
+        // 🔥 Comprime se necessário
+        return compressIfNeeded(concatenated);
+    }
+
+    /**
+     * 🔥 Comprime o áudio se for maior que o limite (5MB)
+     * Usa bitrate de 64kbps, mono, 22.05kHz
+     */
+    private byte[] compressIfNeeded(byte[] audioData) {
+        if (audioData == null || audioData.length <= MAX_AUDIO_SIZE_BYTES) {
+            log.debug(
+                    "Áudio com {} bytes, abaixo do limite de {} MB. Não comprimindo.",
+                    audioData.length,
+                    MAX_AUDIO_SIZE_BYTES / 1024 / 1024);
+            return audioData;
+        }
+
+        double sizeMb = audioData.length / 1024.0 / 1024.0;
+        log.info("🔊 Áudio grande ({:.2f} MB), comprimindo...", sizeMb);
+
+        Path inputFile = null;
+        Path outputFile = null;
+        try {
+            inputFile = Files.createTempFile(tempDir, "compress_input_", ".mp3");
+            Files.write(inputFile, audioData);
+
+            outputFile = Files.createTempFile(tempDir, "compress_output_", ".mp3");
+
+            // Comprime para 64kbps (qualidade aceitável, tamanho reduzido)
+            String[] cmd = {
+                "ffmpeg",
+                "-y",
+                "-i",
+                inputFile.toAbsolutePath().toString(),
+                "-b:a",
+                "64k",
+                "-ac",
+                "1", // Mono
+                "-ar",
+                "22050", // 22.05kHz
+                outputFile.toAbsolutePath().toString()
+            };
+
+            log.debug("⚙️ Executando FFmpeg: {}", String.join(" ", cmd));
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            // Aguarda até 60 segundos
+            boolean finished = process.waitFor(60, TimeUnit.SECONDS);
+            int exitCode = finished ? process.exitValue() : 1;
+
+            if (exitCode == 0 && Files.exists(outputFile) && Files.size(outputFile) > 0) {
+                byte[] compressed = Files.readAllBytes(outputFile);
+                double reduction = (1 - compressed.length / (double) audioData.length) * 100;
+                log.info(
+                        "✅ Compressão concluída: {} -> {} bytes ({:.1f}% redução)",
+                        audioData.length, compressed.length, reduction);
+                return compressed;
+            } else {
+                log.warn("⚠️ FFmpeg falhou com código {}, mantendo áudio original", exitCode);
+                return audioData;
+            }
+
+        } catch (Exception e) {
+            log.warn("⚠️ Falha na compressão: {}. Mantendo áudio original.", e.getMessage());
+            return audioData;
+        } finally {
+            try {
+                if (inputFile != null) Files.deleteIfExists(inputFile);
+                if (outputFile != null) Files.deleteIfExists(outputFile);
+            } catch (IOException ignored) {
+                log.debug("Não foi possível deletar arquivos temporários de compressão");
+            }
+        }
     }
 
     private byte[] synthesizeSinglePart(String text) {
@@ -91,7 +173,8 @@ public class AzureTtsClient {
                 "SSML enviado (primeiros 500 chars): {}",
                 ssml.length() > 500 ? ssml.substring(0, 500) + "..." : ssml);
 
-        // 🔥 Só salva se a propriedade debug.tts.save-ssml for true (desativado por padrão)
+        // 🔥 Só salva se a propriedade debug.tts.save-ssml for true (desativado por
+        // padrão)
         if (Boolean.parseBoolean(System.getProperty("ajuste.debug.tts.save-ssml", "false"))) {
             try {
                 Path ssmlFile = Files.createTempFile(tempDir, "ssml_", ".xml");

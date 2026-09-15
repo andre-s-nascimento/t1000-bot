@@ -147,19 +147,19 @@ public class MovieService {
 
         return String.format(
                 """
-        🎬 <b>%s</b>
-        <i>%s</i>
-        📅 Ano: %s %s
-        ⭐ <b>Nota:</b> <a href="%s">%.1f/10</a>
+                🎬 <b>%s</b>
+                <i>%s</i>
+                📅 Ano: %s %s
+                ⭐ <b>Nota:</b> <a href="%s">%.1f/10</a>
 
-        🎬 <b>Diretor:</b> %s
+                🎬 <b>Diretor:</b> %s
 
-        👥 <b>Elenco:</b> %s
+                👥 <b>Elenco:</b> %s
 
-        📖 <b>Sinopse:</b> %s
+                📖 <b>Sinopse:</b> %s
 
-        📺 <b>Onde assistir:</b> %s%s
-        """,
+                📺 <b>Onde assistir:</b> %s%s
+                """,
                 detalhes.title().toUpperCase(),
                 escapeHtml(detalhes.originalTitle() != null ? detalhes.originalTitle() : ""),
                 ano,

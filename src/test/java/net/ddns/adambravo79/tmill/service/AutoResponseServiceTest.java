@@ -35,79 +35,80 @@ class AutoResponseServiceTest {
 
     private static final String JSON_VALIDO =
             """
-      {
-        "rules": {
-          "regra1": {
-            "triggers": ["bom dia", "boa tarde"],
-            "response": "Olá! Bom dia/tarde para você!",
-            "animation": "https://exemplo.com/gif.gif"
-          },
-          "regra2": {
-            "triggers": ["tchau"],
-            "response": "Até logo!",
-            "timeRange": { "start": "18:00", "end": "23:59" }
-          },
-          "regra3": {
-            "triggers": ["obrigado"],
-            "response": "De nada!",
-            "userResponse": {
-              "123": "Por nada, amigo!",
-              "456": "Disponha!"
-            },
-            "userAnimation": {
-              "123": "https://exemplo.com/amigo.gif"
+            {
+              "rules": {
+                "regra1": {
+                  "triggers": ["bom dia", "boa tarde"],
+                  "response": "Olá! Bom dia/tarde para você!",
+                  "animation": "https://exemplo.com/gif.gif"
+                },
+                "regra2": {
+                  "triggers": ["tchau"],
+                  "response": "Até logo!",
+                  "timeRange": { "start": "18:00", "end": "23:59" }
+                },
+                "regra3": {
+                  "triggers": ["obrigado"],
+                  "response": "De nada!",
+                  "userResponse": {
+                    "123": "Por nada, amigo!",
+                    "456": "Disponha!"
+                  },
+                  "userAnimation": {
+                    "123": "https://exemplo.com/amigo.gif"
+                  }
+                },
+                "regra4": {
+                  "triggers": ["oi", "olá"],
+                  "response": "Oi! Como posso ajudar?"
+                }
+              }
             }
-          },
-          "regra4": {
-            "triggers": ["oi", "olá"],
-            "response": "Oi! Como posso ajudar?"
-          }
-        }
-      }
-      """;
+            """;
 
     private static final String JSON_COM_USER_OVERRIDES =
             """
-      {
-        "rules": {
-          "nova": {
-            "triggers": ["teste"],
-            "response": "Resposta padrão",
-            "userOverrides": {
-              "999": {
-                "response": "Resposta especial",
-                "animation": "https://exemplo.com/especial.gif"
+            {
+              "rules": {
+                "nova": {
+                  "triggers": ["teste"],
+                  "response": "Resposta padrão",
+                  "userOverrides": {
+                    "999": {
+                      "response": "Resposta especial",
+                      "animation": "https://exemplo.com/especial.gif"
+                    }
+                  }
+                },
+                "sem_triggers": {
+                  "triggers": null,
+                  "response": "não deve aparecer"
+                },
+                "sem_response": {
+                  "triggers": ["vazio"],
+                  "response": null
+                }
               }
             }
-          },
-          "sem_triggers": {
-            "triggers": null,
-            "response": "não deve aparecer"
-          },
-          "sem_response": {
-            "triggers": ["vazio"],
-            "response": null
-          }
-        }
-      }
-      """;
+            """;
 
     private static final String JSON_COM_TIMERANGE_INCOMPLETO =
             """
-      {
-        "rules": {
-          "regra_com_timerange_incompleto": {
-            "triggers": ["teste"],
-            "response": "resposta com start apenas",
-            "timeRange": { "start": "18:00" }
-          }
-        }
-      }
-      """;
+            {
+              "rules": {
+                "regra_com_timerange_incompleto": {
+                  "triggers": ["teste"],
+                  "response": "resposta com start apenas",
+                  "timeRange": { "start": "18:00" }
+                }
+              }
+            }
+            """;
 
-    private static final String JSON_RULES_VAZIO = """
-      { "rules": {} }
-      """;
+    private static final String JSON_RULES_VAZIO =
+            """
+            { "rules": {} }
+            """;
 
     @BeforeEach
     void setUp() {

@@ -45,11 +45,11 @@ public class ReleaseNotifiedRepository {
 
     public void saveFullRelease(FullRelease release) {
         String sql =
-                """
-            INSERT INTO releases_notified
-            (tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """;
+"""
+    INSERT INTO releases_notified
+    (tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+""";
         jdbcTemplate.update(
                 sql,
                 release.tmdbId(),
@@ -69,12 +69,12 @@ public class ReleaseNotifiedRepository {
     // Busca lançamentos completos entre duas datas
     public List<FullRelease> findFullReleasesBetween(LocalDate from, LocalDate to) {
         String sql =
-                """
-            SELECT tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path
-            FROM releases_notified
-            WHERE date(notified_at) BETWEEN ? AND ?
-            ORDER BY notified_at ASC
-        """;
+"""
+    SELECT tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path
+    FROM releases_notified
+    WHERE date(notified_at) BETWEEN ? AND ?
+    ORDER BY notified_at ASC
+""";
         return jdbcTemplate.query(
                 sql,
                 (rs, rowNum) ->

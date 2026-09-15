@@ -20,7 +20,12 @@ if git diff --cached | grep -E '(CLIENT_SECRET|API_KEY|PRIVATE_KEY|TOKEN)=.{10,}
   exit 1
 fi
 
-echo "🧹 Rodando lint-staged..."
+echo "🧹 Rodando spotlessApply (formatando código Java)..."
+# 🔥 EXECUTA SEM PASSAR ARGUMENTOS
+./gradlew spotlessApply --no-configuration-cache
+
+echo "🧹 Rodando lint-staged para os demais arquivos..."
+# Roda o lint-staged APENAS para arquivos não-Java
 npx lint-staged
 
 echo "✅ Commit seguro"

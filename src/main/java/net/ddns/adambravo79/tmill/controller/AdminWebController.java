@@ -130,29 +130,59 @@ public class AdminWebController {
     @PostMapping("/fala-t1000-tts")
     @ResponseBody
     public ResponseEntity<String> falaT1000Tts(
-            @RequestParam String message, @RequestParam(required = false) Long chatId) {
+            @RequestParam(required = false) String message,
+            @RequestParam(required = false) Long chatId) {
+
+        // 1. Validação
+        if (message == null || message.isBlank()) {
+            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+        }
+
+        // 2. Define chat alvo
+        long targetChatId = (chatId != null) ? chatId : ownerId;
+        if (targetChatId == 0) {
+            return ResponseEntity.badRequest()
+                    .body("❌ Nenhum chatId informado e ownerId não configurado.");
+        }
+
+        Path tempFile = null;
         try {
-            long targetChatId = (chatId != null) ? chatId : ownerId;
-            if (targetChatId == 0) {
-                return ResponseEntity.badRequest()
-                        .body("❌ Nenhum chatId informado e ownerId não configurado.");
-            }
+            // 3. Sintetiza áudio (dentro do try!)
             byte[] audio = azureTtsClient.synthesizeFullText(message);
             if (audio == null || audio.length == 0) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                         .body("❌ Falha na síntese (áudio vazio).");
             }
-            // Salva e envia (código existente)
-            Path tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
+
+            // 4. Salva com nome personalizado
+            String fileName =
+                    String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
+            tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
+            Path finalFile = tempFile.resolveSibling(fileName);
             Files.write(tempFile, audio);
+            Files.move(tempFile, finalFile);
+
+            // 5. Envia
             telegramFacade.enviarMidia(
-                    targetChatId, tempFile.toAbsolutePath().toString(), "🔊 Áudio sintetizado");
-            Files.deleteIfExists(tempFile);
-            return ResponseEntity.ok("✅ Áudio enviado para o chat " + targetChatId);
+                    targetChatId,
+                    finalFile.toAbsolutePath().toString(),
+                    "🔊 Áudios para a futura Skynet");
+
+            Files.deleteIfExists(finalFile);
+            return ResponseEntity.ok("✅ Áudio enviado com sucesso para o chat " + targetChatId);
+
         } catch (Exception e) {
             log.error("Erro no TTS", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Erro: " + e.getMessage());
+                    .body("❌ Erro ao salvar áudio: " + e.getMessage());
+        } finally {
+            if (tempFile != null && Files.exists(tempFile)) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (IOException ignored) {
+                    log.debug("Não foi possível deletar arquivo: {}", tempFile);
+                }
+            }
         }
     }
 
