@@ -147,14 +147,35 @@ public class DatabaseInitializer {
 
     /**
      * Executes a static ALTER TABLE statement and logs success/failure. This method contains its own
-     * try-catch, so the caller does not have a nested try block.
+     * try-catch, so the caller does not have a nested try block. Erros de "coluna já existente"
+     * (SQLITE_ERROR duplicate column name) são silenciados e logados como INFO, pois são esperados em
+     * migrações idempotentes.
      */
     private void executeAlterStatement(String columnName, String sql) {
         try {
             jdbcTemplate.execute(sql);
-            log.info("Coluna {} adicionada à tabela releases_notified", columnName);
+            log.info("Coluna {} adicionada à tabela", columnName);
+        } catch (org.springframework.jdbc.UncategorizedSQLException e) {
+            if (isDuplicateColumnError(e)) {
+                log.info("Coluna {} já existe (migração ignorada)", columnName);
+            } else {
+                log.error("Erro ao adicionar coluna {} em releases_notified", columnName, e);
+            }
         } catch (Exception e) {
             log.error("Erro ao adicionar coluna {} em releases_notified", columnName, e);
         }
+    }
+
+    /** Verifica se a exceção é do tipo "duplicate column name" do SQLite. */
+    private boolean isDuplicateColumnError(Throwable e) {
+        Throwable current = e;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null && msg.contains("duplicate column name")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 }

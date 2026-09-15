@@ -176,11 +176,14 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
 
+        // Privado falha com Forbidden
         doThrow(
                         HttpClientErrorException.create(
                                 HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
                 .when(telegramFacade)
                 .enviarMidia(eq(100L), anyString(), anyString());
+        // Grupo sucesso (stub explícito pra não cair no strict)
+        doNothing().when(telegramFacade).enviarMidia(eq(-100L), anyString(), anyString());
 
         int enviados = service.enviarParabensPara(5, 10);
 
@@ -197,6 +200,11 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L, -200L));
 
+        // Stub do privado (sucesso — void, sem config = comportamento default)
+        doNothing().when(telegramFacade).enviarMidia(eq(100L), anyString(), anyString());
+        // Stub do grupo -200 (sucesso)
+        doNothing().when(telegramFacade).enviarMidia(eq(-200L), anyString(), anyString());
+        // Stub do grupo -100 (falha)
         doThrow(new RuntimeException("boom"))
                 .when(telegramFacade)
                 .enviarMidia(eq(-100L), anyString(), anyString());
