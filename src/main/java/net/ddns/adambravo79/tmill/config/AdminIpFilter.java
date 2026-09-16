@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@Order(1)
+@Order(10)
 public class AdminIpFilter extends OncePerRequestFilter {
 
     @Value("${admin.allowed-ips:}")
@@ -47,12 +47,19 @@ public class AdminIpFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String path = request.getRequestURI();
+
+        if (path.startsWith("/login")
+                || path.startsWith("/oauth2")
+                || path.startsWith("/access-denied")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         if (!path.startsWith("/admin")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Se não houver IPs configurados, permite (modo dev)
         if (allowedIps.isEmpty()) {
             filterChain.doFilter(request, response);
             return;

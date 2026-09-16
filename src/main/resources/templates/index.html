@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>T-Mill Bot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            max-width: 520px;
+            padding: 2.5rem;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card shadow-sm">
+        <h1>🤖 T-Mill Bot</h1>
+        <p class="text-muted">
+            Bot de transcrição e busca de filmes para Telegram.
+        </p>
+        <hr>
+        <a href="/admin-web" class="btn btn-primary mt-2">
+            🛡️ Acessar painel admin
+        </a>
+    </div>
+    <div th:if="${param.reason != null and param.reason[0] == 'unauthorized'}"
+     class="alert alert-warning">
+    ⚠️ Sua conta Google não tem permissão de acesso ao painel admin. Tente outra conta.
+</div>
+</body>
+
+</html>
