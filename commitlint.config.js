@@ -39,5 +39,8 @@ module.exports = {
         (message) => message.startsWith('Merge'),
         (message) => message.includes('into develop'), // 🔥 captura este padrão
         (message) => message.startsWith('Revert'),
+        // Commit antigo (2bf0fa8) que está na main desde antes do commitlint ser rigoroso.
+        // Não é possível reescrever o histórico da main sem force-push, então ignoramos.
+        (message) => message.includes('anniversary message for clarity'),
     ],
 };
