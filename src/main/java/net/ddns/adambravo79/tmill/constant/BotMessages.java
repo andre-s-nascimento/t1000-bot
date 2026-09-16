@@ -103,13 +103,13 @@ public final class BotMessages {
                     + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
 
     public static final String ANIVERSARIO_DATA_INVALIDA =
-            "❌ Essa data não existe! Verifique o dia e o mês.\n"
+            "❌ Essa data não existe, mané! Verifique o dia e o mês.\n"
                     + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
 
     public static final String ANIVERSARIO_REGISTRADO =
             "✅ <b>Aniversário registrado!</b>\n\n"
-                    + "📅 Data: <b>%s</b>\n\n"
-                    + "No dia, o T-1000 vai aparecer por aqui pra te desejar parabéns. 🎉🎬";
+                + "📅 Data: <b>%s</b>\n\n"
+                + "No dia, o T-1000, eu mesmo, vou aparecer por aqui pra te desejar parabéns. 🎉🎬";
 
     public static final String ANIVERSARIO_JA_ENVIADO_HOJE =
             "🎂 Parabéns de hoje já foram enviados para este usuário.";
