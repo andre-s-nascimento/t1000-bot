@@ -109,7 +109,7 @@ public final class BotMessages {
     public static final String ANIVERSARIO_REGISTRADO =
             "✅ <b>Aniversário registrado!</b>\n\n"
                     + "📅 Data: <b>%s</b>\n\n"
-                    + "No dia, o T-1000 vai aparecer por aqui pra te desejar parabéns. 🎉🎬";
+                    + "No dia, o T-1000, eu mesmo, vou aparecer por aqui pra te desejar parabéns. 🎉🎬";
 
     public static final String ANIVERSARIO_JA_ENVIADO_HOJE =
             "🎂 Parabéns de hoje já foram enviados para este usuário.";
