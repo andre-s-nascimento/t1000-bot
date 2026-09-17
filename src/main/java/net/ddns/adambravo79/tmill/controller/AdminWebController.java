@@ -15,9 +15,12 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -90,6 +93,12 @@ public class AdminWebController {
     @Value("${podcast.publish.chat-id:0}")
     private long publishChatId;
 
+    @Value("${bot.allowed-chats:}")
+    private String botAllowedChats;
+
+    @Value("${digest.chat-ids:}")
+    private String digestChatIds;
+
     // Página principal
     @GetMapping
     public String adminPage(Model model) {
@@ -100,6 +109,23 @@ public class AdminWebController {
                 "now",
                 LocalDateTime.now(ZoneId.of(BRAZIL_ZONE))
                         .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
+        // Lógica nova: unifica as duas listas de chats em um Set para evitar IDs duplicados
+        Set<String> allChats = new LinkedHashSet<>();
+        if (botAllowedChats != null && !botAllowedChats.isBlank()) {
+            Arrays.stream(botAllowedChats.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(allChats::add);
+        }
+        if (digestChatIds != null && !digestChatIds.isBlank()) {
+            Arrays.stream(digestChatIds.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .forEach(allChats::add);
+        }
+        // Envia a lista para o Thymeleaf
+        model.addAttribute("availableChatIds", allChats);
+
         return "admin";
     }
 
