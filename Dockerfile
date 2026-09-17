@@ -32,6 +32,7 @@ COPY --from=build /app/build/libs/*.jar app.jar
 
 # Usuário não-root (segurança)
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN mkdir -p /app/temp && chown -R appuser /app/temp
 USER appuser
 
 # Porta (opcional, se seu bot expor HTTP)

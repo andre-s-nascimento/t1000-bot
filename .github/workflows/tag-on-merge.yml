@@ -30,5 +30,9 @@ jobs:
       - name: Create tag
         if: steps.vars.outputs.version != ''
         run: |
-          git tag -a "v${{ steps.vars.outputs.version }}" -m "Release v${{ steps.vars.outputs.version }}"
-          git push origin "v${{ steps.vars.outputs.version }}"
+          if git rev-parse "v${{ steps.vars.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.vars.outputs.version }} já existe. Nada a fazer."
+          else
+            git tag -a "v${{ steps.vars.outputs.version }}" -m "Release v${{ steps.vars.outputs.version }}"
+            git push origin "v${{ steps.vars.outputs.version }}"
+          fi
