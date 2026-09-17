@@ -4,6 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    
+    <!-- Meta tags do CSRF geradas pelo Spring Security -->
+    <meta name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+    <meta name="_csrf_parameter" th:content="${_csrf.parameterName}"/>
+    
     <title>Painel Administrativo - T-Mill</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -345,8 +351,10 @@
                                     </div>
                                     <div class="mb-2">
                                         <label for="falaChat" class="form-label">Chat ID (opcional)</label>
-                                        <input type="number" class="form-control" id="falaChat" name="chatId"
-                                            value="-1003703557250" aria-describedby="chatHelp">
+                                            <select class="form-select" name="chatId" aria-label="Chat ID" id="falaChat" >
+    <option value="">-- Vazio (Padrão) --</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                                     </div>
                                     <div class="mb-2">
                                         <label for="falaMode" class="form-label">Modo</label>
@@ -381,7 +389,10 @@
                                     </div>
                                     <div class="mb-2">
                                         <label for="ttsChat" class="form-label">Chat ID (opcional)</label>
-                                        <input type="number" class="form-control" id="ttsChat" name="chatId">
+                                        <select class="form-select" name="chatId" aria-label="Chat ID" id="ttsChat">
+    <option value="">-- Vazio (Padrão) --</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                                     </div>
                                     <button type="submit" class="btn btn-success" aria-label="Gerar e enviar áudio">
                                         <i class="bi bi-file-earmark-play" aria-hidden="true"></i> Gerar e Enviar
@@ -418,8 +429,10 @@
                     </form>
                     <form th:action="@{/admin-web/test-worldcup-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <input type="number" class="form-control form-control-sm" name="chatId"
-                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+    <option value="">Vazio (Padrão)</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             <button type="submit" class="btn btn-warning btn-sm" th:disabled="${!worldcupEnabled}"
                                 aria-label="Enviar manual para showcase">
                                 <i class="bi bi-star" aria-hidden="true"></i> Showcase
@@ -433,8 +446,11 @@
                     </form>
                     <form th:action="@{/admin-web/reload-worldcup-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <input type="number" class="form-control form-control-sm" name="chatId"
-                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            
+                            <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+    <option value="">Vazio (Padrão)</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             <button type="submit" class="btn btn-info btn-sm"
                                 aria-label="Recarregar e notificar showcase">
                                 <i class="bi bi-bell" aria-hidden="true"></i> Reload + Notificar
@@ -451,8 +467,11 @@
                     </form>
                     <form th:action="@{/admin-web/test-worldcup-noon-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <input type="number" class="form-control form-control-sm" name="chatId"
-                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                        
+                                <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+    <option value="">Vazio (Padrão)</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             <button type="submit" class="btn btn-secondary btn-sm" th:disabled="${!worldcupEnabled}"
                                 aria-label="Enviar meio-dia para showcase">
                                 <i class="bi bi-star" aria-hidden="true"></i> Meio-dia Showcase
@@ -467,8 +486,10 @@
                     </form>
                     <form th:action="@{/admin-web/test-worldcup-evening-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <input type="number" class="form-control form-control-sm" name="chatId"
-                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                                <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+    <option value="">Vazio (Padrão)</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             <button type="submit" class="btn btn-secondary btn-sm" th:disabled="${!worldcupEnabled}"
                                 aria-label="Enviar noite para showcase">
                                 <i class="bi bi-star" aria-hidden="true"></i> Noite Showcase
@@ -488,8 +509,10 @@
                             </div>
                             <div class="col-auto">
                                 <label for="resultChat" class="visually-hidden">Chat ID</label>
-                                <input type="number" class="form-control" id="resultChat" name="chatId"
-                                    placeholder="Chat ID" aria-label="Chat ID opcional">
+                                    <select class="form-select form-select-sm" id="resultChat" name="chatId" aria-label="Chat ID opcional">
+    <option value="">Vazio (Padrão)</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             </div>
                             <div class="col-auto">
                                 <button type="submit" class="btn btn-dark" th:disabled="${!worldcupEnabled}"
@@ -542,8 +565,10 @@
                             </div>
                             <div class="col-auto">
                                 <label for="customChat" class="visually-hidden">Chat ID</label>
-                                <input type="number" class="form-control" id="customChat" name="chatId"
-                                    placeholder="Chat ID" aria-label="Chat ID opcional">
+                                    <select class="form-select" name="chatId"  id="customChat" aria-label="Chat ID">
+    <option value="">-- Vazio (Padrão) --</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             </div>
                             <div class="col-auto">
                                 <button type="submit" class="btn btn-outline-info"
@@ -567,8 +592,10 @@
                     </form>
                     <form th:action="@{/admin-web/test-weekly-reminder-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <input type="number" class="form-control form-control-sm" name="chatId"
-                                placeholder="Chat ID" aria-label="Chat ID opcional">
+                            <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+    <option value="">Vazio (Padrão)</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             <button type="submit" class="btn btn-outline-warning btn-sm"
                                 aria-label="Enviar lembrete para chat específico">
                                 <i class="bi bi-envelope" aria-hidden="true"></i> Enviar para Chat específico
@@ -591,7 +618,10 @@
                                     aria-label="Formulário de teste de auto-resposta">
                                     <div class="mb-2">
                                         <label for="autoUserId" class="form-label">User ID (opcional)</label>
-                                        <input type="number" class="form-control" id="autoUserId" name="userId">
+                                        <select class="form-select" name="chatId" aria-label="Chat ID" id="autoUserId">
+    <option value="">-- Vazio (Padrão) --</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                                     </div>
                                     <div class="mb-2">
                                         <label for="autoMessage" class="form-label">Mensagem</label>
@@ -600,7 +630,10 @@
                                     </div>
                                     <div class="mb-2">
                                         <label for="autoChat" class="form-label">Chat ID (opcional)</label>
-                                        <input type="number" class="form-control" id="autoChat" name="chatId">
+                              <select class="form-select" name="chatId" aria-label="Chat ID" id="autoUserId">
+    <option value="">-- Vazio (Padrão) --</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                                     </div>
                                     <div class="mb-2">
                                         <label for="autoTime" class="form-label">Horário simulado (HH:mm)</label>
@@ -627,7 +660,11 @@
                                     aria-label="Formulário de depuração de auto-resposta">
                                     <div class="mb-2">
                                         <label for="debugUserId" class="form-label">User ID (opcional)</label>
-                                        <input type="number" class="form-control" id="debugUserId" name="userId">
+
+                                        <select class="form-select" name="chatId" aria-label="Chat ID" id="debugUserId" >
+    <option value="">-- Vazio (Padrão) --</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                                     </div>
                                     <div class="mb-2">
                                         <label for="debugMessage" class="form-label">Mensagem</label>
@@ -763,8 +800,11 @@
                             </div>
                             <div class="col-auto">
                                 <label for="podcastChat" class="visually-hidden">Chat ID</label>
-                                <input type="number" class="form-control" id="podcastChat" name="chatId"
-                                    placeholder="Chat ID" aria-label="Chat ID opcional">
+
+<select class="form-select" name="chatId" aria-label="Chat ID" id="podcastChat" >
+    <option value="">-- Vazio (Padrão) --</option>
+    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+</select>
                             </div>
                             <div class="col-auto">
                                 <button type="submit" class="btn btn-outline-dark" aria-label="Gerar podcast">
@@ -837,8 +877,18 @@
                     resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status" aria-hidden="true"></div><span class="sr-only">Carregando...</span>';
                 }
 
+                // --- INJEÇÃO DO CABEÇALHO CSRF NA REQUISIÇÃO ---
+                var csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+                var csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+                var fetchHeaders = {};
+                fetchHeaders[csrfHeader] = csrfToken;
+                // -----------------------------------------------
+
                 try {
-                    var response = await fetch(url + '?' + params.toString(), { method: 'POST' });
+                    var response = await fetch(url + '?' + params.toString(), { 
+                        method: 'POST',
+                        headers: fetchHeaders
+                    });
                     var text = await response.text();
                     if (resultDiv) {
                         resultDiv.innerHTML = '<div class="alert alert-info" role="status">' + text + '</div>';
@@ -886,6 +936,11 @@
                         container.innerHTML = '<p class="text-muted">Nenhum aniversário cadastrado.</p>';
                         return;
                     }
+
+                    // --- INJEÇÃO DO INPUT HIDDEN CSRF NOS FORMULÁRIOS DINÂMICOS ---
+                    var csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+                    var csrfParam = document.querySelector("meta[name='_csrf_parameter']").getAttribute("content");
+
                     var rows = data.birthdays.map(function (b) {
                         var dia = String(b.day).padStart(2, '0');
                         var mes = String(b.month).padStart(2, '0');
@@ -895,6 +950,7 @@
                             '<td>' + (b.lastSentYear || '-') + '</td>' +
                             '<td>' +
                             '<form action="/admin-web/delete-birthday" method="post" style="display:inline">' +
+                            '<input type="hidden" name="' + csrfParam + '" value="' + csrfToken + '">' +
                             '<input type="hidden" name="userId" value="' + b.userId + '">' +
                             '<button type="submit" class="btn btn-sm btn-outline-danger" ' +
                             'onclick="return confirm(\'Remover aniversário?\')">' +
