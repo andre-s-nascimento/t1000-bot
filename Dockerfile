@@ -31,7 +31,8 @@ RUN apk add --no-cache ffmpeg ca-certificates
 COPY --from=build /app/build/libs/*.jar app.jar
 
 # Usuário não-root (segurança)
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Usuário não-root com UID 1000
+RUN addgroup -g 1000 appgroup && adduser -u 1000 -G appgroup -S appuser
 RUN mkdir -p /app/temp && chown -R appuser /app/temp
 USER appuser
 
