@@ -1,5 +1,5 @@
 services:
-  # 1. Mensageria: Apache Kafka (Modo KRaft - sem Zookeeper para ser mais leve)
+  # 1. Mensageria: Apache Kafka
   kafka:
     image: bitnami/kafka:latest
     container_name: t1000-kafka
@@ -17,23 +17,23 @@ services:
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
       - ALLOW_PLAINTEXT_LISTENER=yes
 
-  # 2. Banco de Dados Relacional (Substituirá o SQLite)
+  # 2. Banco de Dados Relacional (PostgreSQL)
   postgres:
     image: postgres:15-alpine
     container_name: t1000-postgres
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: t1000_user
-      POSTGRES_PASSWORD: t1000_password
-      POSTGRES_DB: t1000_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
 
-  # 3. Banco de Dados NoSQL (Para logs estruturados e histórico de chat)
+  # 3. Banco de Dados NoSQL (MongoDB)
   mongodb:
     image: mongo:6.0
     container_name: t1000-mongodb
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: t1000_admin
-      MONGO_INITDB_ROOT_PASSWORD: t1000_password
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}

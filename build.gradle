@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'net.ddns.adambravo79'
-version = '2.4.2'
+version = '2.5.0'
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(21) }
@@ -68,6 +68,13 @@ dependencies {
 
     // HTML
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+    // Dependência para Mensageria (Kafka)
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // Drivers para migração futura (Postgres e Mongo)
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok:1.18.34'
