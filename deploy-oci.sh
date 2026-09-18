@@ -61,6 +61,20 @@ pull_image() {
 }
 
 # ==============================
+# 💾 BACKUP
+# ==============================
+backup_database() {
+    log_info "Iniciando backup do banco de dados..."
+    if [ -f "data/t1000.db" ]; then
+        BACKUP_FILE="data/t1000_backup_$(date +%Y%m%d_%H%M%S).db"
+        cp data/t1000.db "$BACKUP_FILE"
+        log_info "✅ Backup concluído: $BACKUP_FILE"
+    else
+        log_warn "Banco de dados não encontrado em data/t1000.db. Pulando backup."
+    fi
+}
+
+# ==============================
 # 🧹 LIMPEZA
 # ==============================
 stop_container() {
@@ -139,6 +153,7 @@ main() {
     case "${1:-deploy}" in
         deploy)
             log_info "Modo: deploy OCI completo (pull + restart)"
+            backup_database
             pull_image
             stop_container
             run_container
@@ -148,6 +163,7 @@ main() {
             ;;
         restart)
             log_info "Modo: restart apenas"
+            backup_database
             pull_image
             stop_container
             run_container
