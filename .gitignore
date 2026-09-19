@@ -60,3 +60,10 @@ temp/**
 **/temp/
 *.mp3
 data/t1000.db
+
+kafka-data/
+kafka-data/**
+/mongo-data
+/mongo-data/**
+/postgres-data
+/postgres-data/**

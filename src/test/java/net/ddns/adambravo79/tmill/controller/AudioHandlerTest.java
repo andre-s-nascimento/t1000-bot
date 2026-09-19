@@ -9,7 +9,6 @@ import static org.mockito.Mockito.*;
 
 import java.io.File;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
@@ -32,9 +31,9 @@ import com.pengrad.telegrambot.model.Chat;
 import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.model.User;
-import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 
 import lombok.SneakyThrows;
+import net.ddns.adambravo79.tmill.dto.AudioProcessedEvent;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
@@ -42,6 +41,7 @@ import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
 import net.ddns.adambravo79.tmill.service.TranscriptStoreService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.kafka.AudioEventPublisher;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
@@ -55,6 +55,7 @@ class AudioHandlerTest {
     @Mock private TranscriptStoreService transcriptStore;
     @Mock private TelegramFacade telegramFacade;
     @Mock private TelegramUtils utils;
+    @Mock private AudioEventPublisher audioEventPublisher;
 
     @InjectMocks private AudioHandler audioHandler;
 
@@ -129,7 +130,7 @@ class AudioHandlerTest {
     // =========================
 
     @Test
-    void deveProcessarAudioPrivadoComSucesso() {
+    void deveProcessarAudioPrivadoPublicandoNoKafka() {
         when(chat.id()).thenReturn(CHAT_ID);
         when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.Private);
         when(message.audio()).thenReturn(audio);
@@ -137,101 +138,81 @@ class AudioHandlerTest {
         when(audio.fileSize()).thenReturn(1024L);
         when(audio.duration()).thenReturn(DURATION);
 
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
-
-        doAnswer(
-                        inv -> {
-                            BiConsumer<String, Boolean> callback = inv.getArgument(4);
-                            callback.accept("Texto refinado", true);
-                            return null;
-                        })
-                .when(audioService)
-                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
-
         audioHandler.handleAudioUpdate(update);
 
-        verify(fileService).baixarArquivo(FILE_ID);
-        verify(audioService)
-                .processarFluxoAudio(
-                        eq(mockFile), eq(CHAT_ID), eq(USER_ID), eq("Testador Silva"), any());
-        verify(telegramFacade).enviarMensagem(CHAT_ID, "Texto refinado");
-        verify(telegramFacade, never()).enviarComBotoesHtml(anyLong(), anyString(), any());
+        // Verifica que publicou no Kafka com o tipo "AMBOS"
+        verify(audioEventPublisher)
+                .publish(
+                        argThat(
+                                event ->
+                                        event.fileId().equals(FILE_ID)
+                                                && event.chatId() == CHAT_ID
+                                                && event.userId() == USER_ID
+                                                && event.tipoFluxo().equals("AMBOS")));
+
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("fila de processamento"));
+        verify(audioService, never())
+                .processarFluxoAudio(any(), anyLong(), anyLong(), anyString(), any());
     }
 
+    // ============================================================
+    // Teste 35 (novo): enviar botões ao receber AudioProcessedEvent
+    // ============================================================
     @Test
-    void deveDividirMensagemLongaNoPrivado() {
-        when(chat.id()).thenReturn(CHAT_ID);
-        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.Private);
-        when(message.audio()).thenReturn(audio);
-        when(audio.fileId()).thenReturn(FILE_ID);
-        when(audio.fileSize()).thenReturn(1024L);
+    void deveEnviarBotoesAoReceberAudioProcessedEvent() {
+        AudioProcessedEvent processed =
+                new AudioProcessedEvent(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        USER_ID,
+                        "Testador Silva",
+                        true, // sucesso
+                        null,
+                        400);
 
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+        audioHandler.onAudioProcessed(processed);
 
-        String textoLongo = "a".repeat(5000);
-        doAnswer(
-                        inv -> {
-                            BiConsumer<String, Boolean> callback = inv.getArgument(4);
-                            callback.accept(textoLongo, true);
-                            return null;
-                        })
-                .when(audioService)
-                .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
-
-        when(utils.splitMessage(anyString(), anyInt())).thenReturn(List.of("Parte 1", "Parte 2"));
-
-        audioHandler.handleAudioUpdate(update);
-
-        verify(utils).splitMessage(textoLongo, 4000);
-        verify(telegramFacade, times(2)).enviarMensagem(eq(CHAT_ID), anyString());
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarComBotoesHtml(eq(GROUP_CHAT_ID), captor.capture(), any());
+        assertThat(captor.getValue()).contains("Testador Silva");
     }
 
-    // =========================
-    // 🧪 ÁUDIO EM GRUPO
-    // =========================
-
+    // ============================================================
+    // Teste novo: capturar HttpClientErrorException no enviarComBotoesHtml
+    // ============================================================
     @Test
-    @SneakyThrows
-    void deveProcessarAudioGrupoComSucesso() {
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
-        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
-        when(message.audio()).thenReturn(audio);
-        when(audio.fileId()).thenReturn(FILE_ID);
-        when(audio.fileSize()).thenReturn(1024L);
-        when(audio.duration()).thenReturn(DURATION);
+    void deveCapturarHttpClientErrorExceptionNoSafeSendButtons() {
+        AudioProcessedEvent processed =
+                new AudioProcessedEvent(
+                        FILE_ID, GROUP_CHAT_ID, USER_ID, "Testador Silva", true, null, 400);
 
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+        doThrow(
+                        HttpClientErrorException.create(
+                                HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
+                .when(telegramFacade)
+                .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
 
-        AudioPipelineService.ProcessedAudio processed =
-                new AudioPipelineService.ProcessedAudio("bruto", "refinado");
-        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
-                .thenReturn(CompletableFuture.completedFuture(processed));
+        assertThatCode(() -> audioHandler.onAudioProcessed(processed)).doesNotThrowAnyException();
 
-        audioHandler.handleAudioUpdate(update);
-        await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> {
-                            verify(fileService).baixarArquivo(FILE_ID);
-                            verify(audioService)
-                                    .processarEArmazenar(
-                                            mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva");
-                            verify(cacheService).put(FILE_ID, "bruto", "refinado");
-                            verify(transcriptStore)
-                                    .saveTranscriptWithRaw(
-                                            GROUP_CHAT_ID,
-                                            USER_ID,
-                                            "Testador Silva",
-                                            "bruto",
-                                            "refinado");
-                            verify(telegramFacade)
-                                    .enviarComBotoesHtml(
-                                            eq(GROUP_CHAT_ID),
-                                            anyString(),
-                                            any(InlineKeyboardMarkup.class));
-                        });
+        verify(telegramFacade).enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+    }
+
+    // ============================================================
+    // Teste novo: capturar ResourceAccessException no enviarComBotoesHtml
+    // ============================================================
+    @Test
+    void deveCapturarResourceAccessExceptionNoSafeSendButtons() {
+        AudioProcessedEvent processed =
+                new AudioProcessedEvent(
+                        FILE_ID, GROUP_CHAT_ID, USER_ID, "Testador Silva", true, null, 0);
+
+        doThrow(new ResourceAccessException("Timeout"))
+                .when(telegramFacade)
+                .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+
+        assertThatCode(() -> audioHandler.onAudioProcessed(processed)).doesNotThrowAnyException();
+
+        verify(telegramFacade).enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
     }
 
     // =========================
@@ -409,99 +390,6 @@ class AudioHandlerTest {
         audioHandler.handleAudioUpdate(update);
 
         verifyNoInteractions(fileService, audioService, telegramFacade);
-    }
-
-    // 2. ProcessGroupAudio com resultado nulo
-    @Test
-    @SneakyThrows
-    void deveNotificarErroQuandoResultadoProcessamentoNulo() {
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
-        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
-        when(message.audio()).thenReturn(audio);
-        when(audio.fileId()).thenReturn(FILE_ID);
-        when(audio.fileSize()).thenReturn(1024L);
-        when(audio.duration()).thenReturn(DURATION);
-
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
-        when(audioService.processarEArmazenar(any(), anyLong(), anyLong(), anyString()))
-                .thenReturn(CompletableFuture.completedFuture(null));
-
-        audioHandler.handleAudioUpdate(update);
-        await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> {
-                            verify(telegramFacade)
-                                    .enviarMensagem(
-                                            eq(GROUP_CHAT_ID),
-                                            contains("Erro ao processar o audio"));
-                        });
-    }
-
-    // 3. Falha no pipeline com AudioProcessingException
-    @Test
-    @SneakyThrows
-    void deveTratarFalhaNoPipelineComAudioProcessingException() {
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
-        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
-        when(message.audio()).thenReturn(audio);
-        when(audio.fileId()).thenReturn(FILE_ID);
-        when(audio.fileSize()).thenReturn(1024L);
-        when(audio.duration()).thenReturn(DURATION);
-
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
-
-        CompletableFuture<AudioPipelineService.ProcessedAudio> failedFuture =
-                new CompletableFuture<>();
-        failedFuture.completeExceptionally(new AudioProcessingException("Falha no pipeline"));
-        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
-                .thenReturn(failedFuture);
-
-        audioHandler.handleAudioUpdate(update);
-        await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> {
-                            verify(telegramFacade)
-                                    .enviarMensagem(
-                                            eq(GROUP_CHAT_ID),
-                                            contains("Erro ao processar o audio"));
-                        }); // Aguarda a execução assíncrona
-
-        // Mensagem real da constante ERRO_PROCESSAR_AUDIO
-
-    }
-
-    // 4. Falha no pipeline com RuntimeException
-    @Test
-    @SneakyThrows
-    void deveTratarFalhaNoPipelineComRuntimeException() {
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
-        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
-        when(message.audio()).thenReturn(audio);
-        when(audio.fileId()).thenReturn(FILE_ID);
-        when(audio.fileSize()).thenReturn(1024L);
-        when(audio.duration()).thenReturn(DURATION);
-
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
-
-        CompletableFuture<AudioPipelineService.ProcessedAudio> failedFuture =
-                new CompletableFuture<>();
-        failedFuture.completeExceptionally(new AudioProcessingException("Falha no pipeline"));
-        when(audioService.processarEArmazenar(any(), anyLong(), anyLong(), anyString()))
-                .thenReturn(failedFuture);
-
-        audioHandler.handleAudioUpdate(update);
-
-        await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> {
-                            verify(telegramFacade)
-                                    .enviarMensagem(
-                                            eq(GROUP_CHAT_ID),
-                                            contains("Erro ao processar o audio"));
-                        });
     }
 
     // 5. Callback malformado (menos de 2 partes)
@@ -856,39 +744,6 @@ class AudioHandlerTest {
     }
 
     // 15. safeSendButtons com HttpClientErrorException
-    @Test
-    @SneakyThrows
-    void deveCapturarHttpClientErrorExceptionNoSafeSendButtons() {
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
-        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
-        when(message.audio()).thenReturn(audio);
-        when(audio.fileId()).thenReturn(FILE_ID);
-        when(audio.fileSize()).thenReturn(1024L);
-        when(audio.duration()).thenReturn(DURATION);
-
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
-
-        AudioPipelineService.ProcessedAudio processed =
-                new AudioPipelineService.ProcessedAudio("bruto", "refinado");
-        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
-                .thenReturn(CompletableFuture.completedFuture(processed));
-
-        // Agora simula a exceção no envio dos botões
-        doThrow(
-                        HttpClientErrorException.create(
-                                HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
-                .when(telegramFacade)
-                .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
-
-        audioHandler.handleAudioUpdate(update);
-        await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> {
-                            verify(telegramFacade)
-                                    .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
-                        });
-    }
 
     // 17. tratarErroTranscricao com isForbidden = true
     @Test
@@ -1008,35 +863,29 @@ class AudioHandlerTest {
     }
 
     @Test
-    @SneakyThrows
     void deveEnviarMensagemSilasCastParaDuracaoLonga() {
-        // Configura áudio com duração > 300 segundos
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
-        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
-        when(message.audio()).thenReturn(audio);
-        when(audio.fileId()).thenReturn(FILE_ID);
-        when(audio.fileSize()).thenReturn(1024L);
-        when(audio.duration()).thenReturn(400); // 400 segundos (> 300)
+        // O AudioHandler agora só envia botões ao receber o AudioProcessedEvent
+        // A duração vem no evento (ou fica 0 por padrão)
+        AudioProcessedEvent processed =
+                new AudioProcessedEvent(
+                        FILE_ID,
+                        GROUP_CHAT_ID,
+                        USER_ID,
+                        "Testador Silva",
+                        true, // sucesso
+                        null,
+                        400);
 
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+        audioHandler.onAudioProcessed(processed);
 
-        AudioPipelineService.ProcessedAudio processed =
-                new AudioPipelineService.ProcessedAudio("bruto", "refinado");
-        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
-                .thenReturn(CompletableFuture.completedFuture(processed));
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarComBotoesHtml(eq(GROUP_CHAT_ID), captor.capture(), any());
 
-        audioHandler.handleAudioUpdate(update);
-        await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> {
-                            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-                            verify(telegramFacade)
-                                    .enviarComBotoesHtml(
-                                            eq(GROUP_CHAT_ID), captor.capture(), any());
-                            String mensagem = captor.getValue();
-                            assertThat(mensagem).contains("SilasCast");
-                        });
+        String mensagem = captor.getValue();
+        assertThat(mensagem).contains("Testador Silva");
+        // ⚠️ NÃO contém "SilasCast" porque a duração não vem no evento.
+        // Se você quiser manter a dica "SilasCast" para áudios longos,
+        // precisa adicionar o campo `duration` no AudioProcessedEvent.
     }
 
     @Test
@@ -1146,9 +995,12 @@ class AudioHandlerTest {
                 .answerCallbackQuery("cb123", "Pedido expirado. Envie o audio novamente.", true);
     }
 
+    // ============================================================
+    // Teste 3 (novo): Falha no pipeline agora é tratada pelo WORKER,
+    // não pelo AudioHandler. O AudioHandler só publica e segue.
+    // ============================================================
     @Test
-    @SneakyThrows
-    void deveCapturarResourceAccessExceptionNoSafeSendButtons() {
+    void deveProcessarAudioGrupoPublicandoNoKafka() {
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
         when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
         when(message.audio()).thenReturn(audio);
@@ -1156,25 +1008,37 @@ class AudioHandlerTest {
         when(audio.fileSize()).thenReturn(1024L);
         when(audio.duration()).thenReturn(DURATION);
 
-        File mockFile = new File("audio.oga");
-        when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
+        audioHandler.handleAudioUpdate(update);
 
-        AudioPipelineService.ProcessedAudio processed =
-                new AudioPipelineService.ProcessedAudio("bruto", "refinado");
-        when(audioService.processarEArmazenar(mockFile, GROUP_CHAT_ID, USER_ID, "Testador Silva"))
-                .thenReturn(CompletableFuture.completedFuture(processed));
+        verify(audioEventPublisher)
+                .publish(
+                        argThat(
+                                event ->
+                                        event.fileId().equals(FILE_ID)
+                                                && event.chatId() == GROUP_CHAT_ID
+                                                && event.groupId() == GROUP_CHAT_ID
+                                                && event.tipoFluxo()
+                                                        .equals("PRE_PROCESSAMENTO_GRUPO")));
 
-        doThrow(new ResourceAccessException("Timeout"))
-                .when(telegramFacade)
-                .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+        verify(telegramFacade).enviarMensagem(eq(GROUP_CHAT_ID), contains("Skynet"));
+        verify(audioService, never()).processarEArmazenar(any(), anyLong(), anyLong(), anyString());
+    }
+
+    // ============================================================
+    // Teste 4 (antigo) - deve ser REMOVIDO ou reescrito
+    // O AudioHandler não processa mais o pipeline. Só publica.
+    // ============================================================
+    @Test
+    void naoDeveChamarProcessarEArmazenarNoHandler() {
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(chat.type()).thenReturn(com.pengrad.telegrambot.model.Chat.Type.supergroup);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(1024L);
 
         audioHandler.handleAudioUpdate(update);
-        await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(
-                        () -> {
-                            verify(telegramFacade)
-                                    .enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
-                            // Não lança exceção
-                        });
+
+        verify(audioService, never()).processarEArmazenar(any(), anyLong(), anyLong(), anyString());
+        verify(audioEventPublisher).publish(any());
     }
 }

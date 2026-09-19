@@ -16,21 +16,14 @@ public class DatabaseInitializer {
     private static final Logger log = LoggerFactory.getLogger(DatabaseInitializer.class);
     private final JdbcTemplate jdbcTemplate;
 
-    // Static map of column → full, hard‑coded ALTER statement (no dynamic parts)
+    // Removido o 'ignore_in_digest' daqui. Esse mapa agora é exclusivo da tabela releases_notified.
     private static final Map<String, String> RELEASE_ALTER_STATEMENTS =
             Map.of(
-                    "title",
-                    "ALTER TABLE releases_notified ADD COLUMN title TEXT",
-                    "overview",
-                    "ALTER TABLE releases_notified ADD COLUMN overview TEXT",
-                    "rating",
-                    "ALTER TABLE releases_notified ADD COLUMN rating REAL",
-                    "providers",
-                    "ALTER TABLE releases_notified ADD COLUMN providers TEXT",
-                    "poster_path",
-                    "ALTER TABLE releases_notified ADD COLUMN poster_path TEXT",
-                    "ignore_in_digest",
-                    "ALTER TABLE messages ADD COLUMN ignore_in_digest BOOLEAN DEFAULT 0");
+                    "title", "ALTER TABLE releases_notified ADD COLUMN title TEXT",
+                    "overview", "ALTER TABLE releases_notified ADD COLUMN overview TEXT",
+                    "rating", "ALTER TABLE releases_notified ADD COLUMN rating REAL",
+                    "providers", "ALTER TABLE releases_notified ADD COLUMN providers TEXT",
+                    "poster_path", "ALTER TABLE releases_notified ADD COLUMN poster_path TEXT");
 
     public DatabaseInitializer(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -38,11 +31,37 @@ public class DatabaseInitializer {
 
     @PostConstruct
     public void init() {
+        criarTabelaMessages();
         criarTabelaTranscripts();
         criarTabelaReleasesNotified();
         criarTabelaBirthdays();
-        adicionarColunaRawText();
+
         adicionarColunasReleases();
+
+        // Verificações independentes e seguras de colunas
+        garantirColuna("transcripts", "raw_text", "TEXT");
+        garantirColuna("transcripts", "ignore_in_digest", "BOOLEAN DEFAULT 0");
+        garantirColuna("messages", "ignore_in_digest", "BOOLEAN DEFAULT 0");
+    }
+
+    private void criarTabelaMessages() {
+        String sql =
+                """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    user_name TEXT,
+                    text TEXT NOT NULL,
+                    ignore_in_digest BOOLEAN DEFAULT 0,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+                """;
+        try {
+            jdbcTemplate.execute(sql);
+        } catch (Exception e) {
+            log.error("Erro ao criar tabela messages", e);
+        }
     }
 
     private void criarTabelaBirthdays() {
@@ -79,6 +98,7 @@ public class DatabaseInitializer {
                     user_name TEXT,
                     text TEXT NOT NULL,
                     raw_text TEXT,
+                    ignore_in_digest BOOLEAN DEFAULT 0,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
                 """;
@@ -111,32 +131,16 @@ public class DatabaseInitializer {
         }
     }
 
-    private void adicionarColunaRawText() {
-        try {
-            List<Map<String, Object>> columns =
-                    jdbcTemplate.queryForList("PRAGMA table_info(transcripts)");
-            boolean hasRawText =
-                    columns.stream().anyMatch(col -> "raw_text".equals(col.get("name")));
-            if (!hasRawText) {
-                jdbcTemplate.execute("ALTER TABLE transcripts ADD COLUMN raw_text TEXT");
-            }
-        } catch (Exception e) {
-            log.error("Erro ao verificar/adicionar coluna raw_text", e);
-        }
-    }
-
     private void adicionarColunasReleases() {
         try {
             List<Map<String, Object>> columns =
                     jdbcTemplate.queryForList("PRAGMA table_info(releases_notified)");
-            // Use Stream.toList() instead of Collectors.toList()
             List<String> existing =
                     columns.stream().map(col -> col.get("name").toString()).toList();
 
             for (Map.Entry<String, String> entry : RELEASE_ALTER_STATEMENTS.entrySet()) {
                 String columnName = entry.getKey();
                 if (!existing.contains(columnName)) {
-                    // Extract the actual execution into a separate method
                     executeAlterStatement(columnName, entry.getValue());
                 }
             }
@@ -145,28 +149,38 @@ public class DatabaseInitializer {
         }
     }
 
-    /**
-     * Executes a static ALTER TABLE statement and logs success/failure. This method contains its own
-     * try-catch, so the caller does not have a nested try block. Erros de "coluna já existente"
-     * (SQLITE_ERROR duplicate column name) são silenciados e logados como INFO, pois são esperados em
-     * migrações idempotentes.
-     */
+    /** Helper genérico para garantir que uma coluna exista em qualquer tabela */
+    private void garantirColuna(String tabela, String coluna, String definicao) {
+        try {
+            List<Map<String, Object>> columns =
+                    jdbcTemplate.queryForList("PRAGMA table_info(" + tabela + ")");
+            boolean existe = columns.stream().anyMatch(col -> coluna.equals(col.get("name")));
+
+            if (!existe) {
+                String sql =
+                        String.format("ALTER TABLE %s ADD COLUMN %s %s", tabela, coluna, definicao);
+                executeAlterStatement(coluna, sql);
+            }
+        } catch (Exception e) {
+            log.error("Erro ao verificar/adicionar coluna {} na tabela {}", coluna, tabela, e);
+        }
+    }
+
     private void executeAlterStatement(String columnName, String sql) {
         try {
             jdbcTemplate.execute(sql);
-            log.info("Coluna {} adicionada à tabela", columnName);
+            log.info("Coluna {} adicionada com sucesso", columnName);
         } catch (org.springframework.jdbc.UncategorizedSQLException e) {
             if (isDuplicateColumnError(e)) {
                 log.info("Coluna {} já existe (migração ignorada)", columnName);
             } else {
-                log.error("Erro ao adicionar coluna {} em releases_notified", columnName, e);
+                log.error("Erro ao adicionar coluna {} via ALTER TABLE", columnName, e);
             }
         } catch (Exception e) {
-            log.error("Erro ao adicionar coluna {} em releases_notified", columnName, e);
+            log.error("Erro inesperado ao adicionar coluna {}", columnName, e);
         }
     }
 
-    /** Verifica se a exceção é do tipo "duplicate column name" do SQLite. */
     private boolean isDuplicateColumnError(Throwable e) {
         Throwable current = e;
         while (current != null) {
