@@ -16,6 +16,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -29,13 +30,15 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.dto.AudioProcessedEvent;
+import net.ddns.adambravo79.tmill.dto.AudioReceivedEvent;
 import net.ddns.adambravo79.tmill.dto.AudioRequest;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
-import net.ddns.adambravo79.tmill.service.TranscriptStoreService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.kafka.AudioEventPublisher;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
@@ -66,9 +69,9 @@ public class AudioHandler {
     private final TelegramFileService fileService;
     private final AudioPipelineService audioService;
     private final FileTranscriptionCacheService cacheService;
-    private final TranscriptStoreService transcriptStore;
     private final TelegramFacade telegramFacade;
     private final TelegramUtils utils;
+    private final AudioEventPublisher audioEventPublisher;
 
     @Value("${t1000.audio.max-size-mb:20}")
     private int maxSizeMb;
@@ -132,27 +135,27 @@ public class AudioHandler {
         if (isGroup) {
             processGroupAudio(message, chatId, fileId, duration);
         } else {
-            processPrivateAudio(message, chatId, fileId);
+            processPrivateAudio(message, chatId, fileId, duration);
         }
     }
 
     // ========================= PRIVADO =========================
 
-    private void processPrivateAudio(Message message, long chatId, String fileId) {
+    private void processPrivateAudio(Message message, long chatId, String fileId, int duration) {
         long userId = message.from().id();
         String userName = utils.buildFullName(message.from());
-        File file = fileService.baixarArquivo(fileId);
 
-        audioService.processarFluxoAudio(
-                file,
+        log.info("🎙️ Enfileirando áudio privado chatId={} fileId={}", chatId, fileId);
+
+        // Publica o evento no Kafka
+        AudioReceivedEvent event =
+                new AudioReceivedEvent(fileId, chatId, userId, userName, 0L, "AMBOS", duration);
+        audioEventPublisher.publish(event);
+
+        safeSendMessage(
                 chatId,
-                userId,
-                userName,
-                (texto, isUltima) -> {
-                    if (Boolean.TRUE.equals(isUltima)) {
-                        safeSendMessage(chatId, texto);
-                    }
-                });
+                "🎧 Seu áudio foi colocado na fila de processamento. Enviarei a transcrição em"
+                        + " instantes!");
     }
 
     // ========================= GRUPO =========================
@@ -161,56 +164,46 @@ public class AudioHandler {
         long senderId = message.from().id();
         String senderName = utils.buildFullName(message.from());
 
-        log.info(
-                "🎙️ Áudio recebido em grupo chatId={} fileId={} de {} duração={}s",
-                chatId,
-                fileId,
-                senderName,
-                duration);
+        log.info("🎙️ Enfileirando áudio de grupo chatId={} fileId={}", chatId, fileId);
 
-        CompletableFuture.supplyAsync(() -> fileService.baixarArquivo(fileId))
-                .thenCompose(
-                        audio ->
-                                audioService.processarEArmazenar(
-                                        audio, chatId, senderId, senderName))
-                .whenComplete(
-                        (result, ex) -> {
-                            if (ex != null) {
-                                handleGroupAudioFailure(chatId, ex);
-                                return;
-                            }
-                            if (result == null) {
-                                log.error(
-                                        "Resultado nulo do processamento de áudio chatId={}",
-                                        chatId);
-                                safeSendMessage(chatId, ERRO_PROCESSAR_AUDIO);
-                                return;
-                            }
+        // Publica o evento no Kafka para o worker processar em segundo plano
+        AudioReceivedEvent event =
+                new AudioReceivedEvent(
+                        fileId,
+                        chatId,
+                        senderId,
+                        senderName,
+                        chatId,
+                        "PRE_PROCESSAMENTO_GRUPO",
+                        duration);
+        audioEventPublisher.publish(event);
 
-                            cacheService.put(fileId, result.bruto(), result.refinado());
-                            transcriptStore.saveTranscriptWithRaw(
-                                    chatId,
-                                    senderId,
-                                    senderName,
-                                    result.bruto(),
-                                    result.refinado());
+        safeSendMessage(chatId, "🎧 Áudio de grupo recebido e enfileirado na Skynet!");
+    }
 
-                            String token = gerarToken(fileId);
-                            log.info(
-                                    "🔑 Token {} gerado para fileId={} (expira em 7 dias)",
-                                    token,
-                                    fileId);
-                            pendingRequests.put(
-                                    token,
-                                    new AudioRequest(
-                                            fileId,
-                                            chatId,
-                                            System.currentTimeMillis(),
-                                            senderId,
-                                            senderName));
+    @KafkaListener(topics = "t1000.audio.processed", groupId = "t1000-bot-responses")
+    public void onAudioProcessed(AudioProcessedEvent event) {
+        if (!event.sucesso()) {
+            safeSendMessage(
+                    event.chatId(), "❌ Falha ao processar seu áudio: " + event.mensagemErro());
+            return;
+        }
 
-                            safeSendButtons(chatId, senderName, duration, token);
-                        });
+        log.info("✅ Bot recebeu confirmação de processamento: fileId={}", event.fileId());
+
+        // Gera o token de acesso que expira em 7 dias (como já existia)
+        String token = gerarToken(event.fileId());
+
+        pendingRequests.put(
+                token,
+                new AudioRequest(
+                        event.fileId(),
+                        event.chatId(),
+                        System.currentTimeMillis(),
+                        event.senderId(),
+                        event.senderName()));
+        // Envia os botões de transcrição para o chat
+        safeSendButtons(event.chatId(), event.senderName(), event.duration(), token);
     }
 
     private void handleGroupAudioFailure(long chatId, Throwable ex) {
