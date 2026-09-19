@@ -55,13 +55,10 @@ public class AudioWorkerService {
                             log.info(
                                     "✅ [Kafka Worker] Transcrição concluída para chatId={}",
                                     event.chatId());
-                            // Aqui você pode disparar o evento de sucesso para o bot postar os
-                            // botões ou o
-                            // texto
+                            // Dispara o evento de sucesso apenas quando o fluxo inteiro finalizou
+                            publicarResposta(event, true, null, duration);
                         }
                     });
-
-            publicarResposta(event, true, null, duration);
 
         } catch (Exception e) {
             log.error(
