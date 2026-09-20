@@ -12,19 +12,36 @@ import net.ddns.adambravo79.tmill.dto.AudioReceivedEvent;
 @RequiredArgsConstructor
 public class AudioEventPublisher {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
     private static final String TOPIC_RECEIVED = "t1000.audio.received";
+
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public void publish(AudioReceivedEvent event) {
         try {
             log.info("📤 [Kafka Producer] Enviando evento... fileId={}", event.fileId());
 
-            // O .get() força a thread a esperar a confirmação oficial do Broker Kafka
             kafkaTemplate.send(TOPIC_RECEIVED, event.fileId(), event).get();
 
             log.info("✅ [Kafka Producer] Broker confirmou gravação do fileId={}", event.fileId());
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+
+            log.error(
+                    "❌ [Kafka Producer] Thread interrompida durante publicação! fileId={}",
+                    event.fileId(),
+                    e);
+
+            throw new IllegalStateException("Thread interrompida ao publicar evento no Kafka", e);
+
         } catch (Exception e) {
-            log.error("❌ [Kafka Producer] Falha crítica ao publicar no Kafka!", e);
+            log.error(
+                    "❌ [Kafka Producer] Falha crítica ao publicar no Kafka! fileId={}",
+                    event.fileId(),
+                    e);
+
+            throw new IllegalStateException(
+                    "Falha ao publicar evento no Kafka: " + event.fileId(), e);
         }
     }
 }
