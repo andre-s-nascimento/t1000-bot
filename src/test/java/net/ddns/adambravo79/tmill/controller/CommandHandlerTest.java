@@ -60,6 +60,7 @@ class CommandHandlerTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private TelegramUtils utils;
     @Mock private BirthdayService birthdayService;
+    @Mock private BotAnalyticsService botAnalyticsService;
 
     @InjectMocks private CommandHandler commandHandler;
 
@@ -549,7 +550,8 @@ class CommandHandlerTest {
                         ideasLogger,
                         messageStoreService,
                         telegramFacade,
-                        utils);
+                        utils,
+                        botAnalyticsService);
         boolean result =
                 ReflectionTestUtils.invokeMethod(handler, "isValidUrl", "ftp://host.com/file");
         assertThat(result).isFalse();
@@ -568,7 +570,8 @@ class CommandHandlerTest {
                         ideasLogger,
                         messageStoreService,
                         telegramFacade,
-                        utils);
+                        utils,
+                        botAnalyticsService);
 
         // Testa com URL contendo espaço (garantidamente inválida)
         assertFalse(

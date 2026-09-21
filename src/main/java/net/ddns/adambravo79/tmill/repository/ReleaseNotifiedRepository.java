@@ -22,9 +22,9 @@ public class ReleaseNotifiedRepository {
         String sql =
                 "SELECT COUNT(*) FROM releases_notified WHERE tmdb_id = ? AND media_type = ? AND"
                         + " release_date = ?";
+        // PASSANDO releaseDate DIRETAMENTE EM VEZ DE releaseDate.toString()
         Integer count =
-                jdbcTemplate.queryForObject(
-                        sql, Integer.class, tmdbId, mediaType, releaseDate.toString());
+                jdbcTemplate.queryForObject(sql, Integer.class, tmdbId, mediaType, releaseDate);
         return count != null && count > 0;
     }
 
@@ -33,7 +33,8 @@ public class ReleaseNotifiedRepository {
         String sql =
                 "INSERT INTO releases_notified (tmdb_id, media_type, release_date) VALUES (?, ?,"
                         + " ?)";
-        jdbcTemplate.update(sql, tmdbId, mediaType, releaseDate.toString());
+        // PASSANDO releaseDate DIRETAMENTE
+        jdbcTemplate.update(sql, tmdbId, mediaType, releaseDate);
         log.debug(
                 "Notificação registrada: tmdbId={}, type={}, date={}",
                 tmdbId,
@@ -42,7 +43,6 @@ public class ReleaseNotifiedRepository {
     }
 
     // Salva os dados completos do lançamento (usado no DailyReleasesService)
-
     public void saveFullRelease(FullRelease release) {
         String sql =
 """
@@ -50,11 +50,12 @@ public class ReleaseNotifiedRepository {
     (tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 """;
+        // PASSANDO release.releaseDate() DIRETAMENTE
         jdbcTemplate.update(
                 sql,
                 release.tmdbId(),
                 release.mediaType(),
-                release.releaseDate().toString(),
+                release.releaseDate(),
                 release.title(),
                 release.overview(),
                 release.rating(),
@@ -72,23 +73,25 @@ public class ReleaseNotifiedRepository {
 """
     SELECT tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path
     FROM releases_notified
-    WHERE date(notified_at) BETWEEN ? AND ?
+    WHERE CAST(notified_at AS DATE) BETWEEN ? AND ?
     ORDER BY notified_at ASC
 """;
+        // USANDO CAST E PASSANDO OS OBJETOS LOCALDATE DIRETAMENTE
         return jdbcTemplate.query(
                 sql,
                 (rs, rowNum) ->
                         new FullRelease(
                                 rs.getLong("tmdb_id"),
                                 rs.getString("media_type"),
-                                LocalDate.parse(rs.getString("release_date")),
+                                // O driver do PG retorna LocalDate nativamente via getObject
+                                rs.getObject("release_date", LocalDate.class),
                                 rs.getString("title"),
                                 rs.getString("overview"),
                                 rs.getDouble("rating"),
                                 rs.getString("providers"),
                                 rs.getString("poster_path")),
-                from.toString(),
-                to.toString());
+                from,
+                to);
     }
 
     public void clearAll() {

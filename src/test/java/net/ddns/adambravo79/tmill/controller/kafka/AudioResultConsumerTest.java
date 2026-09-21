@@ -12,12 +12,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import net.ddns.adambravo79.tmill.dto.AudioProcessedEvent;
+import net.ddns.adambravo79.tmill.service.BotAnalyticsService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @ExtendWith(MockitoExtension.class)
 class AudioResultConsumerTest {
 
     @Mock private TelegramFacade telegramFacade;
+    @Mock private BotAnalyticsService botAnalyticsService;
 
     @InjectMocks private AudioResultConsumer audioResultConsumer;
 

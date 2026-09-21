@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'net.ddns.adambravo79'
-version = '2.5.0'
+version = '2.5.1'
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(21) }
@@ -29,6 +29,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
 
     implementation 'org.springframework.security:spring-security-core:7.1.1'
     implementation 'org.springframework.security:spring-security-web:7.1.1'
@@ -37,8 +38,7 @@ dependencies {
     implementation 'org.springframework.security:spring-security-oauth2-core:7.1.1'
     implementation 'org.springframework.security:spring-security-oauth2-client:7.1.1'
     implementation 'org.springframework.security:spring-security-oauth2-jose:7.1.1'
-    
-    
+        
     // define a BOM and its version
     implementation(platform("com.squareup.okhttp3:okhttp-bom:5.4.0"))
     // define any required OkHttp artifacts without version
@@ -72,7 +72,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 
     // Drivers para migração futura (Postgres e Mongo)
-    runtimeOnly 'org.postgresql:postgresql'
+    // Driver do PostgreSQL
+    implementation 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 
     // Lombok
@@ -90,10 +92,21 @@ dependencies {
     testImplementation 'org.awaitility:awaitility:4.2.2'
     testImplementation 'com.squareup.okhttp3:mockwebserver3:5.4.0'
     testImplementation 'com.squareup.okhttp3:mockwebserver3-junit5:5.4.0'
+    
+    // Testcontainers Core & Modules
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'org.testcontainers:testcontainers-kafka'
+    testImplementation 'org.testcontainers:testcontainers-mongodb'
+    testImplementation 'commons-io:commons-io:2.22.0'
 }
 
 configurations.all {
-    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    resolutionStrategy {
+        cacheChangingModulesFor 0, 'seconds'
+        force 'commons-io:commons-io:2.22.0'
+    }
 }
 
 // Spotless (configuração mantida)
@@ -124,6 +137,7 @@ jacoco {
 
 test {
     useJUnitPlatform()
+    environment 'TELEGRAM_BOT_TOKEN', System.getenv('TELEGRAM_BOT_TOKEN') ?: 'dummy-token-para-testes'
     // Força o fuso horário dos testes para coincidir com a regra de negócio
     systemProperty 'user.timezone', 'America/Sao_Paulo'
     finalizedBy jacocoTestReport

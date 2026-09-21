@@ -227,7 +227,7 @@ public class DailyDigestService {
                         """
                         SELECT user_name, text, timestamp
                         FROM messages
-                        WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
+                        WHERE timestamp BETWEEN ? AND ?
                         AND ignore_in_digest = 0
                         ORDER BY timestamp ASC
                         """,
@@ -239,7 +239,7 @@ public class DailyDigestService {
                         """
                         SELECT user_name, text, timestamp
                         FROM transcripts
-                        WHERE datetime(timestamp, 'localtime') BETWEEN ? AND ?
+                        WHERE timestamp BETWEEN ? AND ?
                         AND ignore_in_digest = 0
                         ORDER BY timestamp ASC
                         """,

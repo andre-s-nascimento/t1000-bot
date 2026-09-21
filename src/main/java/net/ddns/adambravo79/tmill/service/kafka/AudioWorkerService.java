@@ -26,7 +26,7 @@ public class AudioWorkerService {
     private static final String TOPIC_PROCESSED = "t1000.audio.processed";
 
     // Usamos um novo groupId ("t1000-workers-v4") para ignorar qualquer histórico de leitura
-    @KafkaListener(topics = "t1000.audio.received", groupId = "t1000-workers-v4")
+    @KafkaListener(topics = "t1000.audio.received", groupId = "t1000-workers-v1")
     public void consumeAudioRequest(@Payload AudioReceivedEvent event) {
         log.info(
                 "🚀 [SUCESSO!] Worker capturou o evento. FileId: {}, Usuário: {}",
@@ -84,6 +84,23 @@ public class AudioWorkerService {
                         sucesso,
                         erro,
                         duration);
-        kafkaTemplate.send(TOPIC_PROCESSED, responseEvent.fileId(), responseEvent);
+        kafkaTemplate
+                .send(TOPIC_PROCESSED, responseEvent.fileId(), responseEvent)
+                .whenComplete(
+                        (result, ex) -> {
+                            if (ex != null) {
+                                log.error(
+                                        "❌ [Kafka Worker] Falha ao publicar resposta. fileId={}",
+                                        responseEvent.fileId(),
+                                        ex);
+                            } else {
+                                log.info(
+                                        "✅ [Kafka Worker] Resposta publicada. fileId={},"
+                                                + " partition={}, offset={}",
+                                        responseEvent.fileId(),
+                                        result.getRecordMetadata().partition(),
+                                        result.getRecordMetadata().offset());
+                            }
+                        });
     }
 }

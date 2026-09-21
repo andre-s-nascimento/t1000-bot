@@ -41,8 +41,13 @@ class ReleaseNotifiedRepositoryTest {
 
     @Test
     void isNotified_quandoExiste_retornaTrue() {
+        // CORRIGIDO: mudou de anyString() para any(LocalDate.class)
         when(jdbcTemplate.queryForObject(
-                        anyString(), eq(Integer.class), anyLong(), anyString(), anyString()))
+                        anyString(),
+                        eq(Integer.class),
+                        anyLong(),
+                        anyString(),
+                        any(LocalDate.class)))
                 .thenReturn(1);
 
         boolean result = repository.isNotified(TMDB_ID, MEDIA_TYPE, RELEASE_DATE);
@@ -54,13 +59,17 @@ class ReleaseNotifiedRepositoryTest {
                         eq(Integer.class),
                         eq(TMDB_ID),
                         eq(MEDIA_TYPE),
-                        eq(RELEASE_DATE.toString()));
+                        eq(RELEASE_DATE)); // Passando LocalDate direto
     }
 
     @Test
     void isNotified_quandoNaoExiste_retornaFalse() {
         when(jdbcTemplate.queryForObject(
-                        anyString(), eq(Integer.class), anyLong(), anyString(), anyString()))
+                        anyString(),
+                        eq(Integer.class),
+                        anyLong(),
+                        anyString(),
+                        any(LocalDate.class)))
                 .thenReturn(0);
 
         boolean result = repository.isNotified(TMDB_ID, MEDIA_TYPE, RELEASE_DATE);
@@ -71,7 +80,11 @@ class ReleaseNotifiedRepositoryTest {
     @Test
     void isNotified_quandoCountNulo_retornaFalse() {
         when(jdbcTemplate.queryForObject(
-                        anyString(), eq(Integer.class), anyLong(), anyString(), anyString()))
+                        anyString(),
+                        eq(Integer.class),
+                        anyLong(),
+                        anyString(),
+                        any(LocalDate.class)))
                 .thenReturn(null);
 
         boolean result = repository.isNotified(TMDB_ID, MEDIA_TYPE, RELEASE_DATE);
@@ -83,7 +96,9 @@ class ReleaseNotifiedRepositoryTest {
 
     @Test
     void saveNotified_deveInserirRegistro() {
-        when(jdbcTemplate.update(anyString(), anyLong(), anyString(), anyString())).thenReturn(1);
+        // CORRIGIDO: any(LocalDate.class)
+        when(jdbcTemplate.update(anyString(), anyLong(), anyString(), any(LocalDate.class)))
+                .thenReturn(1);
 
         repository.saveNotified(TMDB_ID, MEDIA_TYPE, RELEASE_DATE);
 
@@ -92,18 +107,18 @@ class ReleaseNotifiedRepositoryTest {
                         contains("INSERT INTO releases_notified"),
                         eq(TMDB_ID),
                         eq(MEDIA_TYPE),
-                        eq(RELEASE_DATE.toString()));
+                        eq(RELEASE_DATE));
     }
 
     // ===================== saveFullRelease =====================
-
     @Test
     void saveFullRelease_deveInserirDadosCompletos() {
+        // CORRIGIDO: any(LocalDate.class) no terceiro argumento
         when(jdbcTemplate.update(
                         anyString(),
                         anyLong(),
                         anyString(),
-                        anyString(),
+                        any(LocalDate.class),
                         anyString(),
                         anyString(),
                         anyDouble(),
@@ -128,7 +143,7 @@ class ReleaseNotifiedRepositoryTest {
                         contains("INSERT INTO releases_notified"),
                         eq(TMDB_ID),
                         eq(MEDIA_TYPE),
-                        eq(RELEASE_DATE.toString()),
+                        eq(RELEASE_DATE),
                         eq(TITLE),
                         eq(OVERVIEW),
                         eq(RATING),
@@ -143,14 +158,21 @@ class ReleaseNotifiedRepositoryTest {
         ResultSet rs = mock(ResultSet.class);
         when(rs.getLong("tmdb_id")).thenReturn(TMDB_ID);
         when(rs.getString("media_type")).thenReturn(MEDIA_TYPE);
-        when(rs.getString("release_date")).thenReturn(RELEASE_DATE.toString());
+        // CORRIGIDO: getObject com LocalDate.class
+        when(rs.getObject("release_date", LocalDate.class)).thenReturn(RELEASE_DATE);
         when(rs.getString("title")).thenReturn(TITLE);
         when(rs.getString("overview")).thenReturn(OVERVIEW);
         when(rs.getDouble("rating")).thenReturn(RATING);
         when(rs.getString("providers")).thenReturn(PROVIDERS);
         when(rs.getString("poster_path")).thenReturn(POSTER_PATH);
 
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), anyString(), anyString()))
+        // CORRIGIDO: any(LocalDate.class) em vez de anyString() para os parâmetros de data do
+        // intervalo
+        when(jdbcTemplate.query(
+                        anyString(),
+                        any(RowMapper.class),
+                        any(LocalDate.class),
+                        any(LocalDate.class)))
                 .thenAnswer(
                         invocation -> {
                             RowMapper<FullRelease> mapper = invocation.getArgument(1);
@@ -174,16 +196,16 @@ class ReleaseNotifiedRepositoryTest {
         assertThat(release.posterPath()).isEqualTo(POSTER_PATH);
 
         verify(jdbcTemplate)
-                .query(
-                        contains("SELECT tmdb_id"),
-                        any(RowMapper.class),
-                        eq(from.toString()),
-                        eq(to.toString()));
+                .query(contains("SELECT tmdb_id"), any(RowMapper.class), eq(from), eq(to));
     }
 
     @Test
     void findFullReleasesBetween_quandoNenhumResultado_retornaListaVazia() {
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), anyString(), anyString()))
+        when(jdbcTemplate.query(
+                        anyString(),
+                        any(RowMapper.class),
+                        any(LocalDate.class),
+                        any(LocalDate.class)))
                 .thenReturn(List.of());
 
         List<FullRelease> results =
