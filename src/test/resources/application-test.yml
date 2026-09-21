@@ -6,9 +6,9 @@ WATCHMODE_API_KEY: dummy
 TELEGRAM_BOT_TOKEN: dummy
 TELEGRAM_OWNER_ID: 0
 STREAMING_AVAILABILITY_API_KEY: dummy
+PODCAST_PUBLISH_CHAT_ID: 123456789
 AZURE_SPEECH_KEY: dummy
 AZURE_SPEECH_REGION: dummy
-PODCAST_PUBLISH_CHAT_ID: 123456789
 
 # Propriedades normais (em minúsculas)
 spring:
@@ -18,12 +18,10 @@ spring:
   application:
     name: tmill-bot-test
   flyway:
-    enabled: false
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration
-      - org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+    enabled: true
+    baseline-on-migrate: true
+    locations:
+      - classpath:db/migration
 
 telegram:
   bot:
@@ -44,6 +42,15 @@ groq:
     refinement: llama-3.1-8b-instant
     digest: meta-llama/llama-4-scout-17b-16e-instruct
   max-prompt-length: 32000
+
+# NOTE: We still need to override the azure properties because the main
+# application.properties uses ${AZURE_SPEECH_KEY} placeholder syntax.
+# The environment variables above (AZURE_SPEECH_KEY: dummy) should satisfy this.
+# But to be extra safe, we can also override the property directly:
+azure:
+  speech:
+    key: dummy
+    region: dummy
 
 tmdb:
   token: dummy

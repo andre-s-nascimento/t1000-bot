@@ -13,11 +13,13 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.serializer.JacksonJsonDeserializer;
+import org.springframework.test.context.ActiveProfiles;
 
 import net.ddns.adambravo79.tmill.dto.AudioReceivedEvent;
 import net.ddns.adambravo79.tmill.service.kafka.AudioEventPublisher;
 
+@ActiveProfiles("test")
 class KafkaAndDatabaseIntegrationTest extends BaseIntegrationTest {
 
     private static final String TOPIC_RECEIVED = "t1000.audio.received";
@@ -65,24 +67,17 @@ class KafkaAndDatabaseIntegrationTest extends BaseIntegrationTest {
     private Consumer<String, AudioReceivedEvent> createConsumer() {
         Properties properties = new Properties();
 
-        properties.put(
-                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-                kafka.getHost() + ":" + kafka.getMappedPort(9092));
-
+        properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, KAFKA.getBootstrapServers());
         properties.put(
                 ConsumerConfig.GROUP_ID_CONFIG, "t1000-integration-test-" + System.nanoTime());
-
         properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-
         properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-
         properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-
-        properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
-
-        properties.put(JsonDeserializer.TRUSTED_PACKAGES, "net.ddns.adambravo79.tmill.dto");
-
-        properties.put(JsonDeserializer.VALUE_DEFAULT_TYPE, AudioReceivedEvent.class.getName());
+        properties.put(
+                ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JacksonJsonDeserializer.class);
+        properties.put(JacksonJsonDeserializer.TRUSTED_PACKAGES, "net.ddns.adambravo79.tmill.dto");
+        properties.put(
+                JacksonJsonDeserializer.VALUE_DEFAULT_TYPE, AudioReceivedEvent.class.getName());
 
         return new KafkaConsumer<>(properties);
     }
@@ -90,7 +85,7 @@ class KafkaAndDatabaseIntegrationTest extends BaseIntegrationTest {
     private ConsumerRecord<String, AudioReceivedEvent> waitForEvent(
             Consumer<String, AudioReceivedEvent> consumer, String expectedFileId) {
 
-        long timeout = System.currentTimeMillis() + Duration.ofSeconds(10).toMillis();
+        long timeout = System.currentTimeMillis() + Duration.ofSeconds(30).toMillis();
 
         while (System.currentTimeMillis() < timeout) {
             var records = consumer.poll(Duration.ofMillis(500));

@@ -99,10 +99,14 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers-postgresql'
     testImplementation 'org.testcontainers:testcontainers-kafka'
     testImplementation 'org.testcontainers:testcontainers-mongodb'
+    testImplementation 'commons-io:commons-io:2.22.0'
 }
 
 configurations.all {
-    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    resolutionStrategy {
+        cacheChangingModulesFor 0, 'seconds'
+        force 'commons-io:commons-io:2.22.0'
+    }
 }
 
 // Spotless (configuração mantida)
@@ -133,6 +137,7 @@ jacoco {
 
 test {
     useJUnitPlatform()
+    environment 'TELEGRAM_BOT_TOKEN', System.getenv('TELEGRAM_BOT_TOKEN') ?: 'dummy-token-para-testes'
     // Força o fuso horário dos testes para coincidir com a regra de negócio
     systemProperty 'user.timezone', 'America/Sao_Paulo'
     finalizedBy jacocoTestReport

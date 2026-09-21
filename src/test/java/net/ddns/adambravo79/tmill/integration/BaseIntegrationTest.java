@@ -1,59 +1,48 @@
 package net.ddns.adambravo79.tmill.integration;
 
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
-@ActiveProfiles("test")
 public abstract class BaseIntegrationTest {
 
-    @Container
-    static final PostgreSQLContainer postgres =
+    static final PostgreSQLContainer POSTGRES =
             new PostgreSQLContainer("postgres:15-alpine")
-                    .withDatabaseName("t1000_test_db")
-                    .withUsername("postgres")
-                    .withPassword("postgres");
+                    .withDatabaseName("test")
+                    .withUsername("test")
+                    .withPassword("test");
 
-    @Container
-    static final GenericContainer<?> kafka =
-            new GenericContainer<>("confluentinc/cp-kafka:7.8.0")
-                    .withEnv("KAFKA_PROCESS_ROLES", "broker,controller")
-                    .withEnv("KAFKA_NODE_ID", "1")
-                    .withEnv("KAFKA_CONTROLLER_QUORUM_VOTERS", "1@localhost:9093")
-                    .withEnv(
-                            "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP",
-                            "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT")
-                    .withEnv(
-                            "KAFKA_LISTENERS", "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093")
-                    .withEnv("KAFKA_ADVERTISED_LISTENERS", "PLAINTEXT://localhost:9092")
-                    .withEnv("KAFKA_CONTROLLER_LISTENER_NAMES", "CONTROLLER")
-                    .withEnv("KAFKA_INTER_BROKER_LISTENER_NAME", "PLAINTEXT")
-                    .withEnv("KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR", "1")
-                    .withEnv("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1")
-                    .withEnv("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1")
-                    .withEnv("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS", "0")
-                    .withEnv("CLUSTER_ID", "MkU3OEVBNTcwNTJENDM2Qk")
-                    .withExposedPorts(9092)
-                    .waitingFor(
-                            new org.testcontainers.containers.wait.strategy.LogMessageWaitStrategy()
-                                    .withRegEx(".*Transitioning from RECOVERY to RUNNING.*")
-                                    .withTimes(1));
+    static final KafkaContainer KAFKA =
+            new KafkaContainer(DockerImageName.parse("apache/kafka:4.2.1"));
+
+    static final MongoDBContainer MONGO = new MongoDBContainer("mongo:6.0");
+
+    static {
+        // Os containers são iniciados uma única vez por JVM de testes.
+        //
+        // Não usar @BeforeAll/@AfterAll aqui.
+        // O Spring pode reutilizar o ApplicationContext entre classes,
+        // portanto os endpoints dos containers precisam permanecer estáveis
+        // durante toda a execução da suíte.
+
+        POSTGRES.start();
+        KAFKA.start();
+        MONGO.start();
+    }
 
     @DynamicPropertySource
-    static void overrideProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
+    static void registerProps(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
 
-        registry.add(
-                "spring.kafka.bootstrap-servers",
-                () -> kafka.getHost() + ":" + kafka.getMappedPort(9092));
+        registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
+
+        registry.add("spring.data.mongodb.uri", MONGO::getReplicaSetUrl);
     }
 }
