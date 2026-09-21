@@ -60,6 +60,7 @@ public class CommandHandler {
     private final MessageStoreService messageStoreService;
     private final TelegramFacade telegramFacade;
     private final TelegramUtils utils;
+    private final BotAnalyticsService botAnalyticsService;
 
     @Value("${telegram.owner.id:0}")
     private long ownerId;
@@ -77,6 +78,14 @@ public class CommandHandler {
         long chatId = message.chat().id();
         String rawText = message.text();
         String text = rawText.trim().toLowerCase();
+
+        botAnalyticsService.registrarConversa(
+                chatId,
+                message.from().id(),
+                utils.buildFullName(message.from()),
+                "TEXT",
+                rawText,
+                "Processado via CommandHandler");
 
         // Remove barra inicial
         if (text.startsWith("/")) {
@@ -244,7 +253,12 @@ Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
         String userName = utils.buildFullName(from);
         String chatName = utils.getChatName(message);
 
+        // 1. Mantém seu logger atual (se necessário)
         ideasLogger.saveIdea(userId, userName, chatId, idea, chatName);
+
+        // 2. 💡 SALVA NO MONGODB USANDO O NOVO REPOSITÓRIO (UserIdeaDocument)
+        botAnalyticsService.salvarIdeia(
+                userId, idea, List.of("telegram", "ideia"), "BACKLOG_TECNICO");
 
         // Mensagem para o administrador usando Text Block
         String adminMsg =
