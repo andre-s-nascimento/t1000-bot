@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Service
 @Slf4j
@@ -26,6 +27,7 @@ public class PodcastPublisherService {
     private final AzureTtsClient ttsClient;
     private final TelegramFacade telegramFacade;
     private final TempDirService tempDirService;
+    private final MetricsService metricsService;
 
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
@@ -120,8 +122,10 @@ public class PodcastPublisherService {
 
             if (sent) {
                 log.info("📤 Áudio enviado para chat {}", chatId);
+                metricsService.success("podcast_publicado");
             } else {
                 log.error("❌ Falha ao enviar áudio após 3 tentativas");
+                metricsService.error("podcast_publicado");
                 // Fallback: envia o roteiro como texto
                 enviarRoteiroComoTexto(chatId, script, startDate, endDate);
             }
@@ -152,10 +156,7 @@ public class PodcastPublisherService {
 
     // ===== NOVOS MÉTODOS =====
 
-    /**
-     * 🔥 Compressão de áudio usando FFmpeg
-     * Reduz bitrate para 64kbps, mono, 22.05kHz
-     */
+    /** 🔥 Compressão de áudio usando FFmpeg Reduz bitrate para 64kbps, mono, 22.05kHz */
     private byte[] compressAudio(byte[] audioData) {
         Path inputFile = null;
         Path outputFile = null;
@@ -215,9 +216,7 @@ public class PodcastPublisherService {
         }
     }
 
-    /**
-     * 🔥 Envia com retry (3 tentativas, 5s de espera entre elas)
-     */
+    /** 🔥 Envia com retry (3 tentativas, 5s de espera entre elas) */
     private boolean sendWithRetry(long chatId, Path file, String caption) {
         int maxRetries = 3;
         long retryDelayMs = 5000;
@@ -244,9 +243,7 @@ public class PodcastPublisherService {
         return false;
     }
 
-    /**
-     * 🔥 Fallback: envia o roteiro como texto se o áudio falhar
-     */
+    /** 🔥 Fallback: envia o roteiro como texto se o áudio falhar */
     private void enviarRoteiroComoTexto(
             long chatId, String script, LocalDate startDate, LocalDate endDate) {
         try {
@@ -283,8 +280,7 @@ public class PodcastPublisherService {
     }
 
     /**
-     * Gera o nome do arquivo no formato:
-     * SilasCast-Semana-XX-do-Mes-YY-do-Ano-YYYY.mp3 onde XX é a
+     * Gera o nome do arquivo no formato: SilasCast-Semana-XX-do-Mes-YY-do-Ano-YYYY.mp3 onde XX é a
      * semana dentro do mês (1-5) e YY é o mês (01-12)
      */
     private String generatePodcastFileName(LocalDate date) {

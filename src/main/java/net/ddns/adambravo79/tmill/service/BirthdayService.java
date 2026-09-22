@@ -19,6 +19,7 @@ import net.ddns.adambravo79.tmill.model.Birthday;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.telegram.core.GroupAuthorizationService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Slf4j
 @Service
@@ -30,6 +31,7 @@ public class BirthdayService {
     private final BirthdayRepository repository;
     private final TelegramFacade telegramFacade;
     private final GroupAuthorizationService groupAuthorizationService;
+    private final MetricsService metricsService;
 
     @Value(
             "${birthday.gif-url:https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2cyem12dm1ldmp0NGR4bHl0NHRqcXBka3pzejN6eHJpeG9nZTliZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/11wifmSGQD9CtW/giphy.gif}")
@@ -131,6 +133,9 @@ public class BirthdayService {
             if (enviarParabensIndividuais(b)) {
                 repository.markSent(b.userId(), year);
                 enviados++;
+                metricsService.success("aniversario_enviado");
+            } else {
+                metricsService.error("aniversario_enviado");
             }
         }
         return enviados;

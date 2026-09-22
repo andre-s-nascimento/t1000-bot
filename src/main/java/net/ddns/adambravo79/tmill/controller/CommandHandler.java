@@ -33,6 +33,7 @@ import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
 @Slf4j
@@ -61,6 +62,7 @@ public class CommandHandler {
     private final TelegramFacade telegramFacade;
     private final TelegramUtils utils;
     private final BotAnalyticsService botAnalyticsService;
+    private final MetricsService metricsService;
 
     @Value("${telegram.owner.id:0}")
     private long ownerId;
@@ -142,24 +144,29 @@ public class CommandHandler {
         if (normalized.startsWith("t1000 anotar ideia")) {
             String idea = rawText.replaceFirst("(?i)^t1000\\s+anotar\\s+ideia\\s*", "").trim();
             handleAnotarIdeia(message, chatId, idea);
+            metricsService.success("comando_anotar_ideia");
             return true;
         }
         if (normalized.startsWith("t1000 buscar")) {
             String termo = rawText.replaceFirst("(?i)^t1000\\s+buscar\\s*", "").trim();
             handleBuscarFilme(chatId, termo);
+            metricsService.success("comando_buscar");
             return true;
         }
         if (normalized.startsWith("t1000 estreias da semana")
                 || normalized.startsWith("t1000 lancamentos")) {
             handleEstreias(chatId);
+            metricsService.success("comando_estreias");
             return true;
         }
         if (normalized.contains("t1000 jogos") || normalized.contains("t1000 copa")) {
             handleJogosCopa(chatId);
+            metricsService.success("comando_copa");
             return true;
         }
         if (normalized.startsWith("t1000 resultados")) {
             handleResultados(chatId, rawText);
+            metricsService.success("comando_resultados");
             return true;
         }
         if (normalized.startsWith("t1000 registrar aniversario")
@@ -169,6 +176,7 @@ public class CommandHandler {
                 || normalized.startsWith("t1000 aniversario")
                 || normalized.startsWith("t1000 aniversário")) {
             handleRegistrarAniversario(message, chatId, rawText);
+            metricsService.success("comando_aniversario");
             return true;
         }
         return false;

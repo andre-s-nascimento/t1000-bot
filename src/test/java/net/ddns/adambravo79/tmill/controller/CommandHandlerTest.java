@@ -45,6 +45,7 @@ import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,6 +62,7 @@ class CommandHandlerTest {
     @Mock private TelegramUtils utils;
     @Mock private BirthdayService birthdayService;
     @Mock private BotAnalyticsService botAnalyticsService;
+    @Mock private MetricsService metricsService;
 
     @InjectMocks private CommandHandler commandHandler;
 
@@ -551,7 +553,8 @@ class CommandHandlerTest {
                         messageStoreService,
                         telegramFacade,
                         utils,
-                        botAnalyticsService);
+                        botAnalyticsService,
+                        metricsService);
         boolean result =
                 ReflectionTestUtils.invokeMethod(handler, "isValidUrl", "ftp://host.com/file");
         assertThat(result).isFalse();
@@ -571,7 +574,8 @@ class CommandHandlerTest {
                         messageStoreService,
                         telegramFacade,
                         utils,
-                        botAnalyticsService);
+                        botAnalyticsService,
+                        metricsService);
 
         // Testa com URL contendo espaço (garantidamente inválida)
         assertFalse(

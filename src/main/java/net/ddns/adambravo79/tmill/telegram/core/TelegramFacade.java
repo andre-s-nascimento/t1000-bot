@@ -20,6 +20,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import okhttp3.OkHttpClient;
 
@@ -30,6 +31,7 @@ public class TelegramFacade {
 
     private final TelegramBotExecutor executor;
     private final TelegramSafeExecutor safeExecutor;
+    private final MetricsService metricsService;
 
     @Value("${telegram.bot.token}")
     private String botToken;
@@ -68,46 +70,56 @@ public class TelegramFacade {
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
-                () -> executor.execute(new SendMessage(chatId, texto)));
+                () -> {
+                    executor.execute(new SendMessage(chatId, texto));
+                    metricsService.success("telegram_enviar_mensagem");
+                });
     }
 
     public void enviarMensagemHtml(long chatId, String texto) {
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
-                () -> executor.execute(new SendMessage(chatId, texto).parseMode(ParseMode.HTML)));
+                () -> {
+                    executor.execute(new SendMessage(chatId, texto).parseMode(ParseMode.HTML));
+                    metricsService.success("telegram_enviar_mensagem_html");
+                });
     }
 
     public void enviarFotoHtml(long chatId, String url, String legenda) {
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
-                () ->
-                        executor.execute(
-                                new SendPhoto(chatId, url)
-                                        .caption(legenda)
-                                        .parseMode(ParseMode.HTML)));
+                () -> {
+                    executor.execute(
+                            new SendPhoto(chatId, url).caption(legenda).parseMode(ParseMode.HTML));
+                    metricsService.success("telegram_enviar_foto");
+                });
     }
 
     public void enviarComBotoesHtml(long chatId, String texto, InlineKeyboardMarkup markup) {
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
-                () ->
-                        executor.execute(
-                                new SendMessage(chatId, texto)
-                                        .parseMode(ParseMode.HTML)
-                                        .replyMarkup(markup)));
+                () -> {
+                    executor.execute(
+                            new SendMessage(chatId, texto)
+                                    .parseMode(ParseMode.HTML)
+                                    .replyMarkup(markup));
+                    metricsService.success("telegram_enviar_mensagem_com_botoes_html");
+                });
     }
 
     public void editarMensagemHtml(long chatId, int messageId, String novoTexto) {
         safeExecutor.run(
                 chatId,
                 this::enviarFallback,
-                () ->
-                        executor.execute(
-                                new EditMessageText(chatId, messageId, novoTexto)
-                                        .parseMode(ParseMode.HTML)));
+                () -> {
+                    executor.execute(
+                            new EditMessageText(chatId, messageId, novoTexto)
+                                    .parseMode(ParseMode.HTML));
+                    metricsService.success("telegram_enviar_mensagem_html");
+                });
     }
 
     public void editarMensagem(long chatId, int messageId, String novoTexto) {
@@ -221,8 +233,7 @@ public class TelegramFacade {
     }
 
     /**
-     * Baixa o arquivo usando a URL pública do Telegram. O
-     * {@link TelegramBotExecutor} não expõe
+     * Baixa o arquivo usando a URL pública do Telegram. O {@link TelegramBotExecutor} não expõe
      * {@code downloadFile}, então fazemos manualmente.
      */
     public byte[] downloadFile(File file) {
@@ -244,10 +255,7 @@ public class TelegramFacade {
         }
     }
 
-    /**
-     * Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4
-     * últimos caracteres.
-     */
+    /** Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4 últimos caracteres. */
     private static String maskToken(String token) {
         if (token == null || token.length() < 8) {
             return "***";

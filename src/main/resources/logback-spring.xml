@@ -1,0 +1,22 @@
+<appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>logs/t1000-bot.json</file>
+    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+        <fileNamePattern>logs/t1000-bot-%d{yyyy-MM-dd}.json.gz</fileNamePattern>
+        <maxHistory>7</maxHistory>
+    </rollingPolicy>
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <!-- Renomeia "timestamp" para "@timestamp" (exigido pelo Kibana) -->
+        <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</timestampPattern>
+        <timeZone>America/Sao_Paulo</timeZone>
+
+        <!-- Campos fixos em toda linha -->
+        <customFields>{"application":"t1000-bot","env":"local"}</customFields>
+
+        <!-- Inclui stack trace em campo separado (não quebra o JSON) -->
+        <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+            <maxDepthPerThrowable>20</maxDepthPerThrowable>
+            <maxLength>4096</maxLength>
+            <rootCauseFirst>true</rootCauseFirst>
+        </throwableConverter>
+    </encoder>
+</appender>

@@ -47,7 +47,64 @@ services:
     volumes:
       - mongo-data:/data/db
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: t1000-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: t1000-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+  # 6. Indexação de Logs: Elasticsearch (Modo Single-Node sem segurança complexa para dev)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.3
+    container_name: t1000-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+
+  # 7. Dashboard de Logs: Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.3
+    container_name: t1000-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+
+  # 👇 ADICIONE ESTE SERVIÇO
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.3
+    container_name: t1000-logstash
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./logs:/usr/share/logstash/logs:ro # Mapeia a pasta de logs da sua app para dentro do container
+    ports:
+      - "5000:5000" # Porta para inputs TCP (opcional, mas útil)
+    depends_on:
+      - elasticsearch
+
 volumes:
   kafka-data:
   postgres-data:
   mongo-data:
+  es-data:
