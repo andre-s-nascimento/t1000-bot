@@ -13,6 +13,7 @@ import net.ddns.adambravo79.tmill.dto.AudioProcessedEvent;
 import net.ddns.adambravo79.tmill.dto.AudioReceivedEvent;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Slf4j
 @Service
@@ -22,10 +23,10 @@ public class AudioWorkerService {
     private final TelegramFileService fileService;
     private final AudioPipelineService audioPipeline;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final MetricsService metricsService;
 
     private static final String TOPIC_PROCESSED = "t1000.audio.processed";
 
-    // Usamos um novo groupId ("t1000-workers-v4") para ignorar qualquer histórico de leitura
     @KafkaListener(topics = "t1000.audio.received", groupId = "t1000-workers-v1")
     public void consumeAudioRequest(@Payload AudioReceivedEvent event) {
         log.info(
@@ -36,15 +37,14 @@ public class AudioWorkerService {
         File audioFile = null;
         int duration = event.duration();
         try {
-            // 1. Baixa o arquivo do Telegram de forma autônoma no Worker
             audioFile = fileService.baixarArquivo(event.fileId());
             if (audioFile == null || !audioFile.exists()) {
                 log.error("❌ [Kafka Worker] Arquivo não encontrado para fileId={}", event.fileId());
+                metricsService.error("audio_worker_arquivo_nao_encontrado");
                 publicarResposta(event, false, "Arquivo temporário não encontrado.", 0);
                 return;
             }
 
-            // 2. Processa o fluxo de áudio (Whisper + Llama)
             audioPipeline.processarFluxoAudio(
                     audioFile,
                     event.groupId() != 0 ? event.groupId() : event.chatId(),
@@ -55,16 +55,19 @@ public class AudioWorkerService {
                             log.info(
                                     "✅ [Kafka Worker] Transcrição concluída para chatId={}",
                                     event.chatId());
-                            // Dispara o evento de sucesso apenas quando o fluxo inteiro finalizou
                             publicarResposta(event, true, null, duration);
                         }
                     });
+
+            // 👇 NOVO — caminho de sucesso (o pipeline rodou até o callback final)
+            metricsService.success("audio_worker_sucesso");
 
         } catch (Exception e) {
             log.error(
                     "❌ [Kafka Worker] Erro crítico ao processar áudio fileId={}",
                     event.fileId(),
                     e);
+            metricsService.error("audio_worker_erro");
             publicarResposta(event, false, e.getMessage(), 0);
         } finally {
             if (audioFile != null && audioFile.exists()) {
@@ -93,6 +96,7 @@ public class AudioWorkerService {
                                         "❌ [Kafka Worker] Falha ao publicar resposta. fileId={}",
                                         responseEvent.fileId(),
                                         ex);
+                                metricsService.error("audio_worker_resposta_falha");
                             } else {
                                 log.info(
                                         "✅ [Kafka Worker] Resposta publicada. fileId={},"
@@ -100,6 +104,7 @@ public class AudioWorkerService {
                                         responseEvent.fileId(),
                                         result.getRecordMetadata().partition(),
                                         result.getRecordMetadata().offset());
+                                metricsService.success("audio_worker_resposta_publicada");
                             }
                         });
     }

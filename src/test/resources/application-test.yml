@@ -23,6 +23,11 @@ spring:
     locations:
       - classpath:db/migration
 
+podcast:
+  retry:
+    max-attempts: 3
+    delay-ms: 10 # rápido nos testes
+
 telegram:
   bot:
     polling:

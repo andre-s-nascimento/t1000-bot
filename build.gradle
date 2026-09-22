@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'net.ddns.adambravo79'
-version = '2.5.1'
+version = '2.5.2'
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(21) }
@@ -27,7 +27,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
 
@@ -76,6 +75,13 @@ dependencies {
     implementation 'org.postgresql:postgresql'
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+
+    // Observabilidade - Sprint 3
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    //implementation 'net.logstash.logback:logstash-logback-encoder'
+    // Source: https://mvnrepository.com/artifact/net.logstash.logback/logstash-logback-encoder
+    implementation 'net.logstash.logback:logstash-logback-encoder:9.0'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok:1.18.34'

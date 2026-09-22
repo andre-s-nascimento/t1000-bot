@@ -36,22 +36,9 @@ import net.ddns.adambravo79.tmill.exception.DigestSendException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramMessageSplitter;
 
-/**
- * Serviço responsável pela geração e envio de digests diários de conversas.
- *
- * <p>Exception handling strategy:
- *
- * <ul>
- *   <li>{@link DataAccessException} — erro no banco de dados; log + skip digest.
- *   <li>{@link HttpClientErrorException} — erro no Groq (rate limit, auth, etc.).
- *   <li>{@link GroqRateLimitException} — rate limit específico do Groq.
- *   <li>{@link DigestGenerationException} — erro na geração do conteúdo do digest.
- *   <li>{@link DigestSendException} — erro no envio para o Telegram.
- *   <li>Erros fatais (Error, InterruptedException) — NUNCA engolidos.
- * </ul>
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -61,7 +48,6 @@ public class DailyDigestService {
     private static final int ALLOWED_MESSAGES_MARGIN = 2000;
     private static final int TRUNCATE_SLICE_DIVISOR = 3;
 
-    /** Formato interno para queries SQL: yyyy-MM-dd HH:mm:ss */
     private static final DateTimeFormatter SQL_DTF =
             DateTimeFormatter.ofPattern(BotMessages.FMT_YYYY_MM_DD + " HH:mm:ss");
 
@@ -72,6 +58,7 @@ public class DailyDigestService {
     private final JdbcTemplate jdbcTemplate;
     private final GroqClient groqClient;
     private final TelegramFacade telegramFacade;
+    private final MetricsService metricsService; // 👈 NOVO
 
     @org.springframework.beans.factory.annotation.Value("${digest.enabled:false}")
     private boolean digestEnabled;
@@ -90,9 +77,7 @@ public class DailyDigestService {
 
         for (String s : digestChatIdsStr.split(",")) {
             String trimmed = s.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
+            if (trimmed.isEmpty()) continue;
             try {
                 digestChatIds.add(Long.parseLong(trimmed));
             } catch (NumberFormatException e) {
@@ -105,16 +90,6 @@ public class DailyDigestService {
         }
     }
 
-    /**
-     * Gera um digest para um período personalizado e chat específico.
-     *
-     * @param from início do período
-     * @param to fim do período
-     * @param specificChatId chat alvo (null para todos os chats configurados)
-     * @throws IllegalArgumentException se from estiver após to
-     * @throws DigestGenerationException se houver erro na geração do digest
-     * @throws DigestSendException se houver erro no envio
-     */
     public void generateDigestCustom(LocalDateTime from, LocalDateTime to, Long specificChatId) {
         if (from == null || to == null) {
             throw new IllegalArgumentException(
@@ -163,6 +138,7 @@ public class DailyDigestService {
 
             if (allMessages.isEmpty()) {
                 log.info("Nenhuma interação encontrada no período.");
+                metricsService.error("digest_sem_mensagens"); // 👈 NOVO
                 return;
             }
 
@@ -174,6 +150,7 @@ public class DailyDigestService {
             String summary = generateSummary(finalMessages, periodLabel);
             if (summary == null || summary.isBlank()) {
                 log.warn("Resumo vazio do Groq para período {}.", periodLabel);
+                metricsService.error("digest_groq_vazio"); // 👈 NOVO
                 return;
             }
 
@@ -184,9 +161,11 @@ public class DailyDigestService {
                 sendDigestToChat(chatId, finalMessage);
             }
 
+            metricsService.success("digest_gerado_sucesso"); // 👈 NOVO
+
         } catch (DataAccessException e) {
             log.error("❌ Erro de acesso ao banco de dados ao gerar digest {}", periodLabel, e);
-            // Não relança — digest é best-effort, mas logamos severamente
+            metricsService.error("digest_db_error"); // 👈 NOVO
 
         } catch (HttpClientErrorException e) {
             log.error(
@@ -194,22 +173,26 @@ public class DailyDigestService {
                     periodLabel,
                     e.getStatusCode(),
                     e);
-            // Rate limit ou erro de autenticação — não retry aqui, apenas log
+            metricsService.error("digest_groq_http_error"); // 👈 NOVO
 
         } catch (GroqRateLimitException e) {
             log.error(
                     "❌ Rate limit do Groq ao gerar digest {}. Considerar retry agendado.",
                     periodLabel,
                     e);
+            metricsService.error("digest_groq_rate_limit"); // 👈 NOVO
 
         } catch (DigestGenerationException e) {
             log.error("❌ Falha na geração do digest {}", periodLabel, e);
+            metricsService.error("digest_groq_indisponivel"); // 👈 NOVO
 
         } catch (DigestSendException e) {
             log.error("❌ Falha no envio do digest {}", periodLabel, e);
+            metricsService.error("digest_envio_erro"); // 👈 NOVO
 
         } catch (RuntimeException e) {
             log.error("❌ Erro inesperado de runtime ao gerar digest {}", periodLabel, e);
+            metricsService.error("digest_erro_inesperado"); // 👈 NOVO
             throw new DigestGenerationException(
                     "Erro inesperado ao gerar digest: " + periodLabel, e);
         }
@@ -271,8 +254,6 @@ public class DailyDigestService {
                 .build();
     }
 
-    // ======================== FETCH & BUILD ========================
-
     @SuppressWarnings({"null", "TimeZone"})
     private String buildMessagesBlock(List<ChatMessage> messages) {
         StringBuilder sb = new StringBuilder();
@@ -309,7 +290,6 @@ public class DailyDigestService {
         return sb.toString();
     }
 
-    /** Faz parse seguro de timestamp, suportando formatos com e sem 'T'. */
     private LocalDateTime parseTimestampSafely(String timestamp) {
         if (timestamp == null || timestamp.isBlank()) {
             return null;
@@ -334,7 +314,6 @@ public class DailyDigestService {
                 finalMessages.length(),
                 allowedMessagesSize);
 
-        // Tenta cortar em uma quebra de linha recente
         int slice = allowedMessagesSize / TRUNCATE_SLICE_DIVISOR;
         int len = finalMessages.length();
 
@@ -354,7 +333,6 @@ public class DailyDigestService {
         if (safeEnd >= text.length()) {
             return text.substring(Math.min(begin, text.length()));
         }
-        // Tenta encontrar uma quebra de linha antes do limite
         int cut = text.lastIndexOf('\n', safeEnd);
         if (cut > begin) {
             return text.substring(begin, cut);
@@ -363,7 +341,6 @@ public class DailyDigestService {
     }
 
     // ======================== SUMMARY ========================
-
     private String generateSummary(String finalMessages, String periodLabel) {
         try {
             DigestPersona persona = DigestPersona.T1000;
@@ -371,8 +348,10 @@ public class DailyDigestService {
         } catch (HttpClientErrorException.TooManyRequests e) {
             throw new GroqRateLimitException("Rate limit do Groq ao gerar resumo", e);
         } catch (HttpClientErrorException e) {
-            throw new DigestGenerationException(
-                    "Erro HTTP do Groq ao gerar resumo: " + e.getStatusCode(), e);
+            // 👇 REMOVIDO o wrap em DigestGenerationException.
+            // Agora propaga o HttpClientErrorException para o catch externo,
+            // que vai registrar 'digest_groq_http_error'.
+            throw e;
         } catch (ResourceAccessException e) {
             throw new DigestGenerationException("Falha de conectividade com Groq", e);
         }
@@ -391,18 +370,14 @@ public class DailyDigestService {
     // ======================== SANITIZE ========================
 
     private String sanitizeDigestText(String text) {
-        if (text == null) {
-            return "";
-        }
+        if (text == null) return "";
 
-        // Converte quebras de linha
         String sanitized =
                 text.replaceAll("(?i)<br\\s*/?>", "\n")
                         .replaceAll("(?i)</?ul\\s*>", "")
                         .replaceAll("(?i)<li\\s*>", "• ")
                         .replaceAll("(?i)</li\\s*>", "\n");
 
-        // Protege tags permitidas (usando regex mais simples para <a>)
         String protectedText =
                 sanitized
                         .replace("<b>", "##B_OPEN##")
@@ -417,13 +392,11 @@ public class DailyDigestService {
                         .replace("</code>", "##C_CLOSE##")
                         .replace("<pre>", "##P_OPEN##")
                         .replace("</pre>", "##P_CLOSE##")
-                        .replaceAll("(?i)<a[^>]*>", "##A_OPEN##") // regex simplificada
+                        .replaceAll("(?i)<a[^>]*>", "##A_OPEN##")
                         .replace("</a>", "##A_CLOSE##");
 
-        // Escapa caracteres < e > restantes
         String escaped = protectedText.replace("<", "&lt;").replace(">", "&gt;");
 
-        // Restaura tags permitidas
         String restored =
                 escaped.replace("##B_OPEN##", "<b>")
                         .replace("##B_CLOSE##", "</b>")
@@ -440,16 +413,11 @@ public class DailyDigestService {
                         .replace("##A_OPEN##", "<a>")
                         .replace("##A_CLOSE##", "</a>");
 
-        // Remove tags <a> vazias
         return restored.replaceAll("<a>\\s*</a>", "");
     }
 
     // ======================== SEND ========================
 
-    /**
-     * Envia o digest para um chat específico. Se falhar, lança DigestSendException para que o caller
-     * possa decidir.
-     */
     private void sendDigestToChat(Long chatId, String finalMessage) {
         try {
             List<String> chunks = TelegramMessageSplitter.split(finalMessage);
@@ -459,7 +427,7 @@ public class DailyDigestService {
             log.info("✅ Digest enviado chatId={}", chatId);
         } catch (DigestSendException e) {
             log.error("❌ Falha ao enviar digest chatId={}", chatId, e);
-            throw e; // Repropaga para o caller decidir
+            throw e;
         } catch (RuntimeException e) {
             log.error("❌ Erro inesperado ao enviar digest chatId={}", chatId, e);
             throw new DigestSendException(
@@ -467,10 +435,6 @@ public class DailyDigestService {
         }
     }
 
-    /**
-     * Envia um chunk de mensagem, tentando com HTML primeiro. Se houver erro de parse de entidades
-     * HTML, reenvia em texto puro.
-     */
     private void sendChunk(Long chatId, String chunk) {
         try {
             telegramFacade.enviarMensagemHtml(chatId, chunk);

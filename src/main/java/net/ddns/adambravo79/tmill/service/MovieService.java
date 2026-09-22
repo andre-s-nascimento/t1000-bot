@@ -16,6 +16,7 @@ import net.ddns.adambravo79.tmill.model.CastRecord;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 /**
  * Serviço responsável por buscar e formatar informações de filmes via API do TMDB.
@@ -29,10 +30,15 @@ public class MovieService {
 
     private final TmdbClient tmdbClient;
     private final EasterEggService easterEggService;
+    private final MetricsService metricsService;
 
-    public MovieService(TmdbClient tmdbClient, EasterEggService easterEggService) {
+    public MovieService(
+            TmdbClient tmdbClient,
+            EasterEggService easterEggService,
+            MetricsService metricsService) {
         this.tmdbClient = tmdbClient;
         this.easterEggService = easterEggService;
+        this.metricsService = metricsService;
     }
 
     /**
@@ -53,8 +59,10 @@ public class MovieService {
 
         var busca = tmdbClient.pesquisarFilme(sanitized);
         if (busca == null || busca.results() == null || busca.results().isEmpty()) {
+            metricsService.error("tmdb_buscar_filme");
             throw new MovieNotFoundException(BotMessages.FILME_NAO_ENCONTRADO + ": " + nome);
         }
+        metricsService.success("tmdb_buscar_filme");
         return busca;
     }
 
@@ -67,38 +75,51 @@ public class MovieService {
      */
     @Cacheable(value = "movieDetails", key = "#id", unless = "#result == null")
     public MovieOrchestrationResponse buscarPorId(long id) {
-        // Busca detalhes, elenco, diretor e provedores em paralelo
-        CompletableFuture<MovieRecord> detalhesFuture =
-                CompletableFuture.supplyAsync(() -> tmdbClient.buscarDetalhes(id));
-        CompletableFuture<List<CastRecord>> elencoFuture =
-                CompletableFuture.supplyAsync(() -> tmdbClient.buscarElenco(id));
-        CompletableFuture<String> diretorFuture =
-                CompletableFuture.supplyAsync(() -> tmdbClient.buscarDiretor(id));
-        CompletableFuture<String> streamingsFuture =
-                CompletableFuture.supplyAsync(() -> tmdbClient.buscarOndeAssistirFilme(id));
+        try {
+            // Busca detalhes, elenco, diretor e provedores em paralelo
+            CompletableFuture<MovieRecord> detalhesFuture =
+                    CompletableFuture.supplyAsync(() -> tmdbClient.buscarDetalhes(id));
+            CompletableFuture<List<CastRecord>> elencoFuture =
+                    CompletableFuture.supplyAsync(() -> tmdbClient.buscarElenco(id));
+            CompletableFuture<String> diretorFuture =
+                    CompletableFuture.supplyAsync(() -> tmdbClient.buscarDiretor(id));
+            CompletableFuture<String> streamingsFuture =
+                    CompletableFuture.supplyAsync(() -> tmdbClient.buscarOndeAssistirFilme(id));
 
-        CompletableFuture.allOf(detalhesFuture, elencoFuture, diretorFuture, streamingsFuture)
-                .join();
+            CompletableFuture.allOf(detalhesFuture, elencoFuture, diretorFuture, streamingsFuture)
+                    .join();
 
-        MovieRecord detalhes = detalhesFuture.join();
-        if (detalhes == null) {
-            throw new MovieNotFoundException(
-                    BotMessages.FALHA_BUSCAR_DETALHES_FILME + " para ID: " + id);
+            MovieRecord detalhes = detalhesFuture.join();
+            if (detalhes == null) {
+                throw new MovieNotFoundException(
+                        BotMessages.FALHA_BUSCAR_DETALHES_FILME + " para ID: " + id);
+            }
+
+            // Formatação dos dados em métodos auxiliares para reduzir complexidade
+            String ano = formatYear(detalhes);
+            String bandeiras = formatFlags(detalhes);
+            String elenco = formatCast(elencoFuture.join());
+            String diretor = diretorFuture.join();
+            String streamings = streamingsFuture.join();
+            String easterEgg =
+                    easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse("");
+
+            String textoHtml =
+                    buildResponseText(
+                            detalhes, diretor, elenco, ano, bandeiras, streamings, easterEgg);
+            String urlPoster = buildPosterUrl(detalhes);
+
+            MovieOrchestrationResponse response =
+                    new MovieOrchestrationResponse(textoHtml, urlPoster);
+
+            // 👇 ADICIONAR
+            metricsService.success("tmdb_buscar_detalhes");
+
+            return response;
+        } catch (Exception e) {
+            metricsService.error("tmdb_buscar_detalhes");
+            throw e;
         }
-
-        // Formatação dos dados em métodos auxiliares para reduzir complexidade
-        String ano = formatYear(detalhes);
-        String bandeiras = formatFlags(detalhes);
-        String elenco = formatCast(elencoFuture.join());
-        String diretor = diretorFuture.join();
-        String streamings = streamingsFuture.join();
-        String easterEgg = easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse("");
-
-        String textoHtml =
-                buildResponseText(detalhes, diretor, elenco, ano, bandeiras, streamings, easterEgg);
-        String urlPoster = buildPosterUrl(detalhes);
-
-        return new MovieOrchestrationResponse(textoHtml, urlPoster);
     }
 
     // ========================= MÉTODOS AUXILIARES PARA FORMATAÇÃO =========================
