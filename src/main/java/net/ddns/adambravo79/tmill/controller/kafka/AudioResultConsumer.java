@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.dto.AudioProcessedEvent;
 import net.ddns.adambravo79.tmill.service.BotAnalyticsService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Slf4j
 @Component
@@ -16,7 +17,8 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 public class AudioResultConsumer {
 
     private final TelegramFacade telegramFacade;
-    private final BotAnalyticsService botAnalyticsService; // 💾 Injeção do nosso serviço NoSQL
+    private final BotAnalyticsService botAnalyticsService;
+    private final MetricsService metricsService;
 
     @KafkaListener(topics = "t1000.audio.processed", groupId = "t1000-bot-responses")
     public void handleProcessedAudio(@Payload AudioProcessedEvent event) {
@@ -37,6 +39,7 @@ public class AudioResultConsumer {
                     event.senderName(),
                     "AUDIO_PROCESSED_SUCCESS",
                     "Áudio fileId=" + event.fileId() + " processado com sucesso.");
+            metricsService.success("audio_transcricao");
 
         } else {
             String mensagemErro =
@@ -52,6 +55,8 @@ public class AudioResultConsumer {
                     event.senderName(),
                     "AUDIO_PROCESSED_ERROR",
                     "Erro no worker para fileId=" + event.fileId() + ": " + event.mensagemErro());
+
+            metricsService.error("audio_transcricao");
         }
     }
 }

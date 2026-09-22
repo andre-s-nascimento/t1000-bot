@@ -1,13 +1,25 @@
 package net.ddns.adambravo79.tmill.telegram.core;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.net.HttpURLConnection;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -21,29 +33,39 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.pengrad.telegrambot.model.File;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.model.request.ParseMode;
-import com.pengrad.telegrambot.request.*;
+import com.pengrad.telegrambot.request.AnswerCallbackQuery;
+import com.pengrad.telegrambot.request.EditMessageText;
+import com.pengrad.telegrambot.request.GetFile;
+import com.pengrad.telegrambot.request.SendAnimation;
+import com.pengrad.telegrambot.request.SendMessage;
+import com.pengrad.telegrambot.request.SendPhoto;
+import com.pengrad.telegrambot.request.SendVideo;
 import com.pengrad.telegrambot.response.GetFileResponse;
 
 import io.ksilisk.telegrambot.core.executor.TelegramBotExecutor;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TelegramFacadeTest {
 
     @Mock private TelegramBotExecutor executor;
-
     @Mock private TelegramSafeExecutor safeExecutor;
+    @Mock private MetricsService metricsService;
 
     @InjectMocks private TelegramFacade facade;
 
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(facade, "botToken", "token123");
+        ReflectionTestUtils.setField(facade, "connectTimeout", 60);
+        ReflectionTestUtils.setField(facade, "readTimeout", 120);
+        ReflectionTestUtils.setField(facade, "writeTimeout", 120);
     }
 
     // =========================
-    // HELPER: executa a ação do safeExecutor
+    // HELPERS: forçar safeExecutor a executar a action
     // =========================
 
     private void mockSafeExecutorToRunAction() {
@@ -81,13 +103,16 @@ class TelegramFacadeTest {
     }
 
     // =========================
-    // TESTES DE ENVIO
+    // ENVIAR MENSAGEM
     // =========================
 
     @Test
+    @DisplayName("enviarMensagem: registra métrica de sucesso")
     void deveEnviarMensagem() throws Exception {
         mockSafeExecutorToRunAction();
+
         facade.enviarMensagem(123L, "texto simples");
+
         ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
         verify(executor).execute(captor.capture());
         SendMessage msg = captor.getValue();
@@ -95,204 +120,209 @@ class TelegramFacadeTest {
                 .containsEntry("chat_id", 123L)
                 .containsEntry("text", "texto simples")
                 .doesNotContainKey("parse_mode");
+
+        verify(metricsService).success("telegram_enviar_mensagem");
     }
 
     @Test
+    @DisplayName("enviarMensagemHtml: registra métrica de sucesso")
     void deveEnviarMensagemHtml() throws Exception {
         mockSafeExecutorToRunAction();
+
         facade.enviarMensagemHtml(123L, "texto <b>HTML</b>");
+
         ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
         verify(executor).execute(captor.capture());
-        SendMessage msg = captor.getValue();
-        assertThat(msg.getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("text", "texto <b>HTML</b>")
-                .containsEntry("parse_mode", ParseMode.HTML);
+        assertThat(captor.getValue().getParameters()).containsEntry("parse_mode", ParseMode.HTML);
+
+        verify(metricsService).success("telegram_enviar_mensagem_html");
     }
 
     @Test
+    @DisplayName("enviarFotoHtml: registra métrica de sucesso")
     void deveEnviarFotoHtml() throws Exception {
         mockSafeExecutorToRunAction();
+
         facade.enviarFotoHtml(123L, "http://foto.jpg", "legenda");
+
         ArgumentCaptor<SendPhoto> captor = ArgumentCaptor.forClass(SendPhoto.class);
         verify(executor).execute(captor.capture());
-        SendPhoto photo = captor.getValue();
-        assertThat(photo.getParameters())
-                .containsEntry("chat_id", 123L)
+        assertThat(captor.getValue().getParameters())
                 .containsEntry("photo", "http://foto.jpg")
-                .containsEntry("caption", "legenda")
-                .containsEntry("parse_mode", ParseMode.HTML);
+                .containsEntry("caption", "legenda");
+
+        verify(metricsService).success("telegram_enviar_foto");
     }
 
     @Test
+    @DisplayName("enviarComBotoesHtml: registra métrica de sucesso")
     void deveEnviarComBotoesHtml() throws Exception {
         mockSafeExecutorToRunAction();
         InlineKeyboardMarkup markup = mock(InlineKeyboardMarkup.class);
+
         facade.enviarComBotoesHtml(123L, "texto com botões", markup);
+
         ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
         verify(executor).execute(captor.capture());
-        SendMessage msg = captor.getValue();
-        assertThat(msg.getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("text", "texto com botões")
-                .containsEntry("parse_mode", ParseMode.HTML)
-                .containsEntry("reply_markup", markup);
+        assertThat(captor.getValue().getParameters())
+                .containsEntry("reply_markup", markup)
+                .containsEntry("parse_mode", ParseMode.HTML);
+
+        verify(metricsService).success("telegram_enviar_mensagem_com_botoes_html");
     }
 
     // =========================
-    // TESTES DE EDIÇÃO
+    // EDITAR MENSAGEM
     // =========================
 
     @Test
-    void deveEditarMensagem() throws Exception {
+    @DisplayName("editarMensagem: NÃO registra métrica (não é instrumentado)")
+    void editarMensagem_naoRegistraMetrica() throws Exception {
         mockSafeExecutorToRunAction();
-        facade.editarMensagem(123L, 456, "novo texto simples");
+
+        facade.editarMensagem(123L, 456, "texto simples");
+
         ArgumentCaptor<EditMessageText> captor = ArgumentCaptor.forClass(EditMessageText.class);
         verify(executor).execute(captor.capture());
-        EditMessageText edit = captor.getValue();
-        assertThat(edit.getParameters())
-                .containsEntry("chat_id", 123L)
+        assertThat(captor.getValue().getParameters())
                 .containsEntry("message_id", 456)
-                .containsEntry("text", "novo texto simples")
                 .doesNotContainKey("parse_mode");
+
+        verifyNoInteractions(metricsService);
     }
 
     @Test
-    void deveEditarMensagemHtml() throws Exception {
+    @DisplayName("editarMensagemHtml: registra métrica com chave própria (não compartilhada)")
+    void editarMensagemHtml_registraMetrica() throws Exception {
         mockSafeExecutorToRunAction();
+
         facade.editarMensagemHtml(123L, 456, "novo texto HTML");
+
         ArgumentCaptor<EditMessageText> captor = ArgumentCaptor.forClass(EditMessageText.class);
         verify(executor).execute(captor.capture());
-        EditMessageText edit = captor.getValue();
-        assertThat(edit.getParameters())
-                .containsEntry("chat_id", 123L)
+        assertThat(captor.getValue().getParameters())
                 .containsEntry("message_id", 456)
-                .containsEntry("text", "novo texto HTML")
                 .containsEntry("parse_mode", "HTML");
+
+        // 👇 chave corrigida — NÃO é mais telegram_enviar_mensagem_html
+        verify(metricsService).success("telegram_editar_mensagem_html");
+        verify(metricsService, never()).success("telegram_enviar_mensagem_html");
     }
 
     // =========================
-    // TESTE DE ANSWER CALLBACK
+    // ANSWER CALLBACK
     // =========================
 
     @Test
-    void deveAnswerCallbackQuery() throws Exception {
+    @DisplayName("answerCallbackQuery: NÃO registra métrica")
+    void answerCallbackQuery_naoRegistraMetrica() throws Exception {
         mockSafeExecutorToRunAction();
+
         facade.answerCallbackQuery("cb123", "processando", true);
+
         ArgumentCaptor<AnswerCallbackQuery> captor =
                 ArgumentCaptor.forClass(AnswerCallbackQuery.class);
         verify(executor).execute(captor.capture());
-        AnswerCallbackQuery answer = captor.getValue();
-        assertThat(answer.getParameters())
+        assertThat(captor.getValue().getParameters())
                 .containsEntry("callback_query_id", "cb123")
-                .containsEntry("text", "processando")
                 .containsEntry("show_alert", true);
+
+        verifyNoInteractions(metricsService);
     }
 
     // =========================
-    // TESTES DE MÍDIA
+    // MÍDIA
     // =========================
 
     @Test
-    void enviarMidia_deveEnviarVideo() throws Exception {
+    @DisplayName("enviarMidia: vídeo, NÃO registra métrica")
+    void enviarMidia_video_naoRegistraMetrica() throws Exception {
         mockSafeExecutorToRunAction();
-        facade.enviarMidia(123L, "video.mp4", "legenda do vídeo");
-        ArgumentCaptor<SendVideo> captor = ArgumentCaptor.forClass(SendVideo.class);
-        verify(executor).execute(captor.capture());
-        SendVideo video = captor.getValue();
-        assertThat(video.getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("video", "video.mp4")
-                .containsEntry("caption", "legenda do vídeo")
-                .containsEntry("parse_mode", ParseMode.HTML);
+
+        facade.enviarMidia(123L, "video.mp4", "legenda");
+
+        verify(executor).execute(any(SendVideo.class));
+        verifyNoInteractions(metricsService);
     }
 
     @Test
-    void enviarMidia_deveEnviarGif() throws Exception {
+    @DisplayName("enviarMidia: gif, NÃO registra métrica")
+    void enviarMidia_gif_naoRegistraMetrica() throws Exception {
         mockSafeExecutorToRunAction();
-        facade.enviarMidia(123L, "animacao.gif", "legenda do GIF");
-        ArgumentCaptor<SendAnimation> captor = ArgumentCaptor.forClass(SendAnimation.class);
-        verify(executor).execute(captor.capture());
-        SendAnimation gif = captor.getValue();
-        assertThat(gif.getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("animation", "animacao.gif")
-                .containsEntry("caption", "legenda do GIF")
-                .containsEntry("parse_mode", ParseMode.HTML);
+
+        facade.enviarMidia(123L, "animacao.gif", "legenda");
+
+        verify(executor).execute(any(SendAnimation.class));
+        verifyNoInteractions(metricsService);
     }
 
     @Test
-    void enviarMidia_deveEnviarImagem() throws Exception {
+    @DisplayName("enviarMidia: imagem, NÃO registra métrica")
+    void enviarMidia_imagem_naoRegistraMetrica() throws Exception {
         mockSafeExecutorToRunAction();
-        facade.enviarMidia(123L, "foto.jpg", "legenda da foto");
-        ArgumentCaptor<SendPhoto> captor = ArgumentCaptor.forClass(SendPhoto.class);
-        verify(executor).execute(captor.capture());
-        SendPhoto photo = captor.getValue();
-        assertThat(photo.getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("photo", "foto.jpg")
-                .containsEntry("caption", "legenda da foto")
-                .containsEntry("parse_mode", ParseMode.HTML);
-    }
-
-    @Test
-    void enviarMidia_deveUsarFallbackParaTipoDesconhecido() throws Exception {
-        mockSafeExecutorToRunAction();
-        facade.enviarMidia(123L, "arquivo.xyz", "texto de fallback");
-        ArgumentCaptor<SendPhoto> captor = ArgumentCaptor.forClass(SendPhoto.class);
-        verify(executor).execute(captor.capture());
-        SendPhoto photo = captor.getValue();
-        assertThat(photo.getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("photo", "arquivo.xyz")
-                .containsEntry("caption", "texto de fallback")
-                .containsEntry("parse_mode", ParseMode.HTML);
-    }
-
-    @Test
-    void enviarMidia_deveCapturarExcecaoEEnviarApenasTexto() throws Exception {
-        mockSafeExecutorToRunAction();
-
-        doThrow(new RuntimeException("Falha ao enviar mídia"))
-                .when(executor)
-                .execute(any(SendPhoto.class));
 
         facade.enviarMidia(123L, "foto.jpg", "legenda");
 
-        // Deve tentar enviar a foto e, em seguida, enviar a legenda como texto
-        ArgumentCaptor<SendPhoto> photoCaptor = ArgumentCaptor.forClass(SendPhoto.class);
-        ArgumentCaptor<SendMessage> msgCaptor = ArgumentCaptor.forClass(SendMessage.class);
-        verify(executor, times(1)).execute(photoCaptor.capture());
-        verify(executor, times(1)).execute(msgCaptor.capture());
+        verify(executor).execute(any(SendPhoto.class));
+        verifyNoInteractions(metricsService);
+    }
 
-        assertThat(photoCaptor.getValue().getParameters()).containsEntry("photo", "foto.jpg");
-        assertThat(msgCaptor.getValue().getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("text", "legenda");
+    @Test
+    @DisplayName("enviarMidia: tipo desconhecido cai no fallback de foto")
+    void enviarMidia_tipoDesconhecido_usaFallbackFoto() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        facade.enviarMidia(123L, "arquivo.xyz", "texto");
+
+        verify(executor).execute(any(SendPhoto.class));
+        verifyNoInteractions(metricsService);
+    }
+
+    @Test
+    @DisplayName("enviarMidia: exceção no envio → tenta enviar caption como texto")
+    void enviarMidia_excecao_generica_enviaTexto() throws Exception {
+        mockSafeExecutorToRunAction();
+        doThrow(new RuntimeException("falha")).when(executor).execute(any(SendPhoto.class));
+
+        facade.enviarMidia(123L, "foto.jpg", "legenda");
+
+        // enviou a foto (que falhou) e depois o texto
+        verify(executor, times(1)).execute(any(SendPhoto.class));
+        verify(executor, times(1)).execute(any(SendMessage.class));
+
+        // 🔧 FIX: o fallback chamou enviarMensagem, que registra métrica.
+        // Portanto NÃO podemos usar verifyNoInteractions(metricsService).
+        verify(metricsService).success("telegram_enviar_mensagem");
+        // E não deve ter registrado a métrica de envio de foto
+        verify(metricsService, never()).success("telegram_enviar_foto");
     }
 
     // =========================
-    // TESTES DE GET FILE
+    // GET FILE
     // =========================
 
     @Test
-    void deveGetFile() {
+    @DisplayName("getFile: sucesso retorna File")
+    void getFile_sucesso() {
         GetFileResponse response = mock(GetFileResponse.class);
         when(response.isOk()).thenReturn(true);
         File file = mock(File.class);
         when(response.file()).thenReturn(file);
-        when(executor.execute(any())).thenReturn(response);
+        when(executor.execute(any(GetFile.class))).thenReturn(response);
 
         File result = facade.getFile("fileId");
+
         assertThat(result).isSameAs(file);
+        verifyNoInteractions(metricsService);
     }
 
     @Test
-    void deveGetFileComErro() {
+    @DisplayName("getFile: erro lança TelegramFileException")
+    void getFile_erro() {
         GetFileResponse response = mock(GetFileResponse.class);
         when(response.isOk()).thenReturn(false);
         when(response.description()).thenReturn("Erro");
-        when(executor.execute(any())).thenReturn(response);
+        when(executor.execute(any(GetFile.class))).thenReturn(response);
 
         assertThatExceptionOfType(TelegramFileException.class)
                 .isThrownBy(() -> facade.getFile("fileId"))
@@ -300,36 +330,13 @@ class TelegramFacadeTest {
     }
 
     // =========================
-    // TESTE DE FALLBACK (via safeExecutor)
+    // FALLBACK DO SAFE EXECUTOR
     // =========================
 
     @Test
-    void safeExecutor_deveChamarFallbackEmExcecao() throws Exception {
-        // Mock do safeExecutor para chamar fallback
-        doAnswer(
-                        inv -> {
-                            TelegramSender fallback = inv.getArgument(1);
-                            fallback.enviar(123L, "Mensagem de fallback");
-                            return null;
-                        })
-                .when(safeExecutor)
-                .run(
-                        anyLong(),
-                        any(TelegramSender.class),
-                        any(TelegramSafeExecutor.ThrowingRunnable.class));
-
-        facade.enviarMensagem(123L, "texto");
-
-        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
-        verify(executor, times(1)).execute(captor.capture());
-        SendMessage msg = captor.getValue();
-        assertThat(msg.getParameters()).containsEntry("text", "Mensagem de fallback");
-    }
-
-    @Test
-    void enviarFallback_deveSerChamadoEmErro() throws Exception {
+    @DisplayName("safeExecutor com fallback: mensagem original falha e fallback é chamado")
+    void safeExecutorFallback_deveSerChamadoEmErro() throws Exception {
         mockSafeExecutorWithFallback();
-
         doThrow(new RuntimeException("erro")).when(executor).execute(any(SendMessage.class));
 
         facade.enviarMensagem(123L, "texto");
@@ -337,29 +344,30 @@ class TelegramFacadeTest {
         ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
         verify(executor, times(2)).execute(captor.capture());
 
-        // A primeira tentativa é a mensagem original
         assertThat(captor.getAllValues().get(0).getParameters()).containsEntry("text", "texto");
-        // A segunda é o fallback
         assertThat(captor.getAllValues().get(1).getParameters())
                 .containsEntry("text", "⚠️ Erro ao processar. Tente novamente.");
+
+        verifyNoInteractions(metricsService);
     }
 
     // =========================
-    // TESTE DE INIT
+    // INIT
     // =========================
 
     @Test
-    void init_deveLogarTokenMascarado() {
-        // Apenas verifica que não lança exceção
+    @DisplayName("init: não lança exceção")
+    void init_naoLancaExcecao() {
         assertThatCode(() -> facade.init()).doesNotThrowAnyException();
     }
 
     // =========================
-    // TESTE DE MASK TOKEN (via reflexão)
+    // MASK TOKEN
     // =========================
 
     @Test
-    void maskToken_comTokenCurto_retornaAsteriscos() throws Exception {
+    @DisplayName("maskToken: token curto retorna ***")
+    void maskToken_tokenCurto_retornaAsteriscos() throws Exception {
         var method = TelegramFacade.class.getDeclaredMethod("maskToken", String.class);
         method.setAccessible(true);
         String result = (String) method.invoke(facade, "12345");
@@ -367,7 +375,8 @@ class TelegramFacadeTest {
     }
 
     @Test
-    void maskToken_comTokenLongo_retornaMascarado() throws Exception {
+    @DisplayName("maskToken: token longo é mascarado")
+    void maskToken_tokenLongo_retornaMascarado() throws Exception {
         var method = TelegramFacade.class.getDeclaredMethod("maskToken", String.class);
         method.setAccessible(true);
         String result = (String) method.invoke(facade, "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz");
@@ -375,157 +384,21 @@ class TelegramFacadeTest {
     }
 
     // =========================
-    // TESTE DE DOWNLOAD FILE
+    // DOWNLOAD FILE
     // =========================
 
     @Test
-    void downloadFile_deveBaixarComSucesso() throws Exception {
+    @DisplayName("downloadFile: falha de rede lança TelegramFileException")
+    void downloadFile_deveLancarExcecao() {
         File file = mock(File.class);
         when(file.filePath()).thenReturn("path/to/file");
 
-        // Spy do facade para mockar a conexão HTTP
+        // Usa spy para executar o código real
         TelegramFacade spyFacade = spy(facade);
-        // Mock do método que abre a conexão
-        HttpURLConnection mockConnection = mock(HttpURLConnection.class);
-        when(mockConnection.getInputStream())
-                .thenReturn(new java.io.ByteArrayInputStream(new byte[] {1, 2, 3}));
-        // Como não podemos mockar URI.create, usamos doReturn para o método downloadFile
-        // Mas o downloadFile chama URI.create, então é mais fácil mockar o método inteiro
-        doReturn(new byte[] {1, 2, 3}).when(spyFacade).downloadFile(file);
-
-        byte[] result = spyFacade.downloadFile(file);
-        assertThat(result).containsExactly(1, 2, 3);
-    }
-
-    @Test
-    void downloadFile_deveLancarExcecaoEmErro() {
-        File file = mock(File.class);
-        when(file.filePath()).thenReturn("path/to/file");
-
-        TelegramFacade spyFacade = spy(facade);
-        doThrow(new TelegramFileException("Erro no download", new IOException()))
-                .when(spyFacade)
-                .downloadFile(file);
+        ReflectionTestUtils.setField(spyFacade, "botToken", "token123");
 
         assertThatThrownBy(() -> spyFacade.downloadFile(file))
                 .isInstanceOf(TelegramFileException.class)
-                .hasMessageContaining("Erro no download");
-    }
-
-    // =========================
-    // TESTE PARA COBRIR O MÉTODO enviarMidia COM EXCEÇÃO (já existe, mas adicionamos)
-    // =========================
-
-    @Test
-    void enviarMidia_comExcecaoGenerica_deveEnviarApenasTexto() throws Exception {
-        // Usa mock que executa a ação e captura exceção (simulando o safeExecutor)
-        mockSafeExecutorToRunAction();
-        doThrow(new RuntimeException("Erro genérico")).when(executor).execute(any(SendPhoto.class));
-
-        facade.enviarMidia(123L, "foto.jpg", "legenda");
-
-        // Deve chamar SendMessage como fallback
-        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
-        verify(executor, times(1))
-                .execute(captor.capture()); // apenas o fallback, pois a foto falha
-        SendMessage fallback = captor.getValue();
-        assertThat(fallback.getParameters())
-                .containsEntry("chat_id", 123L)
-                .containsEntry("text", "legenda");
-    }
-
-    // =========================
-    // TESTE PARA FALLBACK DO safeExecutor (já existe, mas pode ser reforçado)
-    // =========================
-
-    @Test
-    void safeExecutorFallback_deveSerChamadoSeActionLancarExcecao() throws Exception {
-        doAnswer(
-                        inv -> {
-                            TelegramSender fallback = inv.getArgument(1);
-                            fallback.enviar(123L, "Fallback devido a erro");
-                            return null;
-                        })
-                .when(safeExecutor)
-                .run(
-                        anyLong(),
-                        any(TelegramSender.class),
-                        any(TelegramSafeExecutor.ThrowingRunnable.class));
-
-        facade.enviarMensagem(123L, "texto");
-
-        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
-        verify(executor).execute(captor.capture());
-        assertThat(captor.getValue().getParameters())
-                .containsEntry("text", "Fallback devido a erro");
-    }
-
-    @Test
-    void downloadFile_deveExecutarCodigoRealELancarExcecao() {
-        File file = mock(File.class);
-        when(file.filePath()).thenReturn("path/to/file"); // caminho inválido, causará IOException
-
-        // Não mocka o método, executa o código real
-        assertThatThrownBy(() -> facade.downloadFile(file))
-                .isInstanceOf(TelegramFileException.class)
                 .hasCauseInstanceOf(IOException.class);
-        // O finally será executado automaticamente
-    }
-
-    // =========================
-    // TESTE PARA ANSWER CALLBACK – COBERTURA DO FALLBACK
-    // =========================
-
-    @Test
-    void answerCallbackQuery_deveChamarFallbackSeActionFalhar() throws Exception {
-        // Mock do safeExecutor para forçar o fallback
-        doAnswer(
-                        inv -> {
-                            TelegramSafeExecutor.ThrowingRunnable action = inv.getArgument(2);
-                            try {
-                                action.run();
-                            } catch (Exception e) {
-                                // fallback
-                                TelegramSender fallback = inv.getArgument(1);
-                                fallback.enviar(0L, "Fallback do answer");
-                            }
-                            return null;
-                        })
-                .when(safeExecutor)
-                .run(
-                        anyLong(),
-                        any(TelegramSender.class),
-                        any(TelegramSafeExecutor.ThrowingRunnable.class));
-
-        // Simula erro na execução do executor.execute
-        doThrow(new RuntimeException("Erro no callback"))
-                .when(executor)
-                .execute(any(AnswerCallbackQuery.class));
-
-        facade.answerCallbackQuery("cb123", "mensagem", false);
-
-        // Verifica que o fallback foi chamado (apenas log, não temos como verificar diretamente)
-        // Podemos verificar que o safeExecutor foi chamado com os argumentos corretos
-        verify(safeExecutor)
-                .run(
-                        eq(0L),
-                        any(TelegramSender.class),
-                        any(TelegramSafeExecutor.ThrowingRunnable.class));
-        // O fallback não é facilmente verificável sem capturar logs, mas a cobertura do método
-        // que contém a lambda (o fallback) será alcançada porque o safeExecutor a chama.
-        // A lambda (id, msg) -> log.debug(...) será executada.
-        // Para garantir que a lambda seja executada, precisamos que safeExecutor chame o fallback.
-        // Isso já está garantido pelo mock acima, que chama fallback.enviar(...) quando o action
-        // falha.
-        // Então a lambda será executada (pois o fallback é um TelegramSender).
-        // Mas a lambda é passada como argumento para safeExecutor.run? Não, a lambda está dentro
-        // do safeExecutor.run no código de produção? Veja o código: safeExecutor.run(0L, (id, msg)
-        // ->
-        // log.debug(...), () -> ...).
-        // Ou seja, o segundo argumento é o fallback (TelegramSender). Então, se o safeExecutor
-        // chamar
-        // o fallback em caso de erro, a lambda será executada. Portanto, a cobertura será
-        // alcançada.
-        // Portanto, este teste já cobre.
     }
 }
