@@ -24,6 +24,7 @@ import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Slf4j
 @Service
@@ -37,6 +38,7 @@ public class WorldCupSchedulerService {
     private final Set<String> remindersSent = ConcurrentHashMap.newKeySet();
     private final WorldCupUpdaterService worldCupUpdaterService;
     private final Clock clock;
+    private final MetricsService metricsService;
 
     @Value(BotMessages.DEFAULT_WORLDCUP_ENABLED)
     private boolean worldcupEnabled;
@@ -48,11 +50,13 @@ public class WorldCupSchedulerService {
             StaticWorldCupService worldCupService,
             TelegramFacade telegramFacade,
             WorldCupUpdaterService worldCupUpdaterService,
-            Clock clock) {
+            Clock clock,
+            MetricsService metricsService) {
         this.worldCupService = worldCupService;
         this.telegramFacade = telegramFacade;
         this.worldCupUpdaterService = worldCupUpdaterService;
         this.clock = clock != null ? clock : Clock.systemDefaultZone();
+        this.metricsService = metricsService;
     }
 
     @PostConstruct
@@ -121,6 +125,7 @@ public class WorldCupSchedulerService {
         List<WorldCupMatch> matches = worldCupService.getMatchesForDay(date);
         if (matches.isEmpty()) {
             log.info("Nenhum jogo na data {}", date);
+            metricsService.error("worldcup_sem_jogos");
             return;
         }
 
@@ -146,6 +151,7 @@ public class WorldCupSchedulerService {
         for (Long groupId : allowedGroups) {
             telegramFacade.enviarMensagemHtml(groupId, message);
         }
+        metricsService.success("worldcup_jogos_enviados");
     }
 
     private void sendThirtyMinuteReminder(WorldCupMatch match) {
@@ -167,11 +173,13 @@ public class WorldCupSchedulerService {
         for (Long groupId : allowedGroups) {
             telegramFacade.enviarMensagemHtml(groupId, message);
         }
+        metricsService.success("worldcup_lembrete_30min_enviado");
     }
 
     public void sendResultsToChat(long chatId, LocalDate date) {
         if (!worldcupEnabled) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
+            metricsService.error("worldcup_desabilitado");
             return;
         }
 
@@ -181,11 +189,13 @@ public class WorldCupSchedulerService {
                     chatId,
                     BotMessages.WORLD_CUP_NO_MATCHES_DATE
                             + date.format(DateTimeFormatter.ofPattern(BotMessages.FMT_DD_MM_YYYY)));
+            metricsService.error("worldcup_sem_jogos");
             return;
         }
 
         String resultsMessage = buildResultsMessage(date, matches);
         telegramFacade.enviarMensagemHtml(chatId, resultsMessage);
+        metricsService.success("worldcup_resultados_enviados");
     }
 
     private String buildResultsMessage(LocalDate date, List<WorldCupMatch> matches) {
@@ -334,6 +344,7 @@ public class WorldCupSchedulerService {
     public void sendNoonMatchesToChat(long chatId) {
         if (!worldcupEnabled) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
+            metricsService.error("worldcup_desabilitado");
             return;
         }
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
@@ -343,6 +354,7 @@ public class WorldCupSchedulerService {
     public void sendEveningMatchesToChat(long chatId) {
         if (!worldcupEnabled) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
+            metricsService.error("worldcup_desabilitado");
             return;
         }
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
@@ -352,6 +364,7 @@ public class WorldCupSchedulerService {
     public void sendManualTestToChat(long chatId) {
         if (!worldcupEnabled) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
+            metricsService.error("worldcup_desabilitado");
             return;
         }
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
@@ -363,6 +376,7 @@ public class WorldCupSchedulerService {
         if (matches.isEmpty()) {
             telegramFacade.enviarMensagemHtml(
                     chatId, "📭 Nenhum jogo programado para " + date + ".");
+            metricsService.error("worldcup_sem_jogos");
             return;
         }
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM);
@@ -384,11 +398,13 @@ public class WorldCupSchedulerService {
             sb.append("\n");
         }
         telegramFacade.enviarMensagemHtml(chatId, sb.toString());
+        metricsService.success("worldcup_jogos_enviados");
     }
 
     public void sendManualTest() {
         if (!worldcupEnabled || allowedGroups.isEmpty()) {
             log.warn("Teste manual ignorado: servico desabilitado ou sem grupos");
+            metricsService.error("worldcup_desabilitado");
             return;
         }
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
@@ -412,11 +428,13 @@ public class WorldCupSchedulerService {
     public void sendMatchesToChat(long chatId, LocalDate date) {
         if (!worldcupEnabled) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
+            metricsService.error("worldcup_desabilitado");
             return;
         }
         List<WorldCupMatch> matches = worldCupService.getMatchesForDay(date);
         if (matches.isEmpty()) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_NO_MATCHES_TODAY);
+            metricsService.error("worldcup_sem_jogos");
             return;
         }
 
@@ -439,6 +457,7 @@ public class WorldCupSchedulerService {
             sb.append("\n");
         }
         telegramFacade.enviarMensagemHtml(chatId, sb.toString());
+        metricsService.success("worldcup_jogos_enviados");
     }
 
     private static final Map<String, String> TEAM_NAME_PT =

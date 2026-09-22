@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverMovieResponse;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverTvResponse;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Slf4j
 @Service
@@ -23,6 +24,8 @@ import net.ddns.adambravo79.tmill.dto.TmdbDiscoverTvResponse;
 public class WeeklyReleasesService {
 
     private final TmdbClient tmdbClient;
+    private final MetricsService metricsService;
+
     private static final int MAX_ITEMS_PER_DAY = 15;
 
     @SuppressWarnings("null")
@@ -50,6 +53,7 @@ public class WeeklyReleasesService {
                             .collect(Collectors.toList());
 
             if (filtered.isEmpty()) {
+                metricsService.error("estreias_vazias");
                 return "Nenhum lançamento encontrado para esta semana.";
             }
 
@@ -65,9 +69,12 @@ public class WeeklyReleasesService {
                                             LinkedHashMap::new,
                                             Collectors.toList()));
 
-            return formatMessage(start, end, groupedByDate);
+            String message = formatMessage(start, end, groupedByDate);
+            metricsService.success("estreias_enviadas");
+            return message;
         } catch (Exception e) {
             log.error("Erro ao obter estreias da semana", e);
+            metricsService.error("estreias_erro");
             return "❌ Erro ao consultar lançamentos. Tente novamente mais tarde.";
         }
     }

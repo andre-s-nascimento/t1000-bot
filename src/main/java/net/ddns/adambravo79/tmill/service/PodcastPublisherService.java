@@ -35,10 +35,15 @@ public class PodcastPublisherService {
     @Value("${podcast.target.user-id}")
     private long targetUserId;
 
+    @Value("${podcast.retry.max-attempts:3}")
+    private int maxRetryAttempts;
+
+    @Value("${podcast.retry.delay-ms:5000}")
+    private long retryDelayMs;
+
     // Tamanho máximo do áudio antes de comprimir (5MB)
     private static final long MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
 
-    // Agendamento: toda sexta-feira ao meio-dia (12:00)
     @Scheduled(cron = "0 0 12 * * 5", zone = "America/Sao_Paulo")
     public void publishWeeklyPodcast() {
         log.info("🎧 Iniciando geração do podcast semanal (Sexta-feira)...");
@@ -64,33 +69,51 @@ public class PodcastPublisherService {
         if (script == null || script.isBlank()) {
             log.warn("Nenhuma transcrição encontrada.");
             telegramFacade.enviarMensagem(chatId, "📭 Nenhuma transcrição para o período.");
+            metricsService.error("podcast_sem_roteiro");
             return;
         }
         log.info("📝 Roteiro gerado ({} caracteres).", script.length());
 
         // 2. Sintetiza áudio
         log.info("🔊 Iniciando síntese de áudio...");
-        byte[] audioData = ttsClient.synthesizeFullText(script);
+        byte[] audioData;
+        try {
+            audioData = ttsClient.synthesizeFullText(script);
+        } catch (Exception e) {
+            log.error("❌ Exceção na síntese do áudio", e);
+            metricsService.error("podcast_tts_vazio");
+            enviarRoteiroComoTexto(chatId, script, startDate, endDate);
+            return;
+        }
+
         if (audioData == null || audioData.length == 0) {
             log.error("❌ Áudio vazio.");
             telegramFacade.enviarMensagem(chatId, "❌ Erro ao gerar áudio do podcast.");
+            metricsService.error("podcast_tts_vazio");
             return;
         }
 
         double audioSizeMb = audioData.length / 1024.0 / 1024.0;
         log.info("🔊 Áudio sintetizado: {} bytes ({:.2f} MB)", audioData.length, audioSizeMb);
 
-        // 🔥 PASSO 2: Comprime se necessário
+        // 🔧 FIX: cálculo de redução estava sempre dando 0
         if (audioData.length > MAX_AUDIO_SIZE_BYTES) {
             log.info("🔊 Áudio grande ({:.2f} MB), comprimindo...", audioSizeMb);
+            long originalSize = audioData.length;
             audioData = compressAudio(audioData);
-            double compressedSizeMb = audioData.length / 1024.0 / 1024.0;
-            log.info(
-                    "🔊 Áudio comprimido: {} bytes ({:.2f} MB) - redução de {:.1f}%",
-                    audioData.length,
-                    compressedSizeMb,
-                    (1 - audioData.length / (double) (audioData.length * 1.0))
-                            * 100); // Será calculado depois
+
+            if (audioData.length < originalSize) {
+                double reduction = (1 - audioData.length / (double) originalSize) * 100;
+                log.info(
+                        "🔊 Áudio comprimido: {} bytes ({:.2f} MB) - redução de {:.1f}%",
+                        audioData.length, audioData.length / 1024.0 / 1024.0, reduction);
+                metricsService.success("podcast_compressao_ok");
+            } else {
+                log.warn("⚠️ FFmpeg não reduziu o tamanho. Mantendo original.");
+                metricsService.error("podcast_compressao_falha");
+            }
+        } else {
+            metricsService.success("podcast_compressao_pulada");
         }
 
         // 3. Gera nome do arquivo
@@ -117,16 +140,14 @@ public class PodcastPublisherService {
 
             log.info("📤 Enviando para o Telegram...");
 
-            // 🔥 PASSO 3: Retry com backoff
             boolean sent = sendWithRetry(chatId, finalFile, caption);
 
             if (sent) {
                 log.info("📤 Áudio enviado para chat {}", chatId);
                 metricsService.success("podcast_publicado");
             } else {
-                log.error("❌ Falha ao enviar áudio após 3 tentativas");
-                metricsService.error("podcast_publicado");
-                // Fallback: envia o roteiro como texto
+                log.error("❌ Falha ao enviar áudio após {} tentativas", maxRetryAttempts);
+                metricsService.error("podcast_falha_envio");
                 enviarRoteiroComoTexto(chatId, script, startDate, endDate);
             }
 
@@ -134,6 +155,7 @@ public class PodcastPublisherService {
 
         } catch (Exception e) {
             log.error("❌ Erro ao salvar ou enviar áudio", e);
+            metricsService.error("podcast_falha_envio");
             enviarRoteiroComoTexto(chatId, script, startDate, endDate);
         } finally {
             if (tempFile != null && Files.exists(tempFile)) {
@@ -154,9 +176,8 @@ public class PodcastPublisherService {
         log.info("✅ Podcast finalizado em {}ms", System.currentTimeMillis() - start);
     }
 
-    // ===== NOVOS MÉTODOS =====
+    // ===== COMPRESSÃO =====
 
-    /** 🔥 Compressão de áudio usando FFmpeg Reduz bitrate para 64kbps, mono, 22.05kHz */
     private byte[] compressAudio(byte[] audioData) {
         Path inputFile = null;
         Path outputFile = null;
@@ -166,7 +187,6 @@ public class PodcastPublisherService {
 
             outputFile = tempDirService.createTempFile("compress_output_", ".mp3");
 
-            // Comprime para 64kbps (qualidade aceitável, tamanho reduzido)
             String[] cmd = {
                 "ffmpeg",
                 "-y",
@@ -175,9 +195,9 @@ public class PodcastPublisherService {
                 "-b:a",
                 "64k",
                 "-ac",
-                "1", // Mono
+                "1",
                 "-ar",
-                "22050", // 22.05kHz
+                "22050",
                 outputFile.toString()
             };
 
@@ -187,7 +207,6 @@ public class PodcastPublisherService {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            // Aguarda até 60 segundos
             boolean finished = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
             int exitCode = finished ? process.exitValue() : 1;
 
@@ -216,20 +235,17 @@ public class PodcastPublisherService {
         }
     }
 
-    /** 🔥 Envia com retry (3 tentativas, 5s de espera entre elas) */
+    // 🔧 FIX: delay configurável via `podcast.retry.delay-ms`
     private boolean sendWithRetry(long chatId, Path file, String caption) {
-        int maxRetries = 3;
-        long retryDelayMs = 5000;
-
-        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        for (int attempt = 1; attempt <= maxRetryAttempts; attempt++) {
             try {
-                log.info("📤 Tentativa {}/{} de enviar áudio", attempt, maxRetries);
+                log.info("📤 Tentativa {}/{} de enviar áudio", attempt, maxRetryAttempts);
                 telegramFacade.enviarMidia(chatId, file.toAbsolutePath().toString(), caption);
                 log.info("✅ Áudio enviado na tentativa {}", attempt);
                 return true;
             } catch (Exception e) {
                 log.warn("⚠️ Tentativa {} falhou: {}", attempt, e.getMessage());
-                if (attempt < maxRetries) {
+                if (attempt < maxRetryAttempts) {
                     try {
                         log.info("⏳ Aguardando {}ms antes da próxima tentativa...", retryDelayMs);
                         Thread.sleep(retryDelayMs);
@@ -243,7 +259,8 @@ public class PodcastPublisherService {
         return false;
     }
 
-    /** 🔥 Fallback: envia o roteiro como texto se o áudio falhar */
+    // ===== FALLBACK DE TEXTO =====
+
     private void enviarRoteiroComoTexto(
             long chatId, String script, LocalDate startDate, LocalDate endDate) {
         try {
@@ -261,7 +278,6 @@ public class PodcastPublisherService {
             if (fullText.length() <= maxLength) {
                 telegramFacade.enviarMensagemHtml(chatId, fullText);
             } else {
-                // Envia em partes
                 int totalParts = (fullText.length() + maxLength - 1) / maxLength;
                 for (int i = 0; i < fullText.length(); i += maxLength) {
                     int partNumber = (i / maxLength) + 1;
@@ -274,15 +290,12 @@ public class PodcastPublisherService {
                 }
             }
             log.info("📝 Roteiro enviado como texto (fallback)");
+            metricsService.success("podcast_fallback_texto");
         } catch (Exception e) {
             log.error("❌ Erro ao enviar roteiro como texto", e);
         }
     }
 
-    /**
-     * Gera o nome do arquivo no formato: SilasCast-Semana-XX-do-Mes-YY-do-Ano-YYYY.mp3 onde XX é a
-     * semana dentro do mês (1-5) e YY é o mês (01-12)
-     */
     private String generatePodcastFileName(LocalDate date) {
         int weekOfMonth = (date.getDayOfMonth() - 1) / 7 + 1;
         int month = date.getMonthValue();

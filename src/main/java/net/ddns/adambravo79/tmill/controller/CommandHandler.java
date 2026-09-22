@@ -171,7 +171,7 @@ public class CommandHandler {
         }
         if (normalized.startsWith("t1000 registrar aniversario")
                 || normalized.startsWith("t1000 registrar aniversário")
-                || normalized.startsWith("t1000 anotar aniversário")
+                || normalized.startsWith("t1000 anotar aniversario")
                 || normalized.startsWith("t1000 anotar aniversário")
                 || normalized.startsWith("t1000 aniversario")
                 || normalized.startsWith("t1000 aniversário")) {
@@ -291,7 +291,9 @@ Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
 
     private void handleRegistrarAniversario(Message message, long chatId, String rawText) {
         String dataTexto =
-                rawText.replaceFirst("(?i)^t1000\\s+(registrar\\s+)?anivers[aá]rio\\s*", "").trim();
+                rawText.replaceFirst(
+                                "(?i)^t1000\\s+(registrar\\s+|anotar\\s+)?anivers[aá]rio\\s*", "")
+                        .trim();
 
         if (dataTexto.isEmpty()) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.ANIVERSARIO_PEDE_DATA);

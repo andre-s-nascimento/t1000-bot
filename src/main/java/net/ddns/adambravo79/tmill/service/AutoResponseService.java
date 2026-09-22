@@ -19,6 +19,7 @@ import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.AutoResponseRule;
 import net.ddns.adambravo79.tmill.model.AutoResponseRuleEntry;
 import net.ddns.adambravo79.tmill.model.UserOverride;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -28,6 +29,8 @@ public class AutoResponseService {
     private final Map<String, AutoResponseRule> triggerToRule = new HashMap<>();
     private final ObjectMapper objectMapper;
     private final ResourceLoader resourceLoader;
+    private final MetricsService metricsService;
+
     private static final ZoneId BRAZIL_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -40,9 +43,13 @@ public class AutoResponseService {
     // Mapa: userId -> (trigger -> último horário de resposta)
     private final Map<Long, Map<String, LocalDate>> userTriggerCooldown = new HashMap<>();
 
-    public AutoResponseService(ResourceLoader resourceLoader, ObjectMapper objectMapper) {
+    public AutoResponseService(
+            ResourceLoader resourceLoader,
+            ObjectMapper objectMapper,
+            MetricsService metricsService) {
         this.resourceLoader = resourceLoader;
         this.objectMapper = objectMapper;
+        this.metricsService = metricsService;
     }
 
     @PostConstruct
@@ -143,8 +150,7 @@ public class AutoResponseService {
     }
 
     /**
-     * Builds a map of user-specific overrides. Uses computeIfAbsent to avoid
-     * explicit
+     * Builds a map of user-specific overrides. Uses computeIfAbsent to avoid explicit
      * containsKey+put.
      */
     private Map<String, AutoResponseOverride> buildOverrides(AutoResponseRuleEntry entry) {
@@ -225,6 +231,7 @@ public class AutoResponseService {
                                                 + " recebeu hoje)",
                                         userId,
                                         trigger);
+                                metricsService.success("auto_response_suprimida");
                                 return Optional.empty();
                             }
 
@@ -246,7 +253,7 @@ public class AutoResponseService {
                             // 👇 REGISTRA QUE O USUÁRIO RECEBEU A RESPOSTA
                             recordResponse(userId, trigger);
                             log.info("✅ Trigger '{}' ativado (horário: {})", trigger, now);
-
+                            metricsService.success("auto_response_disparada");
                             return Optional.of(override);
                         });
     }

@@ -118,7 +118,7 @@ public class TelegramFacade {
                     executor.execute(
                             new EditMessageText(chatId, messageId, novoTexto)
                                     .parseMode(ParseMode.HTML));
-                    metricsService.success("telegram_enviar_mensagem_html");
+                    metricsService.success("telegram_editar_mensagem_html");
                 });
     }
 
