@@ -67,3 +67,5 @@ kafka-data/**
 /mongo-data/**
 /postgres-data
 /postgres-data/**
+/bruno
+.jsessionid

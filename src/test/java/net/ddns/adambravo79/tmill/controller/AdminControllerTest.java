@@ -66,6 +66,7 @@ class AdminControllerTest {
     @Mock private TempDirService tempDirService;
     @Mock private BirthdayService birthdayService;
     @Mock private BirthdayRepository birthdayRepository;
+    @Mock private MigrationService migrationService;
 
     private AdminController adminController;
     private ObjectMapper objectMapperSpy;
@@ -98,7 +99,8 @@ class AdminControllerTest {
                         podcastPublisherService,
                         tempDirService,
                         birthdayService,
-                        birthdayRepository);
+                        birthdayRepository,
+                        migrationService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
 

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'net.ddns.adambravo79'
-version = '2.5.2'
+version = '2.5.3'
 
 java {
     toolchain { languageVersion = JavaLanguageVersion.of(21) }
@@ -205,6 +205,13 @@ tasks.named('bootRun') {
                 .collectEntries { [it[0], it[1]] }
         environment(envVars)
     }
+    // 👇 Limita a JVM do app
+    jvmArgs = [
+        '-Xmx512m',
+        '-XX:MaxMetaspaceSize=192m',
+        '-XX:+UseG1GC',
+        '-XX:MaxGCPauseMillis=200'
+    ]
 }
 
 tasks.register('copyDependencies', Copy) {
