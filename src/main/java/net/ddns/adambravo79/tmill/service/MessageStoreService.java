@@ -33,7 +33,7 @@ public class MessageStoreService {
                     userId,
                     userName,
                     text,
-                    ignoreInDigest ? 1 : 0);
+                    ignoreInDigest);
         } catch (Exception e) {
             log.error("Erro ao salvar mensagem", e);
         }

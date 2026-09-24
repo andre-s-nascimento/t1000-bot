@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -40,7 +41,12 @@ public class AutoResponseService {
     @Value("${auto.response.file:classpath:auto-responses.json}")
     private String configFile;
 
-    // Mapa: userId -> (trigger -> último horário de resposta)
+    @Value("${auto.response.once-per-day-triggers:bom dia}")
+    private String oncePerDayTriggersRaw;
+
+    private Set<String> oncePerDayTriggers = new HashSet<>();
+
+    // Mapa: userId -> (trigger -> último dia em que respondeu)
     private final Map<Long, Map<String, LocalDate>> userTriggerCooldown = new HashMap<>();
 
     public AutoResponseService(
@@ -54,9 +60,20 @@ public class AutoResponseService {
 
     @PostConstruct
     public void init() {
+        parseOncePerDayTriggers();
         if (enabled) {
             loadResponses();
         }
+    }
+
+    private void parseOncePerDayTriggers() {
+        oncePerDayTriggers =
+                Arrays.stream(oncePerDayTriggersRaw.split(","))
+                        .map(String::trim)
+                        .map(String::toLowerCase)
+                        .filter(s -> !s.isBlank())
+                        .collect(Collectors.toSet());
+        log.info("🔁 Triggers de uma vez ao dia: {}", oncePerDayTriggers);
     }
 
     public void loadResponses() {
@@ -92,6 +109,7 @@ public class AutoResponseService {
 
     private void recordResponse(Long userId, String trigger) {
         if (userId == null) return;
+        if (!isOncePerDayTrigger(trigger)) return;
 
         userTriggerCooldown
                 .computeIfAbsent(userId, k -> new HashMap<>())
@@ -99,17 +117,15 @@ public class AutoResponseService {
     }
 
     private boolean shouldSuppressResponse(Long userId, String trigger) {
-        if (userId == null) return false; // não suprime para usuários anônimos
+        if (userId == null) return false;
+        if (!isOncePerDayTrigger(trigger)) return false;
 
-        // Pega o mapa de triggers para este usuário
         Map<String, LocalDate> userTriggers = userTriggerCooldown.get(userId);
         if (userTriggers == null) return false;
 
-        // Verifica se este trigger foi ativado hoje
         LocalDate lastResponse = userTriggers.get(trigger);
         if (lastResponse == null) return false;
 
-        // Se foi hoje, suprime a resposta
         return lastResponse.equals(LocalDate.now(BRAZIL_ZONE));
     }
 
@@ -224,7 +240,6 @@ public class AutoResponseService {
                             String trigger = entry.getKey();
                             AutoResponseRule rule = entry.getValue();
 
-                            // 👇 VERIFICA SE DEVE SUPRIMIR
                             if (shouldSuppressResponse(userId, trigger)) {
                                 log.debug(
                                         "⏭️ Resposta suprimida para userId={}, trigger='{}' (já"
@@ -250,7 +265,6 @@ public class AutoResponseService {
                                         new AutoResponseOverride(rule.response(), rule.animation());
                             }
 
-                            // 👇 REGISTRA QUE O USUÁRIO RECEBEU A RESPOSTA
                             recordResponse(userId, trigger);
                             log.info("✅ Trigger '{}' ativado (horário: {})", trigger, now);
                             metricsService.success("auto_response_disparada");
@@ -291,5 +305,24 @@ public class AutoResponseService {
                             rule.userOverrides() != null ? rule.userOverrides().size() : 0));
         }
         return summary;
+    }
+
+    /**
+     * Verifica se um trigger está na lista "once-per-day".
+     *
+     * <p>Match exato OU prefixo seguido de espaço. Assim:
+     *
+     * <ul>
+     *   <li>"bom dia" casa com "bom dia" e "bom dia família"
+     *   <li>NÃO casa com "bom diabo" (não tem espaço depois do prefixo)
+     * </ul>
+     *
+     * <p>Para variantes com pontuação (ex: "bom dia!"), inclua-as explicitamente no .env
+     * (AUTO_RESPONSE_ONCE_PER_DAY).
+     */
+    private boolean isOncePerDayTrigger(String trigger) {
+        String t = trigger.toLowerCase();
+        return oncePerDayTriggers.stream()
+                .anyMatch(prefix -> t.equals(prefix) || t.startsWith(prefix + " "));
     }
 }

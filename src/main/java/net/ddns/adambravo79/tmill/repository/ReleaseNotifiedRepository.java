@@ -70,20 +70,19 @@ public class ReleaseNotifiedRepository {
     // Busca lançamentos completos entre duas datas
     public List<FullRelease> findFullReleasesBetween(LocalDate from, LocalDate to) {
         String sql =
-"""
-    SELECT tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path
-    FROM releases_notified
-    WHERE CAST(notified_at AS DATE) BETWEEN ? AND ?
-    ORDER BY notified_at ASC
-""";
-        // USANDO CAST E PASSANDO OS OBJETOS LOCALDATE DIRETAMENTE
+                """
+                SELECT tmdb_id, media_type, release_date, title, overview, rating, providers, poster_path
+                FROM releases_notified
+                WHERE release_date BETWEEN ? AND ?     -- 🔧 FIX: usar release_date
+                ORDER BY release_date ASC              -- 🔧 FIX: usar release_date
+                """;
+
         return jdbcTemplate.query(
                 sql,
                 (rs, rowNum) ->
                         new FullRelease(
                                 rs.getLong("tmdb_id"),
                                 rs.getString("media_type"),
-                                // O driver do PG retorna LocalDate nativamente via getObject
                                 rs.getObject("release_date", LocalDate.class),
                                 rs.getString("title"),
                                 rs.getString("overview"),

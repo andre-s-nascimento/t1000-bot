@@ -62,7 +62,7 @@ public class AudioService {
             drainThread.setDaemon(true);
             drainThread.start();
 
-            boolean finished = p.waitFor(30, TimeUnit.SECONDS);
+            boolean finished = p.waitFor(180, TimeUnit.SECONDS);
             drainThread.join(1000); // aguarda até 1s a drenagem
 
             if (finished && p.exitValue() == 0) {

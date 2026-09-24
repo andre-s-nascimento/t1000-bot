@@ -59,6 +59,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
+import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
@@ -67,6 +68,7 @@ import net.ddns.adambravo79.tmill.service.BirthdayService;
 import net.ddns.adambravo79.tmill.service.DailyDigestService;
 import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
+import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
@@ -119,6 +121,7 @@ public class AdminController {
     private final TempDirService tempDirService;
     private final BirthdayService birthdayService;
     private final BirthdayRepository birthdayRepository;
+    private final MigrationService migrationService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -1091,5 +1094,98 @@ public class AdminController {
         }
 
         return testPodcast(chatId, null, null, days);
+    }
+
+    // ========================= MIGRAÇÃO SQLITE → POSTGRES/MONGO =========================
+
+    /**
+     * Executa a migração dos dados legados do SQLite para os novos bancos.
+     *
+     * <p>⚠️ Requer {@code migration.enabled=true} em application.properties.
+     *
+     * <p>⚠️ NÃO é idempotente. Rode uma única vez em ambiente limpo.
+     *
+     * @return resumo com contadores por tabela
+     */
+    @PostMapping("/migrate-sqlite")
+    public ResponseEntity<?> migrateFromSqlite(
+            @RequestParam(required = false, defaultValue = "false") boolean dryRun) {
+        try {
+            MigrationResult result = migrationService.migrateAll(dryRun);
+            log.info(
+                    "🚚 Migração{} concluída: status={}, duração={}ms, contadores={}",
+                    dryRun ? " (DRY-RUN)" : "",
+                    result.status(),
+                    result.durationMs(),
+                    result.tablesMigrated());
+
+            return switch (result.status()) {
+                case "SUCCESS" -> ResponseEntity.ok(result);
+                case "PARTIAL" -> ResponseEntity.status(HttpStatus.MULTI_STATUS).body(result);
+                default -> ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+            };
+        } catch (IllegalStateException e) {
+            log.warn("Migração rejeitada: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
+                    .body(Map.of("erro", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Erro inesperado na migração", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("erro", "Erro inesperado: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Dry-run: conta quantos registros existem em cada tabela do SQLite, sem migrar. Útil para saber
+     * o volume antes de rodar a migração real.
+     */
+    @GetMapping("/migrate-sqlite/preview")
+    public ResponseEntity<?> previewMigration() {
+        try {
+            Map<String, Integer> counts = migrationService.previewCounts();
+            return ResponseEntity.ok(
+                    Map.of(
+                            "arquivo", sqlitePathPublic(),
+                            "contadores", counts,
+                            "total", counts.values().stream().mapToInt(Integer::intValue).sum()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
+                    .body(Map.of("erro", e.getMessage()));
+        }
+    }
+
+    @Value("${migration.sqlite.path:./data/t1000.db}")
+    private String migrationSqlitePath;
+
+    private String sqlitePathPublic() {
+        return migrationSqlitePath;
+    }
+
+    @GetMapping("/debug/cache/{fileId}")
+    public ResponseEntity<?> debugCache(@PathVariable String fileId) {
+        var entry = fileTranscriptionCacheService.get(fileId);
+        if (entry == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("erro", "fileId não encontrado no cache", "fileId", fileId));
+        }
+
+        String bruto = entry.textoBruto();
+        String refinado = entry.textoRefinado();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("fileId", fileId);
+        result.put("brutoLength", bruto == null ? 0 : bruto.length());
+        result.put("refinadoLength", refinado == null ? 0 : refinado.length());
+        result.put("brutoVazio", bruto == null || bruto.isBlank());
+        result.put("refinadoVazio", refinado == null || refinado.isBlank());
+        result.put("timestamp", entry.timestamp());
+        result.put(
+                "primeiros200Bruto",
+                bruto == null ? "" : bruto.substring(0, Math.min(200, bruto.length())));
+        result.put(
+                "primeiros200Refinado",
+                refinado == null ? "" : refinado.substring(0, Math.min(200, refinado.length())));
+
+        return ResponseEntity.ok(result);
     }
 }

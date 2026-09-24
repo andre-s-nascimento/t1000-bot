@@ -88,10 +88,7 @@ public class AzureTtsClient {
         return compressIfNeeded(concatenated);
     }
 
-    /**
-     * 🔥 Comprime o áudio se for maior que o limite (5MB)
-     * Usa bitrate de 64kbps, mono, 22.05kHz
-     */
+    /** 🔥 Comprime o áudio se for maior que o limite (5MB) Usa bitrate de 64kbps, mono, 22.05kHz */
     private byte[] compressIfNeeded(byte[] audioData) {
         if (audioData == null || audioData.length <= MAX_AUDIO_SIZE_BYTES) {
             log.debug(
@@ -133,8 +130,8 @@ public class AzureTtsClient {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            // Aguarda até 60 segundos
-            boolean finished = process.waitFor(60, TimeUnit.SECONDS);
+            // Aguarda até 120 segundos
+            boolean finished = process.waitFor(120, TimeUnit.SECONDS);
             int exitCode = finished ? process.exitValue() : 1;
 
             if (exitCode == 0 && Files.exists(outputFile) && Files.size(outputFile) > 0) {
@@ -313,7 +310,7 @@ public class AzureTtsClient {
         try {
             ProcessBuilder checkPb = new ProcessBuilder("/usr/bin/ffmpeg", "-version");
             Process checkProcess = checkPb.start();
-            boolean finished = checkProcess.waitFor(10, TimeUnit.SECONDS);
+            boolean finished = checkProcess.waitFor(60, TimeUnit.SECONDS);
             if (!finished) {
                 log.error("FFmpeg não está disponível no sistema (timeout).");
                 return false;

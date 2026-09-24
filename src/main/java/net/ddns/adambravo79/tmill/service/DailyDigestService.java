@@ -202,20 +202,19 @@ public class DailyDigestService {
 
     @SuppressWarnings("null")
     private List<ChatMessage> fetchMessages(LocalDateTime from, LocalDateTime to) {
-        String fromStr = from.format(SQL_DTF);
-        String toStr = to.format(SQL_DTF);
-
+        // 🔧 FIX: passar LocalDateTime direto — o driver do Postgres converte para TIMESTAMP.
+        // Formatar como String quebra no Postgres (timestamp >= varchar não existe).
         List<Map<String, Object>> messages =
                 jdbcTemplate.queryForList(
                         """
                         SELECT user_name, text, timestamp
                         FROM messages
                         WHERE timestamp BETWEEN ? AND ?
-                        AND ignore_in_digest = 0
+                        AND ignore_in_digest = false
                         ORDER BY timestamp ASC
                         """,
-                        fromStr,
-                        toStr);
+                        from,
+                        to);
 
         List<Map<String, Object>> transcripts =
                 jdbcTemplate.queryForList(
@@ -223,11 +222,11 @@ public class DailyDigestService {
                         SELECT user_name, text, timestamp
                         FROM transcripts
                         WHERE timestamp BETWEEN ? AND ?
-                        AND ignore_in_digest = 0
+                        AND ignore_in_digest = false
                         ORDER BY timestamp ASC
                         """,
-                        fromStr,
-                        toStr);
+                        from,
+                        to);
 
         List<ChatMessage> allMessages = new ArrayList<>(messages.size() + transcripts.size());
 
@@ -245,7 +244,20 @@ public class DailyDigestService {
     private ChatMessage buildChatMessage(Map<String, Object> row, boolean isAudio) {
         String user = (String) row.get("user_name");
         String text = (String) row.get("text");
-        String timestamp = String.valueOf(row.get("timestamp"));
+        Object rawTimestamp = row.get("timestamp"); // 👈 pode ser Timestamp OU LocalDateTime
+
+        // 🔧 FIX: normalizar para String ISO (formato aceito pelo parseTimestampSafely)
+        String timestamp;
+        if (rawTimestamp instanceof java.sql.Timestamp ts) {
+            timestamp = ts.toLocalDateTime().toString(); // "2026-09-22T10:00"
+        } else if (rawTimestamp instanceof LocalDateTime ldt) {
+            timestamp = ldt.toString();
+        } else if (rawTimestamp != null) {
+            timestamp = rawTimestamp.toString();
+        } else {
+            timestamp = null;
+        }
+
         return ChatMessage.builder()
                 .user(user != null ? user : "Desconhecido")
                 .text(text != null ? text : "")

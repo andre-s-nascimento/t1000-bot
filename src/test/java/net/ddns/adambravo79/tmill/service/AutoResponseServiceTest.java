@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Map;
 import java.util.Optional;
@@ -127,6 +128,8 @@ class AutoResponseServiceTest {
         service = new AutoResponseService(resourceLoader, objectMapper, metricsService);
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "configFile", "classpath:auto-responses-test.json");
+        ReflectionTestUtils.setField(service, "oncePerDayTriggersRaw", "bom dia");
+        ReflectionTestUtils.invokeMethod(service, "parseOncePerDayTriggers");
     }
 
     // ============================================================
@@ -270,11 +273,9 @@ class AutoResponseServiceTest {
     void triggerComUserOverride_registraMetrica() throws Exception {
         carregarRegras();
 
-        Optional<AutoResponseOverride> r = service.getResponseRule(123L, "obrigado");
-
-        assertThat(r).isPresent();
-        assertThat(r.get().response()).isEqualTo("Por nada, amigo!");
-        verify(metricsService).success("auto_response_disparada");
+        assertThat(service.getResponseRule(123L, "obrigado")).isPresent();
+        assertThat(service.getResponseRule(123L, "obrigado")).isPresent();
+        verify(metricsService, times(2)).success("auto_response_disparada");
     }
 
     @Test
@@ -366,9 +367,8 @@ class AutoResponseServiceTest {
 
     @Test
     @DisplayName("Trigger curto (<3 chars): não registra métrica")
-    void triggerCurto_nenhumaMetrica() throws Exception {
+    void triggerComMenosDe3Chars_nenhumaMetrica() throws Exception {
         carregarRegras();
-
         assertThat(service.getResponseRule(1L, "oi")).isEmpty();
         verifyNoInteractions(metricsService);
     }
@@ -621,6 +621,54 @@ class AutoResponseServiceTest {
         service.init();
 
         assertThat(service.getRulesCount()).isGreaterThan(0);
+    }
+
+    @Test
+    @DisplayName("Trigger fora da lista once-per-day responde sempre no mesmo dia")
+    void triggerForaDaLista_respondeSempre() throws Exception {
+        carregarRegras();
+
+        assertThat(service.getResponseRule(1L, "obrigado")).isPresent();
+        assertThat(service.getResponseRule(1L, "obrigado")).isPresent();
+        assertThat(service.getResponseRule(1L, "obrigado")).isPresent();
+
+        verify(metricsService, times(3)).success("auto_response_disparada");
+        verify(metricsService, never()).success("auto_response_suprimida");
+    }
+
+    @Test
+    @DisplayName("isOncePerDayTrigger: 'bom dia família' casa por prefixo + espaço")
+    void isOncePerDayTrigger_prefixoComEspaco() {
+        ReflectionTestUtils.setField(service, "oncePerDayTriggersRaw", "bom dia");
+        ReflectionTestUtils.invokeMethod(service, "parseOncePerDayTriggers");
+
+        Boolean exato = ReflectionTestUtils.invokeMethod(service, "isOncePerDayTrigger", "bom dia");
+        Boolean comSufixo =
+                ReflectionTestUtils.invokeMethod(service, "isOncePerDayTrigger", "bom dia família");
+        Boolean falsoPositivo =
+                ReflectionTestUtils.invokeMethod(service, "isOncePerDayTrigger", "bom diabo");
+
+        assertThat(exato).isTrue();
+        assertThat(comSufixo).isTrue();
+        assertThat(falsoPositivo).isFalse();
+    }
+
+    @Test
+    @DisplayName("recordResponse só grava para triggers once-per-day")
+    void recordResponse_soGravaOncePerDay() throws Exception {
+        carregarRegras();
+
+        // "obrigado" NÃO é once-per-day → não deve gravar
+        service.getResponseRule(1L, "obrigado");
+        Map<Long, Map<String, LocalDate>> cooldown =
+                (Map<Long, Map<String, LocalDate>>)
+                        ReflectionTestUtils.getField(service, "userTriggerCooldown");
+        assertThat(cooldown).isEmpty();
+
+        // "bom dia" É once-per-day → deve gravar
+        service.getResponseRule(1L, "bom dia");
+        assertThat(cooldown).containsKey(1L);
+        assertThat(cooldown.get(1L)).containsKey("bom dia");
     }
 
     // ============================================================

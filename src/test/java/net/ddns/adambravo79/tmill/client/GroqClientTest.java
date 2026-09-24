@@ -110,7 +110,7 @@ class GroqClientTest {
         stubChatUri();
         ChatCompletionResponse response =
                 new ChatCompletionResponse(
-                        List.of(new Choice(new Message("assistant", "Texto refinado"))));
+                        List.of(new Choice(new Message("assistant", "Texto refinado"), "stop")));
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
         String result = groqClient.refinarTexto("texto bruto");
@@ -130,7 +130,7 @@ class GroqClientTest {
         stubChatUri();
         ChatCompletionResponse response =
                 new ChatCompletionResponse(
-                        List.of(new Choice(new Message("assistant", "Texto refinado"))));
+                        List.of(new Choice(new Message("assistant", "Texto refinado"), "stop")));
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
         groqClient.refinarTexto("texto bruto");
@@ -280,6 +280,60 @@ class GroqClientTest {
                                 groqClient.gerarResumoDigest(
                                         "mensagens", DigestPersona.T1000, "manhã"))
                 .isInstanceOf(RuntimeException.class);
+    }
+
+    @Test
+    void refinarTexto_comRespostaVaziaGroq_usaTextoBrutoComoFallback() {
+        stubChatUri();
+        // Groq devolve escolha com conteúdo VAZIO e finish_reason="stop"
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", ""), "stop")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String resultado = groqClient.refinarTexto("Texto bruto original");
+
+        // Fallback: usa o texto bruto quando o refinado é vazio
+        assertThat(resultado).isEqualTo("Texto bruto original");
+    }
+
+    @Test
+    void refinarTexto_comFinishReasonLength_usaTextoBrutoComoFallback() {
+        stubChatUri();
+        // Groq trunca (finish_reason="length") e devolve vazio
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", ""), "length")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String resultado = groqClient.refinarTexto("Texto bruto original");
+
+        assertThat(resultado).isEqualTo("Texto bruto original");
+    }
+
+    @Test
+    void chatCompletion_comFinishReasonLength_logaAviso() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "Texto curto"), "length")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        // Não deve lançar — apenas logar aviso
+        String result = groqClient.chatCompletion("system", "user", "llama", 0.5, 100);
+        assertThat(result).isEqualTo("Texto curto");
+    }
+
+    @Test
+    void chatCompletion_comContentFilter_retornaVazio() {
+        stubChatUri();
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", ""), "content_filter")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String result = groqClient.chatCompletion("system", "user", "llama", 0.5, 100);
+        assertThat(result).isEmpty();
     }
 
     // =========================

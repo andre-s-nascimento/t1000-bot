@@ -1,7 +1,9 @@
+/* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import java.io.File;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +19,7 @@ import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.model.ChatCompletionResponse;
+import net.ddns.adambravo79.tmill.model.Choice;
 import net.ddns.adambravo79.tmill.model.TranscriptionResponse;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.prompt.DigestPromptFactory;
@@ -29,6 +32,16 @@ public class GroqClient {
     private static final String CONTENT = "content";
     private static final String SYSTEM_PROMPT_REFINAMENTO =
             "Corrija a pontuação e remova vícios de fala. Retorne apenas o texto limpo.";
+
+    /**
+     * Quando o refinamento perde mais que este percentual do texto, consideramos que foi truncado
+     * (finish_reason=length). Um refinamento bem feito preserva ~95% do texto, então uma redução de
+     * mais de 30% é sinal claro de corte.
+     */
+    private static final double MAX_REFINAMENTO_REDUCAO = 0.30;
+
+    /** Textos muito curtos geram falso positivo na checagem de truncamento. */
+    private static final int MIN_LENGTH_PARA_CHECAR_TRUNCAMENTO = 200;
 
     private final RestClient restClient;
     private final DigestPromptFactory promptFactory;
@@ -43,8 +56,16 @@ public class GroqClient {
     @Value("${groq.model.digest:openai/gpt-oss-120b}")
     private String digestModel;
 
-    @Value("${groq.model.refinement.max-tokens:4000}") // fallback 4000
+    @Value("${groq.model.refinement.max-tokens:4000}")
     private int refinementMaxTokens;
+
+    /**
+     * Liga/desliga reasoning_effort=low para modelos de raciocínio (ex.: gpt-oss-20b, gpt-oss-120b).
+     * Sem isso, o modelo gasta a maior parte do max_tokens "pensando" e o output volta truncado
+     * (finish_reason=length).
+     */
+    @Value("${groq.model.reasoning-effort:low}")
+    private String reasoningEffort;
 
     @Autowired
     public GroqClient(
@@ -77,6 +98,8 @@ public class GroqClient {
         this.maxPromptLength = maxPromptLength;
     }
 
+    // ========================= TRANSCRIÇÃO =========================
+
     @Retryable(
             includes = {java.io.IOException.class, HttpClientErrorException.class},
             maxRetries = 2,
@@ -106,7 +129,8 @@ public class GroqClient {
         return response.text();
     }
 
-    // Método de refinamento de texto (usado pelo AudioPipelineService)
+    // ========================= REFINAMENTO =========================
+
     @Retryable(
             includes = {java.io.IOException.class, HttpClientErrorException.class},
             maxRetries = 3,
@@ -117,16 +141,70 @@ public class GroqClient {
         if (textoBruto == null || textoBruto.isBlank()) {
             return "";
         }
-        return chatCompletion(
-                SYSTEM_PROMPT_REFINAMENTO, textoBruto, refinementModel, 0.18, refinementMaxTokens);
+
+        log.info("🤖 Iniciando refinamento (input: {} chars)", textoBruto.length());
+
+        String resultado;
+        try {
+            resultado =
+                    chatCompletion(
+                            SYSTEM_PROMPT_REFINAMENTO,
+                            textoBruto,
+                            refinementModel,
+                            0.18,
+                            refinementMaxTokens);
+        } catch (Exception e) {
+            log.error(
+                    "❌ Erro no refinamento ({}), usando texto bruto como fallback",
+                    e.getMessage(),
+                    e);
+            return textoBruto;
+        }
+
+        // FIX 1: refinamento vazio → usa bruto
+        if (resultado == null || resultado.isBlank()) {
+            log.warn(
+                    "⚠️ Refinamento retornou VAZIO (model={}, input={} chars). Usando texto bruto"
+                            + " como fallback.",
+                    refinementModel,
+                    textoBruto.length());
+            return textoBruto;
+        }
+
+        // FIX 2: refinamento truncado (redução > 30%) → usa bruto
+        // Só checa em textos com tamanho mínimo para evitar falso positivo em inputs curtos.
+        if (textoBruto.length() >= MIN_LENGTH_PARA_CHECAR_TRUNCAMENTO) {
+            double reductionRatio = 1.0 - (resultado.length() / (double) textoBruto.length());
+            if (reductionRatio > MAX_REFINAMENTO_REDUCAO) {
+                log.warn(
+                        "⚠️ Refinamento reduziu {}% do texto (input={} chars, output={} chars)."
+                                + " Provavelmente TRUNCADO. Usando texto bruto como fallback.",
+                        (int) (reductionRatio * 100), textoBruto.length(), resultado.length());
+                return textoBruto;
+            }
+            log.info(
+                    "✅ Refinamento concluído (input: {} chars, output: {} chars, redução: {}%)",
+                    textoBruto.length(), resultado.length(), (int) (reductionRatio * 100));
+        } else {
+            log.info(
+                    "✅ Refinamento concluído (input: {} chars, output: {} chars — input curto, sem"
+                            + " checagem de truncamento)",
+                    textoBruto.length(),
+                    resultado.length());
+        }
+
+        return resultado;
     }
 
-    // Método para gerar resumo do digest
+    // ========================= DIGEST =========================
+
     public String gerarResumoDigest(String messages, DigestPersona persona, String periodLabel) {
         String systemPrompt = promptFactory.buildSystemPrompt(persona, periodLabel);
         String userPrompt = promptFactory.buildUserPrompt(messages);
         return chatCompletion(systemPrompt, userPrompt, digestModel, 0.5, 2200);
     }
+
+    // ========================= CHAT COMPLETION =========================
 
     @Retryable(
             includes = {java.io.IOException.class, HttpClientErrorException.class},
@@ -151,18 +229,25 @@ public class GroqClient {
             log.warn("⚠️ Prompt acima do limite size={} limit={}", totalSize, maxPromptLength);
         }
 
-        var payload =
-                Map.of(
-                        MODEL,
-                        model,
-                        "messages",
-                        List.of(
-                                Map.of("role", "system", CONTENT, systemPrompt),
-                                Map.of("role", "user", CONTENT, userPrompt)),
-                        "temperature",
-                        temperature,
-                        "max_tokens",
-                        maxTokens);
+        // LinkedHashMap para permitir adicionar reasoning_effort condicionalmente.
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put(MODEL, model);
+        payload.put(
+                "messages",
+                List.of(
+                        Map.of("role", "system", CONTENT, systemPrompt),
+                        Map.of("role", "user", CONTENT, userPrompt)));
+        payload.put("temperature", temperature);
+        payload.put("max_tokens", maxTokens);
+
+        // reasoning_effort=low para modelos de raciocínio (gpt-oss-*)
+        if (reasoningEffort != null
+                && !reasoningEffort.isBlank()
+                && model != null
+                && model.contains("gpt-oss")) {
+            payload.put("reasoning_effort", reasoningEffort);
+            log.debug("🧠 reasoning_effort={} aplicado em model={}", reasoningEffort, model);
+        }
 
         ChatCompletionResponse response =
                 restClient
@@ -177,6 +262,46 @@ public class GroqClient {
             throw new IllegalStateException("Resposta inválida da Groq.");
         }
 
-        return response.choices().get(0).message().content();
+        Choice choice = response.choices().get(0);
+        String content = choice.message().content();
+        String finishReason = choice.finishReason();
+        int contentLength = content == null ? 0 : content.length();
+
+        if (response.usage() != null) {
+            log.info(
+                    "✅ Groq respondeu: model={}, finish_reason={}, content={} chars,"
+                            + " tokens=(prompt={}, completion={}, total={})",
+                    model,
+                    finishReason,
+                    contentLength,
+                    response.usage().promptTokens(),
+                    response.usage().completionTokens(),
+                    response.usage().totalTokens());
+        } else {
+            log.info(
+                    "✅ Groq respondeu: model={}, finish_reason={}, content={} chars (sem usage)",
+                    model,
+                    finishReason,
+                    contentLength);
+        }
+
+        if ("length".equals(finishReason)) {
+            log.warn(
+                    "⚠️ Modelo TRUNCOU a resposta (finish_reason=length). Considere aumentar"
+                            + " max_tokens (atual={}) ou usar reasoning_effort=low.",
+                    maxTokens);
+        } else if ("content_filter".equals(finishReason)) {
+            log.warn(
+                    "⚠️ Modelo BLOQUEOU conteúdo (finish_reason=content_filter). Texto pode ter"
+                            + " sido considerado inapropriado.");
+        } else if (contentLength == 0) {
+            log.warn(
+                    "⚠️ Modelo retornou conteúdo VAZIO (finish_reason={}). Possível problema com o"
+                            + " modelo {} ou com o prompt.",
+                    finishReason,
+                    model);
+        }
+
+        return content;
     }
 }

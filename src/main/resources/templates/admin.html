@@ -618,10 +618,8 @@
                                     aria-label="Formulário de teste de auto-resposta">
                                     <div class="mb-2">
                                         <label for="autoUserId" class="form-label">User ID (opcional)</label>
-                                        <select class="form-select" name="chatId" aria-label="Chat ID" id="autoUserId">
-    <option value="">-- Vazio (Padrão) --</option>
-    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
-</select>
+                                        <input type="text" class="form-control" id="autoUserId" name="userId" placeholder="1241644136">
+                                        
                                     </div>
                                     <div class="mb-2">
                                         <label for="autoMessage" class="form-label">Mensagem</label>
@@ -630,7 +628,7 @@
                                     </div>
                                     <div class="mb-2">
                                         <label for="autoChat" class="form-label">Chat ID (opcional)</label>
-                              <select class="form-select" name="chatId" aria-label="Chat ID" id="autoUserId">
+                                    <select class="form-select" name="chatId" aria-label="Chat ID" id="autoUserId">
     <option value="">-- Vazio (Padrão) --</option>
     <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
 </select>
@@ -659,12 +657,8 @@
                                 <form id="debugForm" onsubmit="debugAutoResponse(event, this)"
                                     aria-label="Formulário de depuração de auto-resposta">
                                     <div class="mb-2">
-                                        <label for="debugUserId" class="form-label">User ID (opcional)</label>
-
-                                        <select class="form-select" name="chatId" aria-label="Chat ID" id="debugUserId" >
-    <option value="">-- Vazio (Padrão) --</option>
-    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
-</select>
+                                      <label for="debugUserId" class="form-label">User ID (opcional)</label>
+<input type="text" class="form-control" id="debugUserId" name="userId" placeholder="1241644136">
                                     </div>
                                     <div class="mb-2">
                                         <label for="debugMessage" class="form-label">Mensagem</label>

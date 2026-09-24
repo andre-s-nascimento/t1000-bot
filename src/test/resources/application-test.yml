@@ -112,3 +112,8 @@ t1000:
 
 server:
   port: 8080
+
+migration:
+  enabled: false
+  sqlite:
+    path: ./data/test-migration.db
