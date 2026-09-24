@@ -1,4 +1,3 @@
-/* (c) 2026 | 15/09/2026 */
 package net.ddns.adambravo79.tmill.config;
 
 import java.util.Arrays;
@@ -7,6 +6,8 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -20,6 +21,7 @@ import org.springframework.security.web.authentication.AuthenticationSuccessHand
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -36,10 +38,48 @@ public class SecurityConfig {
     @Value("${admin.allowed-emails:}")
     private String allowedEmailsStr;
 
-    private final AdminEmailAuthorizationFilter adminEmailAuthorizationFilter;
+    // 👈 NOVO — flag de dev
+    @Value("${admin.security.disabled:false}")
+    private boolean securityDisabled;
 
-    public SecurityConfig(AdminEmailAuthorizationFilter adminEmailAuthorizationFilter) {
+    private final AdminEmailAuthorizationFilter adminEmailAuthorizationFilter;
+    private final Environment environment; // 👈 NOVO
+
+    public SecurityConfig(
+            AdminEmailAuthorizationFilter adminEmailAuthorizationFilter,
+            Environment environment) { // 👈 NOVO
         this.adminEmailAuthorizationFilter = adminEmailAuthorizationFilter;
+        this.environment = environment;
+    }
+
+    /**
+     * 👈 NOVO — Falha o boot se a flag de desabilitar segurança for usada em produção. Isso evita
+     * deploy acidental de um ambiente sem autenticação.
+     */
+    @PostConstruct
+    public void validateSecurityConfig() {
+        if (securityDisabled) {
+            boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
+
+            if (isProd) {
+                throw new IllegalStateException(
+                        "🚨 FALHA CRÍTICA: `admin.security.disabled=true` NÃO é permitido no"
+                                + " profile `prod`. Desative a flag ou remova o profile `prod`.");
+            }
+
+            log.warn("");
+            log.warn("╔════════════════════════════════════════════════════════════════╗");
+            log.warn("║  ⚠️  MODO DEV ATIVADO — SPRING SECURITY DESABILITADO          ║");
+            log.warn("║                                                                ║");
+            log.warn("║  Endpoints /admin/** e /admin-web/** estão SEM AUTENTICAÇÃO.   ║");
+            log.warn("║                                                                ║");
+            log.warn("║  ❌ NUNCA use isso em produção!                                ║");
+            log.warn("║  ❌ NUNCA exponha essa porta publicamente!                     ║");
+            log.warn("║                                                                ║");
+            log.warn("║  Para desligar: ADMIN_SECURITY_DISABLED=false (ou remova).     ║");
+            log.warn("╚════════════════════════════════════════════════════════════════╝");
+            log.warn("");
+        }
     }
 
     @Bean
@@ -49,6 +89,20 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
+        // 👈 NOVO — caminho "dev unlock": libera tudo, sem OAuth2, sem CSRF
+        if (securityDisabled) {
+            log.warn("🔓 SecurityFilterChain: modo dev ativo — todas as rotas liberadas");
+
+            http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                    .csrf(csrf -> csrf.disable())
+                    .headers(headers -> headers.frameOptions(frame -> frame.disable()));
+
+            return http.build();
+        }
+
+        // ===================== CAMINHO NORMAL (produção) =====================
+
         List<String> allowedEmails = parseAllowedEmails();
 
         http.authorizeHttpRequests(
@@ -81,6 +135,9 @@ public class SecurityConfig {
                                         .deleteCookies("JSESSIONID"))
                 .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
                 .sessionManagement(sm -> sm.sessionFixation().changeSessionId());
+
+        // 👈 NOVO — ignora CSRF para /admin/** (API interna consumida por scripts)
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/admin/**"));
 
         log.info("🛡️ SecurityConfig carregado. E-mails autorizados: {}", allowedEmails);
 

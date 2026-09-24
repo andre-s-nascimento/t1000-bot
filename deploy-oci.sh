@@ -9,7 +9,7 @@ IMAGE_NAME="andresnascimento/t1000-bot"
 IMAGE_TAG="latest"
 DOCKER_IMAGE="$IMAGE_NAME:$IMAGE_TAG"
 
-DATA_PATH="$(pwd)/temp_audio"
+TEMP_PATH="$(pwd)/temp_audio"
 
 # Cores para output
 RED='\033[0;31m'
@@ -94,12 +94,15 @@ cleanup_docker() {
 run_container() {
     log_info "Iniciando container do $APP_NAME"
 
-    mkdir -p "$DATA_PATH"
+    # 🔧 Cria TODOS os diretórios usados pelo app
+    mkdir -p "$TEMP_PATH"
     mkdir -p "$(pwd)/logs"
-    chmod 777 "$(pwd)/logs"
-    # Garante permissões corretas para o banco
-    sudo chown -R 1000:1000 data 2>/dev/null || true
-    sudo chmod 666 data/t1000.db 2>/dev/null || true
+    mkdir -p "$(pwd)/data"
+    mkdir -p "$(pwd)/media"
+    mkdir -p "$(pwd)/config"
+
+    # 🔧 Garante que os diretórios pertencem ao usuário do host (ubuntu)
+    sudo chown -R "$(id -u):$(id -g)" "$TEMP_PATH" "$(pwd)/logs" "$(pwd)/data" "$(pwd)/media" 2>/dev/null || true
 
     docker run -d \
         --name "$APP_NAME" \
@@ -107,11 +110,12 @@ run_container() {
         --env-file .env \
         -p 8082:8082 \
         -e TZ=America/Sao_Paulo \
-        -v "$DATA_PATH:/app/temp_audio" \
+        -v "$TEMP_PATH:/app/temp" \
         -v "$(pwd)/data:/app/data" \
         -v "$(pwd)/logs:/app/logs" \
         -v "$(pwd)/config/easter-eggs.json:/app/config/easter-eggs.json" \
         -v "$(pwd)/config/auto-responses.json:/app/config/auto-responses.json" \
+        -v "$(pwd)/config/worldcup2026.json:/app/config/worldcup2026.json" \
         -v "$(pwd)/media:/app/media" \
         --memory="700m" \
         --memory-reservation="512m" \

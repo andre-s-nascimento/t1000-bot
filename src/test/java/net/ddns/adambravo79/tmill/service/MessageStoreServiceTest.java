@@ -35,7 +35,7 @@ class MessageStoreServiceTest {
                         USER_ID,
                         USER_NAME,
                         TEXT,
-                        0);
+                        false);
     }
 
     @Test

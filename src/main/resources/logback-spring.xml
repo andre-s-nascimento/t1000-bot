@@ -1,22 +1,77 @@
-<appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-    <file>logs/t1000-bot.json</file>
-    <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-        <fileNamePattern>logs/t1000-bot-%d{yyyy-MM-dd}.json.gz</fileNamePattern>
-        <maxHistory>7</maxHistory>
-    </rollingPolicy>
-    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-        <!-- Renomeia "timestamp" para "@timestamp" (exigido pelo Kibana) -->
-        <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</timestampPattern>
-        <timeZone>America/Sao_Paulo</timeZone>
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
 
-        <!-- Campos fixos em toda linha -->
-        <customFields>{"application":"t1000-bot","env":"local"}</customFields>
+    <!-- Defaults do Spring Boot -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-        <!-- Inclui stack trace em campo separado (não quebra o JSON) -->
-        <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
-            <maxDepthPerThrowable>20</maxDepthPerThrowable>
-            <maxLength>4096</maxLength>
-            <rootCauseFirst>true</rootCauseFirst>
-        </throwableConverter>
-    </encoder>
-</appender>
+    <!-- ============================================================ -->
+    <!-- APPENDER: CONSOLE                                            -->
+    <!-- ============================================================ -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- APPENDER: JSON_FILE                                          -->
+    <!-- ============================================================ -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/t1000-bot.json</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/t1000-bot-%d{yyyy-MM-dd}.json.gz</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</timestampPattern>
+            <timeZone>America/Sao_Paulo</timeZone>
+            <customFields>{"application":"t1000-bot","env":"local"}</customFields>
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerThrowable>20</maxDepthPerThrowable>
+                <maxLength>4096</maxLength>
+                <rootCauseFirst>true</rootCauseFirst>
+            </throwableConverter>
+        </encoder>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- PERFIL: default / dev / local                                -->
+    <!-- 👇 ESTE É O BLOCO QUE ESTAVA FALTANDO O <appender-ref>       -->
+    <!-- ============================================================ -->
+    <springProfile name="default,dev,local">
+        <logger name="net.ddns.adambravo79.tmill" level="DEBUG"/>
+        <logger name="org.springframework" level="INFO"/>
+        <logger name="io.ksilisk.telegrambot" level="INFO"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="JSON_FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- ============================================================ -->
+    <!-- PERFIL: test                                                 -->
+    <!-- ============================================================ -->
+    <springProfile name="test">
+        <logger name="net.ddns.adambravo79.tmill" level="INFO"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ============================================================ -->
+    <!-- PERFIL: prod                                                 -->
+    <!-- ============================================================ -->
+    <springProfile name="prod">
+        <logger name="net.ddns.adambravo79.tmill" level="INFO"/>
+        <logger name="org.springframework" level="WARN"/>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="JSON_FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>

@@ -7,6 +7,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,14 +33,14 @@ public class PodcastPublisherService {
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
 
-    @Value("${podcast.target.user-id}")
-    private long targetUserId;
-
     @Value("${podcast.retry.max-attempts:3}")
     private int maxRetryAttempts;
 
     @Value("${podcast.retry.delay-ms:5000}")
     private long retryDelayMs;
+
+    @Value("${podcast.compress.timeout-seconds:180}")
+    private long compressTimeoutSeconds;
 
     // Tamanho máximo do áudio antes de comprimir (5MB)
     private static final long MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
@@ -94,19 +95,25 @@ public class PodcastPublisherService {
         }
 
         double audioSizeMb = audioData.length / 1024.0 / 1024.0;
-        log.info("🔊 Áudio sintetizado: {} bytes ({:.2f} MB)", audioData.length, audioSizeMb);
+        log.info(
+                "🔊 Áudio sintetizado: {} bytes ({} MB)",
+                audioData.length,
+                String.format("%.2f", audioSizeMb));
 
         // 🔧 FIX: cálculo de redução estava sempre dando 0
         if (audioData.length > MAX_AUDIO_SIZE_BYTES) {
-            log.info("🔊 Áudio grande ({:.2f} MB), comprimindo...", audioSizeMb);
+            log.info("🔊 Áudio grande ({} MB), comprimindo...", String.format("%.2f", audioSizeMb));
             long originalSize = audioData.length;
             audioData = compressAudio(audioData);
 
             if (audioData.length < originalSize) {
                 double reduction = (1 - audioData.length / (double) originalSize) * 100;
+                double compressedSizeMb = audioData.length / 1024.0 / 1024.0;
                 log.info(
-                        "🔊 Áudio comprimido: {} bytes ({:.2f} MB) - redução de {:.1f}%",
-                        audioData.length, audioData.length / 1024.0 / 1024.0, reduction);
+                        "🔊 Áudio comprimido: {} bytes ({} MB) - redução de {}%",
+                        audioData.length,
+                        String.format("%.2f", compressedSizeMb),
+                        String.format("%.1f", reduction));
                 metricsService.success("podcast_compressao_ok");
             } else {
                 log.warn("⚠️ FFmpeg não reduziu o tamanho. Mantendo original.");
@@ -166,11 +173,12 @@ public class PodcastPublisherService {
                 }
             }
         }
+
         long duration = System.currentTimeMillis() - start;
         double sizeMb = audioData.length / 1024.0 / 1024.0;
         log.info(
-                "📊 Métricas: tamanho={:.2f}MB, duração={}ms, caracteres={}",
-                sizeMb,
+                "📊 Métricas: tamanho={}MB, duração={}ms, caracteres={}",
+                String.format("%.2f", sizeMb),
                 duration,
                 script.length());
         log.info("✅ Podcast finalizado em {}ms", System.currentTimeMillis() - start);
@@ -207,15 +215,15 @@ public class PodcastPublisherService {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            boolean finished = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
+            boolean finished = process.waitFor(compressTimeoutSeconds, TimeUnit.SECONDS);
             int exitCode = finished ? process.exitValue() : 1;
 
             if (exitCode == 0 && Files.exists(outputFile) && Files.size(outputFile) > 0) {
                 byte[] compressed = Files.readAllBytes(outputFile);
                 double reduction = (1 - compressed.length / (double) audioData.length) * 100;
                 log.info(
-                        "✅ Compressão concluída: {} -> {} bytes ({:.1f}% redução)",
-                        audioData.length, compressed.length, reduction);
+                        "✅ Compressão concluída: {} -> {} bytes ({}% redução)",
+                        audioData.length, compressed.length, String.format("%.1f", reduction));
                 return compressed;
             } else {
                 log.warn("⚠️ FFmpeg falhou com código {}, mantendo áudio original", exitCode);
