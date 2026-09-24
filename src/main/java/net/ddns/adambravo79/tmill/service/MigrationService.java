@@ -4,10 +4,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Savepoint;
 import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -386,75 +384,28 @@ public class MigrationService {
             boolean dryRun) {
 
         int migrated = 0;
-        Connection pgConn = null;
-        boolean originalAutoCommit = true;
-
         try (Statement st = sqlite.createStatement();
                 ResultSet rs = st.executeQuery(selectSql)) {
 
-            // 🔧 Usa a conexão direta do DataSource (não a gerenciada pelo Spring)
-            pgConn = jdbcTemplate.getDataSource().getConnection();
-            originalAutoCommit = pgConn.getAutoCommit();
-            pgConn.setAutoCommit(false); // 👈 CRÍTICO: sem isso, savepoints não isolam
-
-            try (PreparedStatement ps = pgConn.prepareStatement(insertSql)) {
-
-                while (rs.next()) {
-                    Savepoint rowSp = pgConn.setSavepoint("row_" + migrated);
-
-                    try {
-                        Object[] params = mapper.map(rs);
-                        for (int i = 0; i < params.length; i++) {
-                            ps.setObject(i + 1, params[i]);
-                        }
-                        ps.executeUpdate();
-                        pgConn.releaseSavepoint(rowSp);
-                        migrated++;
-                    } catch (Exception e) {
-                        try {
-                            pgConn.rollback(rowSp);
-                        } catch (SQLException rollbackEx) {
-                            log.warn("Falha no rollback do savepoint: {}", rollbackEx.getMessage());
-                        }
-                        errors.add(tableName + " (row " + migrated + "): " + e.getMessage());
-                    }
-                }
-
-                if (dryRun) {
-                    pgConn.rollback(); // 🔧 dry-run: rollback
-                    log.debug("🔄 [DRY-RUN] Rollback de {}", tableName);
-                } else {
-                    pgConn.commit(); // 🔧 real: commit
-                }
-                counts.put(tableName, migrated);
-                log.info(
-                        "✅ {}: {} registros {} para PostgreSQL",
-                        tableName,
-                        migrated,
-                        dryRun ? "simulados" : "migrados");
-
-            } catch (Exception e) {
-                pgConn.rollback();
-                throw e;
-            } finally {
+            while (rs.next()) {
                 try {
-                    pgConn.setAutoCommit(originalAutoCommit);
-                } catch (SQLException ignored) {
-                    log.debug("Não foi possível restaurar autoCommit");
+                    Object[] params = mapper.map(rs);
+                    jdbcTemplate.update(insertSql, params);
+                    migrated++;
+                } catch (Exception e) {
+                    errors.add(tableName + " (row " + migrated + "): " + e.getMessage());
                 }
             }
+            counts.put(tableName, migrated);
+            log.info(
+                    "✅ {}: {} registros {} para PostgreSQL",
+                    tableName,
+                    migrated,
+                    dryRun ? "simulados" : "migrados");
 
         } catch (SQLException e) {
             log.warn("⚠️ Tabela {} não existe no SQLite: {}", tableName, e.getMessage());
             counts.put(tableName, 0);
-        } finally {
-            if (pgConn != null) {
-                try {
-                    pgConn.close(); // devolve pro pool
-                } catch (SQLException ignored) {
-                    log.debug("Não foi possível fechar conexão");
-                }
-            }
         }
     }
 

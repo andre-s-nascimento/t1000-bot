@@ -69,3 +69,4 @@ kafka-data/**
 /postgres-data/**
 /bruno
 .jsessionid
+suite-nova.log

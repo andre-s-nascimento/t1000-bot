@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -39,6 +40,11 @@ public class AutoResponseService {
 
     @Value("${auto.response.file:classpath:auto-responses.json}")
     private String configFile;
+
+    @Value("${auto.response.once-per-day-triggers:bom dia}")
+    private String oncePerDayTriggersRaw;
+
+    private Set<String> oncePerDayTriggers = new HashSet<>();
 
     // Mapa: userId -> (trigger -> último horário de resposta)
     private final Map<Long, Map<String, LocalDate>> userTriggerCooldown = new HashMap<>();
@@ -75,6 +81,14 @@ public class AutoResponseService {
                 return;
             }
 
+            oncePerDayTriggers =
+                    Arrays.stream(oncePerDayTriggersRaw.split(","))
+                            .map(String::trim)
+                            .map(String::toLowerCase)
+                            .filter(s -> !s.isBlank())
+                            .collect(Collectors.toSet());
+            log.info("🔁 Triggers de uma vez ao dia: {}", oncePerDayTriggers);
+
             triggerToRule.clear();
             for (Map.Entry<String, AutoResponseRuleEntry> entry : config.rules().entrySet()) {
                 String ruleName = entry.getKey();
@@ -92,6 +106,7 @@ public class AutoResponseService {
 
     private void recordResponse(Long userId, String trigger) {
         if (userId == null) return;
+        if (!isOncePerDayTrigger(trigger)) return;
 
         userTriggerCooldown
                 .computeIfAbsent(userId, k -> new HashMap<>())
@@ -99,7 +114,8 @@ public class AutoResponseService {
     }
 
     private boolean shouldSuppressResponse(Long userId, String trigger) {
-        if (userId == null) return false; // não suprime para usuários anônimos
+        if (userId == null) return false;
+        if (!isOncePerDayTrigger(trigger)) return false;
 
         // Pega o mapa de triggers para este usuário
         Map<String, LocalDate> userTriggers = userTriggerCooldown.get(userId);
@@ -226,7 +242,7 @@ public class AutoResponseService {
 
                             // 👇 VERIFICA SE DEVE SUPRIMIR
                             if (shouldSuppressResponse(userId, trigger)) {
-                                log.debug(
+                                log.info(
                                         "⏭️ Resposta suprimida para userId={}, trigger='{}' (já"
                                                 + " recebeu hoje)",
                                         userId,
@@ -291,5 +307,10 @@ public class AutoResponseService {
                             rule.userOverrides() != null ? rule.userOverrides().size() : 0));
         }
         return summary;
+    }
+
+    private boolean isOncePerDayTrigger(String trigger) {
+        String t = trigger.toLowerCase();
+        return oncePerDayTriggers.stream().anyMatch(t::startsWith);
     }
 }

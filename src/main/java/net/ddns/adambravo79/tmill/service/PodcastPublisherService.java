@@ -207,7 +207,7 @@ public class PodcastPublisherService {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            boolean finished = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
+            boolean finished = process.waitFor(120, java.util.concurrent.TimeUnit.SECONDS);
             int exitCode = finished ? process.exitValue() : 1;
 
             if (exitCode == 0 && Files.exists(outputFile) && Files.size(outputFile) > 0) {
