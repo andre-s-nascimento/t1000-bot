@@ -46,7 +46,7 @@ public class AutoResponseService {
 
     private Set<String> oncePerDayTriggers = new HashSet<>();
 
-    // Mapa: userId -> (trigger -> último horário de resposta)
+    // Mapa: userId -> (trigger -> último dia em que respondeu)
     private final Map<Long, Map<String, LocalDate>> userTriggerCooldown = new HashMap<>();
 
     public AutoResponseService(
@@ -60,9 +60,20 @@ public class AutoResponseService {
 
     @PostConstruct
     public void init() {
+        parseOncePerDayTriggers();
         if (enabled) {
             loadResponses();
         }
+    }
+
+    private void parseOncePerDayTriggers() {
+        oncePerDayTriggers =
+                Arrays.stream(oncePerDayTriggersRaw.split(","))
+                        .map(String::trim)
+                        .map(String::toLowerCase)
+                        .filter(s -> !s.isBlank())
+                        .collect(Collectors.toSet());
+        log.info("🔁 Triggers de uma vez ao dia: {}", oncePerDayTriggers);
     }
 
     public void loadResponses() {
@@ -80,14 +91,6 @@ public class AutoResponseService {
                 log.warn("Arquivo de respostas automáticas vazio ou inválido.");
                 return;
             }
-
-            oncePerDayTriggers =
-                    Arrays.stream(oncePerDayTriggersRaw.split(","))
-                            .map(String::trim)
-                            .map(String::toLowerCase)
-                            .filter(s -> !s.isBlank())
-                            .collect(Collectors.toSet());
-            log.info("🔁 Triggers de uma vez ao dia: {}", oncePerDayTriggers);
 
             triggerToRule.clear();
             for (Map.Entry<String, AutoResponseRuleEntry> entry : config.rules().entrySet()) {
@@ -117,15 +120,12 @@ public class AutoResponseService {
         if (userId == null) return false;
         if (!isOncePerDayTrigger(trigger)) return false;
 
-        // Pega o mapa de triggers para este usuário
         Map<String, LocalDate> userTriggers = userTriggerCooldown.get(userId);
         if (userTriggers == null) return false;
 
-        // Verifica se este trigger foi ativado hoje
         LocalDate lastResponse = userTriggers.get(trigger);
         if (lastResponse == null) return false;
 
-        // Se foi hoje, suprime a resposta
         return lastResponse.equals(LocalDate.now(BRAZIL_ZONE));
     }
 
@@ -240,9 +240,8 @@ public class AutoResponseService {
                             String trigger = entry.getKey();
                             AutoResponseRule rule = entry.getValue();
 
-                            // 👇 VERIFICA SE DEVE SUPRIMIR
                             if (shouldSuppressResponse(userId, trigger)) {
-                                log.info(
+                                log.debug(
                                         "⏭️ Resposta suprimida para userId={}, trigger='{}' (já"
                                                 + " recebeu hoje)",
                                         userId,
@@ -266,7 +265,6 @@ public class AutoResponseService {
                                         new AutoResponseOverride(rule.response(), rule.animation());
                             }
 
-                            // 👇 REGISTRA QUE O USUÁRIO RECEBEU A RESPOSTA
                             recordResponse(userId, trigger);
                             log.info("✅ Trigger '{}' ativado (horário: {})", trigger, now);
                             metricsService.success("auto_response_disparada");
@@ -309,8 +307,22 @@ public class AutoResponseService {
         return summary;
     }
 
+    /**
+     * Verifica se um trigger está na lista "once-per-day".
+     *
+     * <p>Match exato OU prefixo seguido de espaço. Assim:
+     *
+     * <ul>
+     *   <li>"bom dia" casa com "bom dia" e "bom dia família"
+     *   <li>NÃO casa com "bom diabo" (não tem espaço depois do prefixo)
+     * </ul>
+     *
+     * <p>Para variantes com pontuação (ex: "bom dia!"), inclua-as explicitamente no .env
+     * (AUTO_RESPONSE_ONCE_PER_DAY).
+     */
     private boolean isOncePerDayTrigger(String trigger) {
         String t = trigger.toLowerCase();
-        return oncePerDayTriggers.stream().anyMatch(t::startsWith);
+        return oncePerDayTriggers.stream()
+                .anyMatch(prefix -> t.equals(prefix) || t.startsWith(prefix + " "));
     }
 }
