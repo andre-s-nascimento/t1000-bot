@@ -310,7 +310,7 @@ public class AzureTtsClient {
         try {
             ProcessBuilder checkPb = new ProcessBuilder("/usr/bin/ffmpeg", "-version");
             Process checkProcess = checkPb.start();
-            boolean finished = checkProcess.waitFor(20, TimeUnit.SECONDS);
+            boolean finished = checkProcess.waitFor(60, TimeUnit.SECONDS);
             if (!finished) {
                 log.error("FFmpeg não está disponível no sistema (timeout).");
                 return false;

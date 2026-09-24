@@ -270,11 +270,44 @@ public class AudioHandler {
 
     private void entregarTranscricaoCache(
             long userId, String tipo, TranscriptionCacheEntry cached, long groupId) {
+
         String texto = tipo.equals(TRANS_BRUTO) ? cached.textoBruto() : cached.textoRefinado();
         String prefixo =
                 tipo.equals(TRANS_BRUTO) ? "🎙️ Transcrição Bruta:\n" : "✨ Transcrição Refinada:\n";
+
+        // 🔧 FIX (PRD): se o texto estiver vazio, tenta o outro tipo como fallback
+        if (texto == null || texto.isBlank()) {
+            log.warn(
+                    "⚠️ Transcrição {} VAZIA no cache para userId={}. Tentando fallback.",
+                    tipo,
+                    userId);
+
+            // Se o pedido era refinado mas está vazio, tenta o bruto
+            if (tipo.equals(TRANS_REFINADO)) {
+                String brutoFallback = cached.textoBruto();
+                if (brutoFallback != null && !brutoFallback.isBlank()) {
+                    log.info("🔄 Fallback: usando transcrição BRUTA no lugar da refinada.");
+                    String aviso =
+                            "⚠️ _Não consegui refinar esta transcrição. Enviando a versão"
+                                    + " bruta:_\n\n";
+                    safeSendTranscription(userId, aviso + "🎙️ " + brutoFallback, groupId);
+                    return;
+                }
+            }
+
+            // Ambos vazios — não tem o que enviar
+            log.error("❌ Ambos bruto e refinado estão vazios para userId={}", userId);
+            safeSendMessage(
+                    userId, "❌ Não consegui obter o texto da transcrição. Tente novamente.");
+            return;
+        }
+
         safeSendTranscription(userId, prefixo + texto, groupId);
-        log.info("✅ Transcrição entregue via cache para userId={} tipo={}", userId, tipo);
+        log.info(
+                "✅ Transcrição entregue via cache para userId={} tipo={} ({} chars)",
+                userId,
+                tipo,
+                texto.length());
     }
 
     private void processarAudioCallback(

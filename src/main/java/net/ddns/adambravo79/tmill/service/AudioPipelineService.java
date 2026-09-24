@@ -160,14 +160,35 @@ public class AudioPipelineService {
         try {
             // --- Transcrição bruta ---
             String bruto = groqClient.transcrever(wavFile);
+
+            // 🔧 FIX: validar que o bruto não está vazio
+            if (bruto == null || bruto.isBlank()) {
+                log.error("❌ Transcrição bruta VAZIA para arquivo: {}", wavFile.getName());
+                throw new AudioProcessingException(
+                        "Transcrição retornou texto vazio para arquivo: " + wavFile.getName());
+            }
+
+            log.info("📝 Transcrição bruta: {} chars", bruto.length());
             callback.accept("🎙️ *Bruto:* \n_" + bruto + "_", false);
 
             // --- Refinamento com retry ---
             String refinado = retryRefinamento(bruto);
+            log.info("✨ Transcrição refinada: {} chars", refinado == null ? 0 : refinado.length());
+
+            // 🔧 FIX: se o refinado voltar vazio, usa o bruto como fallback
+            if (refinado == null || refinado.isBlank()) {
+                log.warn("⚠️ Refinamento VAZIO. Usando texto bruto como fallback.");
+                refinado = bruto;
+            }
 
             // --- Persistência ---
             transcriptStoreService.saveTranscript(chatId, userId, userName, refinado);
             chatTranscriptionCache.salvar(chatId, refinado);
+
+            log.info(
+                    "✅ Transcrição processada: bruto={} chars, refinado={} chars",
+                    bruto.length(),
+                    refinado.length());
 
             callback.accept("✨ *Refinado:* \n" + refinado, true);
 

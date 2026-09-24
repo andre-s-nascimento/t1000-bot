@@ -1160,4 +1160,32 @@ public class AdminController {
     private String sqlitePathPublic() {
         return migrationSqlitePath;
     }
+
+    @GetMapping("/debug/cache/{fileId}")
+    public ResponseEntity<?> debugCache(@PathVariable String fileId) {
+        var entry = fileTranscriptionCacheService.get(fileId);
+        if (entry == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("erro", "fileId não encontrado no cache", "fileId", fileId));
+        }
+
+        String bruto = entry.textoBruto();
+        String refinado = entry.textoRefinado();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("fileId", fileId);
+        result.put("brutoLength", bruto == null ? 0 : bruto.length());
+        result.put("refinadoLength", refinado == null ? 0 : refinado.length());
+        result.put("brutoVazio", bruto == null || bruto.isBlank());
+        result.put("refinadoVazio", refinado == null || refinado.isBlank());
+        result.put("timestamp", entry.timestamp());
+        result.put(
+                "primeiros200Bruto",
+                bruto == null ? "" : bruto.substring(0, Math.min(200, bruto.length())));
+        result.put(
+                "primeiros200Refinado",
+                refinado == null ? "" : refinado.substring(0, Math.min(200, refinado.length())));
+
+        return ResponseEntity.ok(result);
+    }
 }
