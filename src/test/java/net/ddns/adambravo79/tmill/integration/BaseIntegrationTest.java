@@ -43,6 +43,6 @@ public abstract class BaseIntegrationTest {
 
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
 
-        registry.add("spring.data.mongodb.uri", MONGO::getReplicaSetUrl);
+        registry.add("spring.mongodb.uri", MONGO::getReplicaSetUrl);
     }
 }

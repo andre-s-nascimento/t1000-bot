@@ -3,9 +3,11 @@
 # ============================================================
 
 # Supabase
-DATABASE_URL=
-DATABASE_USER=postgres
-DATABASE_PASSWORD=
+POSTGRES_DATABASE_URL=
+# Usuário com project ref (formato do pooler)
+POSTGRES_DATABASE_USER=
+# Senha (percent-encode se tiver símbolos especiais)
+POSTGRES_DATABASE_PASSWORD=
 
 # Atlas
 MONGODB_URI=mongodb+srv://user
