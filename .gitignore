@@ -70,3 +70,14 @@ kafka-data/**
 /bruno
 .jsessionid
 suite-nova.log
+
+aiven-truststore.jks
+# Certificados Kafka (Aiven)
+certs/
+*.jks
+*.p12
+*.pem
+!certs/.gitkeep
+EOF
+.env.prod
+/test-migration-speed.sh

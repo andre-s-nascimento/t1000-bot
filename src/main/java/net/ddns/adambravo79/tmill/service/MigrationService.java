@@ -383,19 +383,31 @@ public class MigrationService {
             RowMapper mapper,
             boolean dryRun) {
 
+        final int BATCH_SIZE = 500;
         int migrated = 0;
+
         try (Statement st = sqlite.createStatement();
                 ResultSet rs = st.executeQuery(selectSql)) {
 
+            List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
+
             while (rs.next()) {
                 try {
-                    Object[] params = mapper.map(rs);
-                    jdbcTemplate.update(insertSql, params);
-                    migrated++;
+                    batch.add(mapper.map(rs));
+
+                    if (batch.size() >= BATCH_SIZE) {
+                        migrated += flushBatch(tableName, insertSql, batch, errors);
+                        batch.clear();
+                    }
                 } catch (Exception e) {
                     errors.add(tableName + " (row " + migrated + "): " + e.getMessage());
                 }
             }
+
+            if (!batch.isEmpty()) {
+                migrated += flushBatch(tableName, insertSql, batch, errors);
+            }
+
             counts.put(tableName, migrated);
             log.info(
                     "✅ {}: {} registros {} para PostgreSQL",
@@ -406,6 +418,35 @@ public class MigrationService {
         } catch (SQLException e) {
             log.warn("⚠️ Tabela {} não existe no SQLite: {}", tableName, e.getMessage());
             counts.put(tableName, 0);
+        }
+    }
+
+    /**
+     * Executa INSERTs em lote e retorna o número de sucessos. Trata falhas parciais (uma linha ruim
+     * não derruba o lote inteiro).
+     */
+    private int flushBatch(
+            String tableName, String insertSql, List<Object[]> batch, List<String> errors) {
+        try {
+            int[] results = jdbcTemplate.batchUpdate(insertSql, batch);
+            int ok = 0;
+            for (int r : results) {
+                if (r >= 0 || r == Statement.SUCCESS_NO_INFO) {
+                    ok++;
+                }
+            }
+            if (ok < batch.size()) {
+                errors.add(
+                        tableName
+                                + ": "
+                                + (batch.size() - ok)
+                                + " linhas do lote falharam silenciosamente");
+            }
+            return ok;
+        } catch (Exception e) {
+            errors.add(tableName + " (lote de " + batch.size() + "): " + e.getMessage());
+            log.error("Erro no batch de {}: {}", tableName, e.getMessage(), e);
+            return 0;
         }
     }
 
