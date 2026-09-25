@@ -1,41 +1,51 @@
-TELEGRAM_BOT_TOKEN=...
+# ============================================================
+# TEMPLATE — Copie para .env (dev) ou .env.prod (container)
+# ============================================================
 
-TMDB_TOKEN=eyJh....
-TMDB_API_KEY=a23...
+# Supabase
+POSTGRES_DATABASE_URL=
+# Usuário com project ref (formato do pooler)
+POSTGRES_DATABASE_USER=
+# Senha (percent-encode se tiver símbolos especiais)
+POSTGRES_DATABASE_PASSWORD=
 
-STREAMING_AVAILABILITY_API_KEY=...
+# Atlas
+MONGODB_URI=mongodb+srv://user
 
-WATCHMODE_API_KEY=wm_c...
+# Aiven Kafka
+KAFKA_BOOTSTRAP_SERVERS=SEU_HOST.aivencloud.com:PORTA
+KAFKA_SASL_USERNAME=avnadmin
+KAFKA_SASL_PASSWORD=
 
-OPENAI_API_KEY=123
+# ⚠️ Ajuste este path conforme o ambiente:
+#   - Dev (host):  /home/SEU_USUARIO/.kafka-certs/aiven-truststore.jks
+#   - Prod (container): /app/certs/aiven-truststore.jks
+KAFKA_TRUSTSTORE_PATH=/app/certs/aiven-truststor.jks
+KAFKA_TRUSTSTORE_PASSWORD=
 
-GROQ_API_KEY=gsk_...
+# Telegram
+TELEGRAM_BOT_TOKEN=seu_token
+TELEGRAM_BOT_USERNAME=seu_bot
+TELEGRAM_OWNER_ID=seu_id
 
-TRANSCRIPTION_ENABLED=true|false
-
-GOOGLE_CLIENT_ID=236....313-4.....9.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=GOCSPX-.....
-ADMIN_ALLOWED_EMAILS=email1, email2[, ...]
-
-AZURE_SPEECH_KEY=9Bw...
+# APIs
+TMDB_READ_TOKEN=seu_token
+GROQ_API_KEY=sua_chave
+WATCHMODE_API_KEY=sua_chave
+STREAMING_AVAILABILITY_API_KEY=sua_chave
+AZURE_SPEECH_KEY=sua_chave
 AZURE_SPEECH_REGION=brazilsouth
 
-TELEGRAM_OWNER_ID=NNNNNNNNNNNN
-TELEGRAM_BOT_USERNAME=nomedo_bot
+# Admin / OAuth
+GOOGLE_CLIENT_ID=seu_id
+GOOGLE_CLIENT_SECRET=
+ADMIN_ALLOWED_EMAILS=seu@email.com
 
-WORLD_CUP_ENABLED=false|true
-WORLDCUP_UPDATE_ENABLED=false|true
-WORLDCUP_UPDATE_DESTINATION=/app/config/worldcup2026.json
+# Podcast / Digest
+PODCAST_PUBLISH_CHAT_ID=seu_chat_id
+DIGEST_ALLOWED_CHATS=seu_chat_id
+BOT_ALLOWED_CHATS=seu_chat_id
 
-# Bancos de Dados - Infraestrutura Local
-POSTGRES_USER=username
-POSTGRES_PASSWORD=senha_segura_postgres_local
-POSTGRES_DB=database_name
-
-MONGO_INITDB_ROOT_USERNAME=username
-MONGO_INITDB_ROOT_PASSWORD=senha_segura_mongo_local
-
-BOT_ALLOWED_CHATS=-100NNNNNNNN,-100NNNNNNNNNN,-NNNNNNNN
-PODCAST_PUBLISH_CHAT_ID=-100NNNNNNNNNN
-DIGEST_ALLOWED_CHATS=-100NNNNNNNN,-100NNNNNNNNNN,-NNNNNNNN
-GOOGLE_APPLICATION_CREDENTIALS=/app/config/gcp-service-account.json
+# Migração
+MIGRATION_ENABLED=false
+MIGRATION_SQLITE_PATH=./data/t1000.db

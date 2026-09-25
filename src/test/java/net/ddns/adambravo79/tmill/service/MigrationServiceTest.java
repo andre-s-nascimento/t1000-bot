@@ -3,8 +3,10 @@ package net.ddns.adambravo79.tmill.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -69,6 +71,10 @@ class MigrationServiceTest {
 
         ReflectionTestUtils.setField(service, "sqlitePath", sqliteFile.toString());
         ReflectionTestUtils.setField(service, "migrationEnabled", true);
+
+        // 🔧 FIX: mock genérico do batchUpdate para evitar NPE
+        // O retorno `new int[]{}` vazio é seguro
+        lenient().when(jdbcTemplate.batchUpdate(anyString(), anyList())).thenReturn(new int[] {});
     }
 
     // ============================================================
@@ -202,6 +208,12 @@ class MigrationServiceTest {
         insertBirthday(sqliteFile, 10L, "Fulano", 5, 10, null);
         insertBirthday(sqliteFile, 11L, "Beltrano", 20, 12, 2025);
 
+        // Mock do retorno do batchUpdate (3 messages, 2 birthdays)
+        when(jdbcTemplate.batchUpdate(contains("INSERT INTO messages"), anyList()))
+                .thenReturn(new int[] {1, 1, 1});
+        when(jdbcTemplate.batchUpdate(contains("INSERT INTO birthdays"), anyList()))
+                .thenReturn(new int[] {1, 1});
+
         MigrationResult result = service.migrateAll();
 
         assertThat(result.status()).isEqualTo("SUCCESS");
@@ -210,8 +222,8 @@ class MigrationServiceTest {
         assertThat(result.tablesMigrated().get("transcripts")).isZero();
         assertThat(result.tablesMigrated().get("releases_notified")).isZero();
 
-        // Deve ter chamado o JdbcTemplate 5x (3 messages + 2 birthdays)
-        verify(jdbcTemplate, times(5)).update(anyString(), any(Object[].class));
+        // Com batch: 1 chamada para messages, 1 para birthdays = 2 batchUpdate
+        verify(jdbcTemplate, times(2)).batchUpdate(anyString(), anyList());
         verify(metricsService).success("migration_sucesso");
     }
 
@@ -309,11 +321,13 @@ class MigrationServiceTest {
         insertMessage(sqliteFile, 1L, 10L, "Fulano", "msg", 0, "2026-09-22T10:00:00");
         insertBirthday(sqliteFile, 10L, "Fulano", 5, 10, null);
 
-        // 🔧 FIX: lançar exceção SÓ na inserção em `messages` (primeira tabela).
-        // O ideal é usar um matcher que olhe o SQL. Aqui usamos a assinatura
-        // exata: como messages é o primeiro INSERT, o Mockito consome o stub na 1ª chamada.
-        when(jdbcTemplate.update(contains("INSERT INTO messages"), any(Object[].class)))
+        // Simula erro APENAS na tabela messages
+        when(jdbcTemplate.batchUpdate(contains("INSERT INTO messages"), anyList()))
                 .thenThrow(new RuntimeException("DB down"));
+
+        // As outras tabelas funcionam normalmente
+        when(jdbcTemplate.batchUpdate(contains("INSERT INTO birthdays"), anyList()))
+                .thenReturn(new int[] {1});
 
         MigrationResult result = service.migrateAll();
 
@@ -410,13 +424,13 @@ class MigrationServiceTest {
     void migrateAll_naoEhIdempotente() throws Exception {
         insertMessage(sqliteFile, 1L, 10L, "Fulano", "msg", 0, "2026-09-22T10:00:00");
 
+        when(jdbcTemplate.batchUpdate(anyString(), anyList())).thenReturn(new int[] {1});
+
         service.migrateAll();
         service.migrateAll();
 
-        // 🔧 FIX: documenta o comportamento — 2 execuções = 2 INSERTs.
-        // O destino (Postgres) precisa de ON CONFLICT DO NOTHING (já tem no service).
-        // Aqui só validamos que o método foi chamado 2x.
-        verify(jdbcTemplate, times(2)).update(anyString(), any(Object[].class));
+        // Verifica que batchUpdate foi chamado 2x (uma por migração)
+        verify(jdbcTemplate, times(2)).batchUpdate(anyString(), anyList());
         verify(metricsService, times(2)).success("migration_sucesso");
     }
 

@@ -1,43 +1,84 @@
+# ============================================================================
 # Stage 1: Build
+# ============================================================================
 FROM amazoncorretto:21-alpine3.20 AS build
+
 WORKDIR /app
 
-# Cache do Gradle (ESSENCIAL)
-ENV GRADLE_USER_HOME=/gradle-cache
+# Instala bash (necessário para alguns scripts do Gradle)
+RUN apk add --no-cache bash
 
-# Copia apenas o necessário primeiro (melhor cache)
+# Copia o wrapper do Gradle e arquivos de build primeiro (melhor cache)
 COPY gradlew .
 COPY gradle gradle
 COPY build.gradle settings.gradle ./
 
-RUN chmod +x gradlew && ./gradlew dependencies --no-daemon || true
+RUN chmod +x gradlew
 
 # Baixa dependências (cacheável)
-# RUN ./gradlew build -x test --parallel --build-cache || true
+RUN ./gradlew dependencies --no-daemon || true
 
-# Agora copia o código
+# Copia o código-fonte
 COPY src src
 
-# Build final (rápido porque já cacheou)
-RUN ./gradlew bootJar -x test --no-daemon
+# Copia os recursos externos necessários em runtime
+# ⚠️ Mova para src/main/resources se preferir empacotar no JAR
+COPY config config
 
-# Stage 2: Runtime (menor possível)
+# Build final (sem testes, com clean)
+RUN ./gradlew clean bootJar -x test --no-daemon
+
+# ============================================================================
+# Stage 2: Runtime
+# ============================================================================
 FROM amazoncorretto:21-alpine3.20
+
 WORKDIR /app
 
-# Instalar ffmpeg e certificados (Alpine usa apk)
-RUN apk add --no-cache ffmpeg ca-certificates
+# Instala ffmpeg, certificados e timezone data
+RUN apk add --no-cache ffmpeg ca-certificates tzdata
 
-COPY --from=build /app/build/libs/*.jar app.jar
+# Configura timezone (importante para os crons do bot)
+ENV TZ=America/Sao_Paulo
+RUN cp /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Usuário não-root (segurança)
-# Usuário não-root com UID 1000
-RUN addgroup -g 1000 appgroup && adduser -u 1000 -G appgroup -S appuser
-RUN mkdir -p /app/temp && chown -R appuser /app/temp
+# Cria usuário não-root ANTES de copiar arquivos
+RUN addgroup -g 1000 appgroup && \
+    adduser -u 1000 -G appgroup -S -D appuser
+
+# Cria diretórios de trabalho com permissões corretas
+RUN mkdir -p /app/temp /app/config /app/certs /app/logs && \
+    chown -R appuser:appgroup /app
+
+# Copia o JAR da aplicação
+COPY --from=build /app/build/libs/*.jar /app/app.jar
+
+# Copia o truststore do Aiven (OBRIGATÓRIO para o Kafka funcionar)
+COPY --chown=appuser:appgroup certs/aiven-truststore.jks /app/certs/aiven-truststore.jks
+
+# Copia os arquivos de configuração externos
+COPY --chown=appuser:appgroup config /app/config
+
+# Troca para usuário não-root
 USER appuser
 
-# Porta (opcional, se seu bot expor HTTP)
-# EXPOSE 8080
+# Diretório temporário do app
+ENV APP_TEMP_DIR=/app/temp
 
-# Comando de entrada (otimizado para baixa memória)
-ENTRYPOINT ["java", "-XX:+UseSerialGC", "-Xms128m", "-Xmx256m", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]
+# Path do truststore (usado no application.properties)
+ENV KAFKA_TRUSTSTORE_PATH=/app/certs/aiven-truststore.jks
+
+# JVM otimizada para containers pequenos (OCI Ampere A1)
+ENV JAVA_OPTS="-XX:+UseSerialGC \
+    -XX:MaxRAMPercentage=75 \
+    -XX:InitialRAMPercentage=50 \
+    -XX:+ExitOnOutOfMemoryError \
+    -XX:+HeapDumpOnOutOfMemoryError \
+    -XX:HeapDumpPath=/app/temp \
+    -Djava.security.egd=file:/dev/./urandom \
+    -Duser.timezone=America/Sao_Paulo \
+    -Dfile.encoding=UTF-8"
+
+EXPOSE 8082
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

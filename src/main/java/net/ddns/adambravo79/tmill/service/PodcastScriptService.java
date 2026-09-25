@@ -80,7 +80,7 @@ REGRAS IMPORTANTES:
 - NÃO use tópicos numerados ou bullet points.
 - Escreva como se estivesse contando uma história.
 - Inclua introdução breve e encerramento.
-- Encerre com: "E caso eu não veja vocês, bom dia, boa noite e boa noite!"
+- Encerre com: "E caso eu não veja vocês, bom dia, boa tarde e boa noite!"
 - Resuma os temas principais, não repita mensagem por mensagem.
 - SEJA CONCISO. Prefira qualidade à quantidade.
 """;
