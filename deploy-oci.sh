@@ -1,5 +1,5 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
 # ==============================
 # 🔧 CONFIGURAÇÕES
@@ -10,18 +10,18 @@ IMAGE_TAG="latest"
 DOCKER_IMAGE="$IMAGE_NAME:$IMAGE_TAG"
 
 TEMP_PATH="$(pwd)/temp_audio"
+ENV_FILE=""
 
-# Cores para output
+# Cores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # ==============================
-# 📋 FUNÇÕES DE LOG COM TIMESTAMP
+# 📋 LOG
 # ==============================
 timestamp() { date +"%Y-%m-%d %H:%M:%S"; }
-
 log_info()  { echo -e "$(timestamp) ${GREEN}[INFO]${NC} $1"; }
 log_warn()  { echo -e "$(timestamp) ${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "$(timestamp) ${RED}[ERROR]${NC} $1"; }
@@ -37,19 +37,24 @@ check_docker() {
 }
 
 load_env() {
-    if [ -f .env ]; then
-        set -a
-        source .env
-        set +a
-        log_info "Variáveis carregadas do .env"
+    if [ -f .env.prod ]; then
+        ENV_FILE=".env.prod"
+    elif [ -f .env ]; then
+        ENV_FILE=".env"
+        log_warn "Usando .env (dev) — ideal é .env.prod em produção"
     else
-        log_error "Arquivo .env não encontrado!"
+        log_error "Nenhum arquivo .env ou .env.prod encontrado!"
         exit 1
     fi
+
+    set -a
+    source "$ENV_FILE"
+    set +a
+    log_info "Variáveis carregadas de $ENV_FILE"
 }
 
 # ==============================
-# 📦 PULL DA IMAGEM (OCI)
+# 📦 PULL
 # ==============================
 pull_image() {
     log_info "Baixando imagem do Docker Hub: $DOCKER_IMAGE"
@@ -57,7 +62,7 @@ pull_image() {
         log_error "Falha ao baixar imagem. Verifique sua conexão e login."
         exit 1
     }
-    log_info "✅ Imagem baixada com sucesso."
+    log_info "✅ Imagem baixada."
 }
 
 # ==============================
@@ -92,22 +97,22 @@ cleanup_docker() {
 # 🚀 RUN
 # ==============================
 run_container() {
-    log_info "Iniciando container do $APP_NAME"
+    log_info "Iniciando container do $APP_NAME (env: $ENV_FILE)"
 
-    # 🔧 Cria TODOS os diretórios usados pelo app
     mkdir -p "$TEMP_PATH"
     mkdir -p "$(pwd)/logs"
     mkdir -p "$(pwd)/data"
     mkdir -p "$(pwd)/media"
     mkdir -p "$(pwd)/config"
 
-    # 🔧 Garante que os diretórios pertencem ao usuário do host (ubuntu)
     sudo chown -R "$(id -u):$(id -g)" "$TEMP_PATH" "$(pwd)/logs" "$(pwd)/data" "$(pwd)/media" 2>/dev/null || true
 
+    # 🔧 FIX CRÍTICO: --env-file "$ENV_FILE"
     docker run -d \
         --name "$APP_NAME" \
         --restart unless-stopped \
-        --env-file .env \
+        --user "$(id -u):$(id -g)" \
+        --env-file "$ENV_FILE" \
         -p 8082:8082 \
         -e TZ=America/Sao_Paulo \
         -v "$TEMP_PATH:/app/temp" \
@@ -131,17 +136,9 @@ run_container() {
 # ==============================
 # 📊 STATUS & LOGS
 # ==============================
-show_status() {
-    docker ps --filter "name=$APP_NAME"
-}
-
-show_logs() {
-    docker logs --tail 50 "$APP_NAME"
-}
-
-logs_follow() {
-    docker logs -f "$APP_NAME"
-}
+show_status() { docker ps --filter "name=$APP_NAME"; }
+show_logs()   { docker logs --tail 50 "$APP_NAME"; }
+logs_follow() { docker logs -f "$APP_NAME"; }
 
 # ==============================
 # 🚀 MAIN
