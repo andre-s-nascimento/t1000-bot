@@ -1,16 +1,60 @@
+# Git
 .git
 .gitignore
-.gradle
-build
-logs
-temp_audio
-*.log
-*.tmp
+.github
+
+# IDE
 .idea
 .vscode
-*.md
-docs
-deploy.sh
-build-and-push.*
+*.iml
+
+# Build
+build/
+target/
+out/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Gradle
+.gradle/
+gradle-app.setting
+
+# Testes
+src/test/
+
+# Ambientais (CRÍTICO — não vaza credenciais)
 .env
-**/node_modules
+.env.*
+*.env
+!.env.example
+
+# Logs e temporários
+logs/
+temp/
+*.log
+
+# Documentação
+*.md
+docs/
+README*
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Configs locais
+config/
+!config/easter-eggs.json
+!config/auto-responses.json
+!config/worldcup2026.json
+
+# Certificados — apenas o JKS entra na imagem
+*.pem
+*.crt
+*.key
+*.p12
+
+# Permite a pasta certs com o truststore
+!certs/
+!certs/aiven-truststore.jks
