@@ -221,3 +221,7 @@ logging:
     org.testcontainers: WARN
     com.github.dockerjava: WARN
     io.ksilisk.telegrambot: WARN
+
+feature-flags:
+  persist:
+    enabled: false # sem persistência nos testes

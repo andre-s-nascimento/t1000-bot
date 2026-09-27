@@ -35,6 +35,7 @@ import net.ddns.adambravo79.tmill.exception.DigestGenerationException;
 import net.ddns.adambravo79.tmill.exception.DigestSendException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramMessageSplitter;
@@ -58,10 +59,8 @@ public class DailyDigestService {
     private final JdbcTemplate jdbcTemplate;
     private final GroqClient groqClient;
     private final TelegramFacade telegramFacade;
-    private final MetricsService metricsService; // 👈 NOVO
-
-    @org.springframework.beans.factory.annotation.Value("${digest.enabled:false}")
-    private boolean digestEnabled;
+    private final MetricsService metricsService;
+    private final FeatureFlagAdminService featureFlags;
 
     @org.springframework.beans.factory.annotation.Value("${digest.chat-ids:}")
     private String digestChatIdsStr;
@@ -104,7 +103,7 @@ public class DailyDigestService {
 
     @Scheduled(cron = "0 30 8 * * *", zone = BRAZIL_ZONE)
     public void generateMorningDigest() {
-        if (!digestEnabled || digestChatIds.isEmpty()) {
+        if (!featureFlags.isEnabled("digest.enabled") || digestChatIds.isEmpty()) {
             log.debug("Digest matinal desabilitado ou sem chats configurados.");
             return;
         }
@@ -116,7 +115,7 @@ public class DailyDigestService {
 
     @Scheduled(cron = "0 30 20 * * *", zone = BRAZIL_ZONE)
     public void generateEveningDigest() {
-        if (!digestEnabled || digestChatIds.isEmpty()) {
+        if (!featureFlags.isEnabled("digest.enabled") || digestChatIds.isEmpty()) {
             log.debug("Digest noturno desabilitado ou sem chats configurados.");
             return;
         }

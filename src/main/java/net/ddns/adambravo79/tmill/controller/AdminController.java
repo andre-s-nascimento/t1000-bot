@@ -6,15 +6,12 @@ import static net.ddns.adambravo79.tmill.constant.BotMessages.DATA_INVALIDA_WORL
 import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_LIMPAR_DADOS;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_LIMPAR_RELEASES;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_DD_MM_YYYY_HYPHEN;
-import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM_SS;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_YYYY_MM_DD;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_DISABLED;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_NOT_AVAILABLE;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.DayOfWeek;
@@ -23,21 +20,17 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.ChronoField;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
-import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
@@ -58,7 +51,6 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
-import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
@@ -75,6 +67,8 @@ import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.databind.ObjectMapper;
@@ -92,6 +86,8 @@ import tools.jackson.databind.ObjectMapper;
  *   <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
  *   <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
  * </ul>
+ *
+ * <p>Utilitários compartilhados com {@link AdminWebController} ficam em {@link AdminUtils}.
  */
 @RestController
 @RequestMapping("/admin")
@@ -99,7 +95,6 @@ import tools.jackson.databind.ObjectMapper;
 @Slf4j
 public class AdminController {
 
-    private static final long SHOWCASE_CHAT_ID = -5283244164L;
     private static final String MSG_ERRO_INTERNO =
             "Erro interno do servidor. Contate o administrador.";
 
@@ -122,6 +117,7 @@ public class AdminController {
     private final BirthdayService birthdayService;
     private final BirthdayRepository birthdayRepository;
     private final MigrationService migrationService;
+    private final FeatureFlagAdminService featureFlagAdminService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -134,6 +130,9 @@ public class AdminController {
 
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
+
+    @Value("${migration.sqlite.path:./data/t1000.db}")
+    private String migrationSqlitePath;
 
     private Set<Long> digestChatIds = new HashSet<>();
 
@@ -197,7 +196,7 @@ public class AdminController {
     @PostMapping("/test-weekly-reminder-showcase")
     public ResponseEntity<String> testWeeklyReminderShowcase(
             @RequestParam(required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         weeklyReminderService.sendReminderToChat(targetChatId);
         return ResponseEntity.ok("Lembrete semanal enviado para o chat " + targetChatId);
     }
@@ -300,7 +299,7 @@ public class AdminController {
     @PostMapping("/test-worldcup-showcase")
     public ResponseEntity<String> testWorldCupShowcase(
             @RequestParam(required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
@@ -311,7 +310,7 @@ public class AdminController {
     @PostMapping("/test-worldcup-noon-showcase")
     public ResponseEntity<String> testWorldCupNoonShowcase(
             @RequestParam(required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
@@ -322,7 +321,7 @@ public class AdminController {
     @PostMapping("/test-worldcup-evening-showcase")
     public ResponseEntity<String> testWorldCupEveningShowcase(
             @RequestParam(required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
@@ -334,7 +333,7 @@ public class AdminController {
     public ResponseEntity<String> reloadWorldCupShowcase(
             @RequestParam(required = false) Long chatId) {
 
-        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         staticWorldCupService.reload();
 
         String msg =
@@ -363,12 +362,12 @@ public class AdminController {
             @RequestParam(defaultValue = "ontem") String dateParam,
             @RequestParam(required = false) Long chatId) {
 
-        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
 
-        LocalDate date = parseDateParam(dateParam);
+        LocalDate date = AdminUtils.parseDateParam(dateParam);
         if (date == null) {
             return ResponseEntity.badRequest().body(DATA_INVALIDA_WORLDCUP);
         }
@@ -403,9 +402,11 @@ public class AdminController {
                 environment.getProperty("telegram.bot.polling.timeout"));
         props.put("telegram.message.limit", environment.getProperty("telegram.message.limit"));
         props.put("telegram.owner.id", environment.getProperty("telegram.owner.id"));
-        props.put("telegram.bot.token", maskToken(environment.getProperty("telegram.bot.token")));
-        props.put("groq.api.key", maskToken(environment.getProperty("groq.api.key")));
-        props.put("tmdb.token", maskToken(environment.getProperty("tmdb.token")));
+        props.put(
+                "telegram.bot.token",
+                AdminUtils.maskToken(environment.getProperty("telegram.bot.token")));
+        props.put("groq.api.key", AdminUtils.maskToken(environment.getProperty("groq.api.key")));
+        props.put("tmdb.token", AdminUtils.maskToken(environment.getProperty("tmdb.token")));
         props.put("groq.model.transcription", environment.getProperty("groq.model.transcription"));
         props.put("groq.model.refinement", environment.getProperty("groq.model.refinement"));
         props.put("groq.model.digest", environment.getProperty("groq.model.digest"));
@@ -426,29 +427,63 @@ public class AdminController {
         props.put(
                 "weekly.reminder.media-file",
                 environment.getProperty("weekly.reminder.media-file"));
-        props.put(
-                "t1000.features.transcription-enabled",
-                environment.getProperty("t1000.features.transcription-enabled"));
+        props.put("transcription.enabled", environment.getProperty("transcription.enabled"));
         props.put("t1000.audio.max-size-mb", environment.getProperty("t1000.audio.max-size-mb"));
         props.put("bot.allowed-chats", environment.getProperty("bot.allowed-chats"));
         return ResponseEntity.ok(props);
     }
 
+    /**
+     * Carrega os arquivos de configuração (easter-eggs, auto-responses, worldcup) usando o {@code
+     * ResourceLoader} e respeitando as propriedades do {@code application.properties} (ex.: {@code
+     * easter-egg.file}, {@code auto.response.file}, {@code worldcup.data.file}).
+     *
+     * <p>Isso garante que o endpoint leia os mesmos arquivos que os services usam (ex.: {@code
+     * EasterEggService}), tanto em dev ({@code file:./config/...}) quanto em prod ({@code
+     * file:/app/config/...}).
+     */
     @GetMapping("/config-files")
     public ResponseEntity<Map<String, Object>> getConfigFiles() {
         Map<String, Object> result = new LinkedHashMap<>();
-        String[] files = {"easter-eggs.json", "auto-responses.json", "worldcup2026.json"};
 
-        for (String fileName : files) {
+        // Definição: nome do arquivo → (chave da propriedade, default)
+        record ConfigFile(String name, String propertyKey, String defaultLocation) {}
+
+        List<ConfigFile> files =
+                List.of(
+                        new ConfigFile(
+                                "easter-eggs.json",
+                                "easter-egg.file",
+                                "classpath:easter-eggs.json"),
+                        new ConfigFile(
+                                "auto-responses.json",
+                                "auto.response.file",
+                                "classpath:auto-responses.json"),
+                        new ConfigFile(
+                                "worldcup2026.json",
+                                "worldcup.data.file",
+                                "classpath:worldcup2026.json"));
+
+        for (ConfigFile file : files) {
             try {
-                Object content = loadConfigFile(fileName);
-                result.put(fileName, content);
+                Object content =
+                        AdminUtils.loadConfigFile(
+                                resourceLoader,
+                                environment,
+                                objectMapper,
+                                file.propertyKey(),
+                                file.name(),
+                                file.defaultLocation());
+                result.put(file.name(), content);
             } catch (JsonProcessingException e) {
-                log.error("Erro ao parsear JSON do arquivo: {}", fileName, e);
-                result.put(fileName, "❌ Erro ao parsear JSON");
+                log.error("Erro ao parsear JSON do arquivo: {}", file.name(), e);
+                result.put(file.name(), "❌ Erro ao parsear JSON");
             } catch (IOException e) {
-                log.warn("Arquivo de configuração não encontrado ou ilegível: {}", fileName);
-                result.put(fileName, "❌ Arquivo não encontrado");
+                log.warn(
+                        "Arquivo de configuração não encontrado: {} (propriedade='{}')",
+                        file.name(),
+                        file.propertyKey());
+                result.put(file.name(), "❌ Arquivo não encontrado");
             }
         }
         return ResponseEntity.ok(result);
@@ -481,8 +516,8 @@ public class AdminController {
             return ResponseEntity.badRequest().body("Parâmetro 'message' é obrigatório.");
         }
 
-        long targetChatId = chatId != null ? chatId : SHOWCASE_CHAT_ID;
-        LocalTime simulatedTime = parseTime(time);
+        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        LocalTime simulatedTime = AdminUtils.parseTime(time);
 
         Optional<AutoResponseOverride> responseOpt =
                 autoResponseService.getResponseRule(userId, message, simulatedTime);
@@ -511,7 +546,7 @@ public class AdminController {
                     .body(Map.of("error", "Parâmetro 'message' é obrigatório."));
         }
 
-        LocalTime simulatedTime = parseTime(time);
+        LocalTime simulatedTime = AdminUtils.parseTime(time);
         Optional<AutoResponseOverride> responseOpt =
                 autoResponseService.getResponseRule(userId, message, simulatedTime);
 
@@ -609,60 +644,8 @@ public class AdminController {
         return ResponseEntity.status(500).body("Falha na síntese (áudio vazio).");
     }
 
-    // @GetMapping("/test-podcast")
-    // public ResponseEntity<String> testPodcast(
-    // @RequestParam(required = false) String start,
-    // @RequestParam(required = false) String end,
-    // @RequestParam(required = false) Long chatId) {
-
-    // LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
-    // LocalDate endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) :
-    // today;
-    // LocalDate startDate =
-    // (start != null && !start.isBlank()) ? LocalDate.parse(start) :
-    // today.minusDays(7);
-
-    // if (startDate.isAfter(endDate)) {
-    // return ResponseEntity.badRequest()
-    // .body("❌ Data de início não pode ser posterior à data de fim.");
-    // }
-
-    // long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
-
-    // // 🔁 Processa em background
-    // CompletableFuture.runAsync(
-    // () -> {
-    // try {
-    // log.info(
-    // "📥 Iniciando geração assíncrona do podcast para chat {}",
-    // targetChatId);
-    // podcastPublisherService.generateAndSendPodcast(
-    // startDate, endDate, targetChatId);
-    // log.info("✅ Podcast assíncrono finalizado para chat {}", targetChatId);
-    // } catch (Exception e) {
-    // log.error(
-    // "❌ Erro assíncrono ao gerar podcast para chat {}", targetChatId, e);
-    // try {
-    // telegramFacade.enviarMensagem(
-    // targetChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
-    // } catch (Exception ignored) {
-    // // Falha ao deletar arquivo temporário – pode ser ignorado
-    // log.debug("Não foi possível gerar arquivo");
-    // }
-    // }
-    // });
-
-    // // Retorna imediatamente
-    // return ResponseEntity.accepted()
-    // .body(
-    // String.format(
-    // "🔄 Podcast agendado para o período de %s a %s. Você receberá em"
-    // + " breve no chat %d.",
-    // startDate, endDate, targetChatId));
-    // }
-
     @PostMapping("/fala-t1000-tts")
-    public ResponseEntity<String> testAzureTts(
+    public ResponseEntity<String> falaT1000Tts(
             @RequestParam String message, @RequestParam(required = false) Long chatId) {
 
         // 1. Validação
@@ -699,20 +682,18 @@ public class AdminController {
         // 5. Salva e envia com nome personalizado
         Path tempFile = null;
         try {
-            // Gera um nome único com timestamp
             String fileName =
                     String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
             tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
             Path finalFile = tempFile.resolveSibling(fileName);
             Files.write(tempFile, audio);
-            Files.move(tempFile, finalFile); // Renomeia para o nome desejado
+            Files.move(tempFile, finalFile);
 
             telegramFacade.enviarMidia(
                     targetChatId,
                     finalFile.toAbsolutePath().toString(),
                     "🔊 Áudios para a futura Skynet");
 
-            // Limpeza
             Files.deleteIfExists(finalFile);
             return ResponseEntity.ok("✅ Áudio enviado com sucesso para o chat " + targetChatId);
 
@@ -725,7 +706,6 @@ public class AdminController {
                 try {
                     Files.deleteIfExists(tempFile);
                 } catch (IOException ignored) {
-                    // Falha ao deletar arquivo temporário – pode ser ignorado
                     log.debug("Não foi possível deletar arquivo: {}", tempFile);
                 }
             }
@@ -777,20 +757,7 @@ public class AdminController {
         return ResponseEntity.ok("✅ " + deleted + " aniversário(s) removido(s).");
     }
 
-    // ========================= MÉTODOS AUXILIARES PRIVADOS
-    // =========================
-
-    /** Carrega e parseia um arquivo de configuração do classpath ou do diretório /app/config/. */
-    private Object loadConfigFile(String fileName) throws IOException {
-        Resource resource = resourceLoader.getResource("classpath:" + fileName);
-        if (!resource.exists()) {
-            resource = resourceLoader.getResource("file:/app/config/" + fileName);
-            if (!resource.exists()) {
-                throw new IOException("Arquivo não encontrado: " + fileName);
-            }
-        }
-        return objectMapper.readValue(resource.getInputStream(), Object.class);
-    }
+    // ========================= MÉTODOS AUXILIARES PRIVADOS =========================
 
     private String buildTestResponseMessage(
             Long userId, String message, LocalTime simulatedTime, AutoResponseOverride response) {
@@ -812,7 +779,7 @@ public class AdminController {
             long targetChatId, AutoResponseOverride response, String finalMsg) {
         if (response.animation() != null
                 && !response.animation().isBlank()
-                && isValidUrl(response.animation())) {
+                && AdminUtils.isValidUrl(response.animation())) {
             try {
                 telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
             } catch (HttpClientErrorException e) {
@@ -843,63 +810,6 @@ public class AdminController {
         }
     }
 
-    private LocalDate parseDateParam(String param) {
-        if (param == null || param.isBlank()) return null;
-        String lower = param.toLowerCase().trim();
-        if (lower.equals("hoje") || lower.equals("de hoje"))
-            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
-        if (lower.equals("ontem") || lower.equals("de ontem"))
-            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE)).minusDays(1);
-
-        String cleaned = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
-        LocalDate parsed = tryParseWithPattern(cleaned);
-        if (parsed != null) return parsed;
-
-        // fallback attempts
-        parsed = tryParseFallback(param, "dd/MM", "dd-MM");
-        if (parsed != null) return parsed;
-        return null;
-    }
-
-    private LocalDate tryParseWithPattern(String cleaned) {
-        Pattern pattern =
-                Pattern.compile("\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
-        Matcher m = pattern.matcher(cleaned);
-        if (m.find()) {
-            String dateStr = m.group(1).trim();
-            try {
-                if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}")) return LocalDate.parse(dateStr);
-                if (dateStr.matches("\\d{1,2}[/-]\\d{2}")) {
-                    DateTimeFormatter fmt =
-                            new DateTimeFormatterBuilder()
-                                    .appendPattern(dateStr.contains("/") ? "dd/MM" : "dd-MM")
-                                    .parseDefaulting(ChronoField.YEAR, 2026)
-                                    .toFormatter();
-                    return LocalDate.parse(dateStr, fmt);
-                }
-            } catch (DateTimeParseException ignored) {
-                /* log if needed */
-            }
-        }
-        return null;
-    }
-
-    private LocalDate tryParseFallback(String param, String... patterns) {
-        for (String p : patterns) {
-            try {
-                DateTimeFormatter fmt =
-                        new DateTimeFormatterBuilder()
-                                .appendPattern(p)
-                                .parseDefaulting(ChronoField.YEAR, 2026)
-                                .toFormatter();
-                return LocalDate.parse(param, fmt);
-            } catch (DateTimeParseException ignored) {
-                /* continue */
-            }
-        }
-        return null;
-    }
-
     private LocalDate[] parseDateRange(String startDate, String endDate) {
         for (String pattern : new String[] {FMT_YYYY_MM_DD, FMT_DD_MM_YYYY_HYPHEN}) {
             try {
@@ -912,39 +822,6 @@ public class AdminController {
             }
         }
         return new LocalDate[0];
-    }
-
-    private String maskToken(String token) {
-        if (token == null || token.length() < 8) {
-            return "***";
-        }
-        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
-    }
-
-    private LocalTime parseTime(String timeStr) {
-        if (timeStr == null || timeStr.isBlank()) {
-            return null;
-        }
-        try {
-            return LocalTime.parse(timeStr, DateTimeFormatter.ofPattern(FMT_HH_MM));
-        } catch (DateTimeParseException e) {
-            return null;
-        }
-    }
-
-    private boolean isValidUrl(String url) {
-        if (url == null || url.isBlank()) {
-            return false;
-        }
-        try {
-            URI uri = new URI(url);
-            String scheme = uri.getScheme();
-            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                    && uri.getHost() != null
-                    && !uri.getHost().isBlank();
-        } catch (URISyntaxException e) {
-            return false;
-        }
     }
 
     // ========================= PODCAST MANUAL =========================
@@ -970,7 +847,7 @@ public class AdminController {
             @RequestParam(required = false) Integer periodo) {
 
         // Define o chat alvo
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = (chatId != null) ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
 
         // Calcula o período
         LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
@@ -978,7 +855,6 @@ public class AdminController {
         LocalDate startDate;
 
         if (start != null && !start.isBlank() && end != null && !end.isBlank()) {
-            // Usa datas fornecidas
             try {
                 startDate = LocalDate.parse(start);
                 endDate = LocalDate.parse(end);
@@ -987,28 +863,23 @@ public class AdminController {
                         .body("❌ Formato de data inválido. Use yyyy-MM-dd");
             }
         } else if (periodo != null && periodo > 0) {
-            // Usa período em dias
             endDate = today;
             startDate = today.minusDays(periodo);
         } else {
-            // Padrão: última semana completa (segunda a domingo)
             endDate = today.with(DayOfWeek.SUNDAY).minusWeeks(1);
             startDate = endDate.with(DayOfWeek.MONDAY);
         }
 
-        // Validação
         if (startDate.isAfter(endDate)) {
             return ResponseEntity.badRequest()
                     .body("❌ Data de início não pode ser posterior à data de fim.");
         }
 
-        // Verifica se o chatId é válido
         if (targetChatId == 0) {
             return ResponseEntity.badRequest()
                     .body("❌ chatId inválido. Configure um chatId ou use o padrão.");
         }
 
-        // 🔥 Processa em background para não bloquear a resposta
         final long finalChatId = targetChatId;
         final LocalDate finalStart = startDate;
         final LocalDate finalEnd = endDate;
@@ -1032,13 +903,11 @@ public class AdminController {
                             telegramFacade.enviarMensagem(
                                     finalChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
                         } catch (Exception ignored) {
-                            // Falha ao enviar mensagem de erro
                             log.debug("Não foi possível enviar mensagem de erro");
                         }
                     }
                 });
 
-        // Retorna imediatamente
         String responseMsg =
                 String.format(
                         "🔄 Podcast agendado para o período de %s a %s.\n"
@@ -1048,7 +917,6 @@ public class AdminController {
                         finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
                         finalChatId);
 
-        // Também envia uma mensagem no chat confirmando
         try {
             telegramFacade.enviarMensagemHtml(
                     finalChatId,
@@ -1066,14 +934,10 @@ public class AdminController {
         return ResponseEntity.accepted().body(responseMsg);
     }
 
-    /**
-     * Endpoint para testar o podcast com período fixo (últimos 7 dias) Mais simples que o
-     * /test-podcast
-     */
+    /** Endpoint para testar o podcast com período fixo (últimos 7 dias). */
     @GetMapping("/test-podcast-latest")
     public ResponseEntity<String> testPodcastLatest(@RequestParam(required = false) Long chatId) {
 
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
         LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate startDate = endDate.minusDays(7);
 
@@ -1135,30 +999,20 @@ public class AdminController {
         }
     }
 
-    /**
-     * Dry-run: conta quantos registros existem em cada tabela do SQLite, sem migrar. Útil para saber
-     * o volume antes de rodar a migração real.
-     */
+    /** Dry-run: conta quantos registros existem em cada tabela do SQLite, sem migrar. */
     @GetMapping("/migrate-sqlite/preview")
     public ResponseEntity<?> previewMigration() {
         try {
             Map<String, Integer> counts = migrationService.previewCounts();
             return ResponseEntity.ok(
                     Map.of(
-                            "arquivo", sqlitePathPublic(),
+                            "arquivo", migrationSqlitePath,
                             "contadores", counts,
                             "total", counts.values().stream().mapToInt(Integer::intValue).sum()));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
                     .body(Map.of("erro", e.getMessage()));
         }
-    }
-
-    @Value("${migration.sqlite.path:./data/t1000.db}")
-    private String migrationSqlitePath;
-
-    private String sqlitePathPublic() {
-        return migrationSqlitePath;
     }
 
     @GetMapping("/debug/cache/{fileId}")
@@ -1187,5 +1041,61 @@ public class AdminController {
                 refinado == null ? "" : refinado.substring(0, Math.min(200, refinado.length())));
 
         return ResponseEntity.ok(result);
+    }
+
+    // ========================= FEATURE FLAGS =========================
+
+    /**
+     * Lista todas as feature flags registradas.
+     *
+     * @return lista ordenada por chave, com estado atual, descrição e flag readOnly
+     */
+    @GetMapping("/features")
+    public ResponseEntity<List<FeatureFlagState>> listFeatures() {
+        return ResponseEntity.ok(featureFlagAdminService.list());
+    }
+
+    /**
+     * Altera uma feature flag em runtime.
+     *
+     * <p>Erros:
+     *
+     * <ul>
+     *   <li>Flag desconhecida → 400
+     *   <li>Flag read-only → 409 Conflict
+     * </ul>
+     *
+     * @param key chave da flag (ex.: {@code "worldcup.enabled"})
+     * @param enabled novo valor
+     */
+    @PostMapping("/features/{key}")
+    public ResponseEntity<Map<String, Object>> toggleFeature(
+            @PathVariable String key, @RequestParam boolean enabled) {
+        try {
+            boolean antes = featureFlagAdminService.isEnabled(key);
+            featureFlagAdminService.toggle(key, enabled);
+            boolean depois = featureFlagAdminService.isEnabled(key);
+
+            log.info("🎛️ [REST] Flag '{}': {} → {}", key, antes, depois);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("key", key);
+            result.put("enabled", depois);
+            result.put("changed", antes != depois);
+            return ResponseEntity.ok(result);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Flag desconhecida: {}", key);
+            return ResponseEntity.badRequest().body(Map.of("erro", e.getMessage()));
+
+        } catch (IllegalStateException e) {
+            log.warn("Tentativa de alterar flag read-only: {}", key);
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("erro", e.getMessage()));
+
+        } catch (Exception e) {
+            log.error("Erro ao alterar flag '{}'", key, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("erro", MSG_ERRO_INTERNO));
+        }
     }
 }

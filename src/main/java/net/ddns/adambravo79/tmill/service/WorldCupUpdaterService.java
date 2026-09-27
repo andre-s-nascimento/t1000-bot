@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClientException;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 
 @Slf4j
 @Service
@@ -21,9 +22,7 @@ public class WorldCupUpdaterService {
 
     private final StaticWorldCupService worldCupService;
     private final RestClient restClient;
-
-    @Value("${worldcup.update.enabled:false}")
-    private boolean updateEnabled;
+    private final FeatureFlagAdminService featureFlags;
 
     @Value(
             "${worldcup.update.url:https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json}")
@@ -32,21 +31,23 @@ public class WorldCupUpdaterService {
     @Value("${worldcup.update.destination:/app/config/worldcup2026.json}")
     private String destinationPath;
 
-    public WorldCupUpdaterService(StaticWorldCupService worldCupService) {
+    public WorldCupUpdaterService(
+            StaticWorldCupService worldCupService, FeatureFlagAdminService featureFlags) {
         this.worldCupService = worldCupService;
         this.restClient = RestClient.builder().build();
+        this.featureFlags = featureFlags;
     }
 
     @PostConstruct
     public void init() {
-        if (updateEnabled) {
+        if (featureFlags.isEnabled("worldcup.update.enabled")) {
             log.info("🔄 Atualização automática da Copa ativada (fonte: {})", updateUrl);
         }
     }
 
     @Scheduled(cron = "${worldcup.update.cron:0 0 3 * * *}", zone = "America/Sao_Paulo")
     public void updateWorldCupData() {
-        if (!updateEnabled) {
+        if (!featureFlags.isEnabled("worldcup.update.enabled")) {
             log.debug("Atualização automática desativada");
             return;
         }

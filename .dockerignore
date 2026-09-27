@@ -1,60 +1,103 @@
-# Git
+# ============================================================================
+# Git / VCS
+# ============================================================================
 .git
 .gitignore
-.github
+.gitattributes
+.github/
 
-# IDE
-.idea
-.vscode
+# ============================================================================
+# IDE / Editores
+# ============================================================================
+.idea/
+.vscode/
 *.iml
+*.ipr
+*.iws
+.settings/
+.classpath
+.project
 
-# Build
+# ============================================================================
+# Build / Artefatos
+# ============================================================================
 build/
 target/
 out/
+bin/
 *.class
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 
+# ============================================================================
 # Gradle
+# ============================================================================
 .gradle/
 gradle-app.setting
+!gradle-wrapper.properties
 
-# Testes
+# ============================================================================
+# Testes — não vão para a imagem de runtime
+# ============================================================================
 src/test/
 
-# Ambientais (CRÍTICO — não vaza credenciais)
+# ============================================================================
+# Variáveis de ambiente — CRÍTICO: nunca vazar credenciais
+# ============================================================================
 .env
 .env.*
 *.env
 !.env.example
 
-# Logs e temporários
+# ============================================================================
+# Logs e temporários (artefatos de runtime, não da imagem)
+# ============================================================================
 logs/
 temp/
+temp_audio/
+data/
+media/
 *.log
 
-# Documentação
+# ============================================================================
+# Documentação (não precisa dentro da imagem)
+# ============================================================================
 *.md
 docs/
 README*
 
-# Docker
+# ============================================================================
+# Docker (autoexcluídos do contexto)
+# ============================================================================
 Dockerfile*
 docker-compose*.yml
+.dockerignore
 
-# Configs locais
-config/
-!config/easter-eggs.json
-!config/auto-responses.json
-!config/worldcup2026.json
+# ============================================================================
+# Configs de aplicação — copiar defaults, EXCLUIR estado de runtime
+# ============================================================================
+# O feature-flags.json é criado/atualizado em runtime pelo container.
+# NUNCA deve ser copiado do host para a imagem (senão "congela" no layer).
+config/feature-flags.json
+config/feature-flags.json.tmp
 
+# ============================================================================
 # Certificados — apenas o JKS entra na imagem
+# ============================================================================
 *.pem
 *.crt
 *.key
 *.p12
+*.pfx
 
 # Permite a pasta certs com o truststore
 !certs/
 !certs/aiven-truststore.jks
+
+# ============================================================================
+# CI/CD local
+# ============================================================================
+*.tmp
+*.bak
+*.swp
+*~

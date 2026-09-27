@@ -137,7 +137,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionFixation().changeSessionId());
 
         // 👈 NOVO — ignora CSRF para /admin/** (API interna consumida por scripts)
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/admin/**"));
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/admin/**", "/admin-web/**"));
 
         log.info("🛡️ SecurityConfig carregado. E-mails autorizados: {}", allowedEmails);
 

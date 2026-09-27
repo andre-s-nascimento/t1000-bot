@@ -94,6 +94,33 @@ cleanup_docker() {
 }
 
 # ==============================
+# ⚙️ CONFIG FILES
+# ==============================
+ensure_config_files() {
+    local config_dir="$(pwd)/config"
+    mkdir -p "$config_dir"
+
+    local required_files=(
+        "easter-eggs.json"
+        "auto-responses.json"
+        "worldcup2026.json"
+    )
+
+    for file in "${required_files[@]}"; do
+        if [ ! -f "$config_dir/$file" ]; then
+            log_warn "Arquivo $file não existe — criando vazio (verifique o conteúdo!)"
+            echo '{}' > "$config_dir/$file"
+        fi
+    done
+
+    # A aplicação cria/atualiza, mas precisa existir pra não virar diretório
+    if [ ! -f "$config_dir/feature-flags.json" ]; then
+        log_info "Inicializando feature-flags.json (persistência de flags)"
+        echo '{}' > "$config_dir/feature-flags.json"
+    fi
+}
+
+# ==============================
 # 🚀 RUN
 # ==============================
 run_container() {
@@ -105,7 +132,17 @@ run_container() {
     mkdir -p "$(pwd)/media"
     mkdir -p "$(pwd)/config"
 
-    sudo chown -R "$(id -u):$(id -g)" "$TEMP_PATH" "$(pwd)/logs" "$(pwd)/data" "$(pwd)/media" 2>/dev/null || true
+    # 🔥 NOVO — garantir que os arquivos de config existem no host
+    # Sem isso, um primeiro deploy deixaria /app/config vazio dentro do container
+    ensure_config_files
+
+    sudo chown -R "$(id -u):$(id -g)" \
+    "$TEMP_PATH" \
+    "$(pwd)/logs" \
+    "$(pwd)/data" \
+    "$(pwd)/media" \
+    "$(pwd)/config" \
+    2>/dev/null || true
 
     # 🔧 FIX CRÍTICO: --env-file "$ENV_FILE"
     docker run -d \
@@ -118,9 +155,7 @@ run_container() {
         -v "$TEMP_PATH:/app/temp" \
         -v "$(pwd)/data:/app/data" \
         -v "$(pwd)/logs:/app/logs" \
-        -v "$(pwd)/config/easter-eggs.json:/app/config/easter-eggs.json" \
-        -v "$(pwd)/config/auto-responses.json:/app/config/auto-responses.json" \
-        -v "$(pwd)/config/worldcup2026.json:/app/config/worldcup2026.json" \
+        -v "$(pwd)/config:/app/config" \
         -v "$(pwd)/media:/app/media" \
         --memory="700m" \
         --memory-reservation="512m" \
@@ -131,6 +166,7 @@ run_container() {
         }
 
     log_info "✅ Container rodando!"
+    log_info "   feature-flags.json persistido em $(pwd)/config/feature-flags.json"
 }
 
 # ==============================
