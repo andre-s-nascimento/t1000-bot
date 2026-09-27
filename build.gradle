@@ -143,9 +143,26 @@ jacoco {
 
 test {
     useJUnitPlatform()
-    environment 'TELEGRAM_BOT_TOKEN', System.getenv('TELEGRAM_BOT_TOKEN') ?: 'dummy-token-para-testes'
-    // Força o fuso horário dos testes para coincidir com a regra de negócio
     systemProperty 'user.timezone', 'America/Sao_Paulo'
+
+    // Todas as variáveis sem default no application.properties
+    // (o YAML de test NÃO resolve ${VAR} — só o ambiente resolve)
+    environment 'TELEGRAM_BOT_TOKEN',        System.getenv('TELEGRAM_BOT_TOKEN')        ?: 'dummy-token'
+    environment 'TELEGRAM_BOT_USERNAME',     System.getenv('TELEGRAM_BOT_USERNAME')     ?: 'test_bot'
+    environment 'TELEGRAM_OWNER_ID',         System.getenv('TELEGRAM_OWNER_ID')         ?: '0'
+    environment 'GROQ_API_KEY',              System.getenv('GROQ_API_KEY')              ?: 'dummy'
+    environment 'TMDB_READ_TOKEN',           System.getenv('TMDB_READ_TOKEN')           ?: 'dummy'
+    environment 'WATCHMODE_API_KEY',         System.getenv('WATCHMODE_API_KEY')         ?: 'dummy'
+    environment 'STREAMING_AVAILABILITY_API_KEY', System.getenv('STREAMING_AVAILABILITY_API_KEY') ?: 'dummy'
+    environment 'AZURE_SPEECH_KEY',          System.getenv('AZURE_SPEECH_KEY')          ?: 'dummy'
+    environment 'AZURE_SPEECH_REGION',       System.getenv('AZURE_SPEECH_REGION')       ?: 'brazilsouth'
+    environment 'PODCAST_PUBLISH_CHAT_ID',   System.getenv('PODCAST_PUBLISH_CHAT_ID')   ?: '123456789'
+    environment 'POSTGRES_DATABASE_URL',     System.getenv('POSTGRES_DATABASE_URL')     ?: 'jdbc:postgresql://localhost:5432/test'
+    environment 'POSTGRES_DATABASE_USER',    System.getenv('POSTGRES_DATABASE_USER')    ?: 'test'
+    environment 'POSTGRES_DATABASE_PASSWORD',System.getenv('POSTGRES_DATABASE_PASSWORD')?: 'test'
+    environment 'MONGODB_URI',               System.getenv('MONGODB_URI')               ?: 'mongodb://localhost:27017/test'
+    environment 'KAFKA_BOOTSTRAP_SERVERS',   System.getenv('KAFKA_BOOTSTRAP_SERVERS')   ?: 'localhost:9092'
+
     finalizedBy jacocoTestReport
 }
 
@@ -197,15 +214,33 @@ tasks.named("sonar") {
 
 tasks.named('bootRun') {
     notCompatibleWithConfigurationCache("Carrega variáveis do .env")
+    
     def envFile = project.file('.env')
     if (envFile.exists()) {
         def envVars = envFile.readLines()
-                .findAll { !it.startsWith('#') && it.contains('=') }
-                .collect { it.split('=', 2) }
+                .collect { it.trim() }
+                .findAll { it && !it.startsWith('#') && it.contains('=') }
+                .collect { 
+                    // remove "export " se existir, e trata aspas
+                    def line = it.replaceFirst(/^export\s+/, '')
+                    def (key, value) = line.split('=', 2)
+                    value = value.trim()
+                    // remove aspas simples/duplas envolventes
+                    if ((value.startsWith('"') && value.endsWith('"')) ||
+                        (value.startsWith("'") && value.endsWith("'"))) {
+                        value = value.substring(1, value.length() - 1)
+                    }
+                    // remove comentário inline (só se não estiver entre aspas — simplificado)
+                    [key.trim(), value]
+                }
                 .collectEntries { [it[0], it[1]] }
+        
         environment(envVars)
+        logger.lifecycle("✅ Carregadas ${envVars.size()} variáveis do .env")
+    } else {
+        logger.lifecycle("⚠️ Arquivo .env não encontrado — usando variáveis de ambiente do sistema")
     }
-    // 👇 Limita a JVM do app
+    
     jvmArgs = [
         '-Xmx512m',
         '-XX:MaxMetaspaceSize=192m',

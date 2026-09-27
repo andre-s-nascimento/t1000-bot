@@ -1,31 +1,59 @@
-# Variáveis de ambiente (em maiúsculas) para placeholders
-TMDB_READ_TOKEN: dummy
-TMDB_TOKEN: dummy
-GROQ_API_KEY: dummy
-WATCHMODE_API_KEY: dummy
-TELEGRAM_BOT_TOKEN: dummy
-TELEGRAM_OWNER_ID: 0
-STREAMING_AVAILABILITY_API_KEY: dummy
-PODCAST_PUBLISH_CHAT_ID: 123456789
-AZURE_SPEECH_KEY: dummy
-AZURE_SPEECH_REGION: dummy
+# ============================================================================
+# application-test.yml
+# ----------------------------------------------------------------------------
+# Perfil ativado via @ActiveProfiles("test") nos testes de integração.
+# Os containers (Postgres/Kafka/Mongo) são injetados via @DynamicPropertySource
+# em BaseIntegrationTest.
+#
+# IMPORTANTE:
+#   Este arquivo SOBRESCREVE o application.properties. Portanto, tudo que aqui
+#   não estiver declarado continua valendo do application.properties.
+#
+#   Como o application.properties usa ${VAR} sem default em vários pontos
+#   (POSTGRES_DATABASE_URL, MONGODB_URI, TELEGRAM_BOT_TOKEN, GROQ_API_KEY,
+#   TMDB_READ_TOKEN, WATCHMODE_API_KEY, STREAMING_AVAILABILITY_API_KEY,
+#   AZURE_SPEECH_KEY, AZURE_SPEECH_REGION, PODCAST_PUBLISH_CHAT_ID), você
+#   PRECISA de:
+#     1. Os @DynamicPropertySource em BaseIntegrationTest (DB, Kafka, Mongo)
+#     2. As variáveis de ambiente injetadas pela task `test` do build.gradle
+#        (TELEGRAM_BOT_TOKEN, GROQ_API_KEY, etc. com fallback "dummy").
+# ============================================================================
 
-# Propriedades normais (em minúsculas)
+# ----------------------------------------------------------------------------
+# APLICAÇÃO
+# ----------------------------------------------------------------------------
 spring:
+  application:
+    name: tmill-bot-test
+  data:
+    mongodb:
+      auto-index-creation: true
+  mongodb:
+    uri: mongodb://localhost:27017/test # será sobrescrito pelo @DynamicPropertySource
   threads:
     virtual:
       enabled: false
-  application:
-    name: tmill-bot-test
+  main:
+    lazy-initialization: false
+  jmx:
+    enabled: false
+
+  # --------------------------------------------------------------------------
+  # FLYWAY — roda as migrações no Postgres do Testcontainer
+  # --------------------------------------------------------------------------
   flyway:
     enabled: true
     baseline-on-migrate: true
     locations:
       - classpath:db/migration
+    clean-disabled: false # em teste, permitir clean ajuda a isolar
+
+  # --------------------------------------------------------------------------
+  # KAFKA — bootstrap-servers será sobrescrito pelo @DynamicPropertySource
+  # --------------------------------------------------------------------------
   kafka:
-    bootstrap-servers: localhost:9092 # @DynamicPropertySource sobrescreve
+    bootstrap-servers: localhost:9092 # placeholder; @DynamicPropertySource substitui
     properties:
-      # Zera as propriedades de segurança do application.properties
       security.protocol: PLAINTEXT
       ssl.truststore.location: ""
       ssl.truststore.password: ""
@@ -35,34 +63,40 @@ spring:
       ssl.keystore.type: ""
       sasl.mechanism: ""
       sasl.jaas.config: ""
-      # Necessário para o consumer JSON
-      spring.json.trusted.packages: "*"
-      spring.json.value.default.type: net.ddns.adambravo79.tmill.dto.AudioReceivedEvent
-
     consumer:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: net.ddns.adambravo79.tmill.dto.AudioReceivedEvent
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-podcast:
-  retry:
-    max-attempts: 3
-    delay-ms: 10 # rápido nos testes
+  # --------------------------------------------------------------------------
+  # CACHE — desabilitado em testes para evitar estado compartilhado
+  # --------------------------------------------------------------------------
+  cache:
+    type: none
 
+# ----------------------------------------------------------------------------
+# TELEGRAM — polling desligado em testes
+# ----------------------------------------------------------------------------
 telegram:
+  owner:
+    id: 0
   bot:
-    polling:
-      enabled: false
     token: dummy
     username: test_bot
-    owner:
-      id: 0
+    polling:
+      enabled: false
   message:
     limit: 4000
 
+# ----------------------------------------------------------------------------
+# GROQ — sobrescreve modelos do application.properties
+# ----------------------------------------------------------------------------
 groq:
   api:
     key: dummy
@@ -71,16 +105,21 @@ groq:
     refinement: llama-3.1-8b-instant
     digest: meta-llama/llama-4-scout-17b-16e-instruct
   max-prompt-length: 32000
+  max-refinement-length: 32000
+  connect-timeout: 5s
+  read-timeout: 30s
 
-# NOTE: We still need to override the azure properties because the main
-# application.properties uses ${AZURE_SPEECH_KEY} placeholder syntax.
-# The environment variables above (AZURE_SPEECH_KEY: dummy) should satisfy this.
-# But to be extra safe, we can also override the property directly:
+# ----------------------------------------------------------------------------
+# AZURE — sobrescreve os ${...} obrigatórios do application.properties
+# ----------------------------------------------------------------------------
 azure:
   speech:
     key: dummy
     region: dummy
 
+# ----------------------------------------------------------------------------
+# TMDB / WATCHMODE / STREAMING
+# ----------------------------------------------------------------------------
 tmdb:
   token: dummy
   api:
@@ -92,22 +131,32 @@ watchmode:
 
 streaming-availability:
   api:
+    host: streaming-availability.p.rapidapi.com
     key: dummy
 
+# ----------------------------------------------------------------------------
+# ADMIN — libera IPs locais nos testes
+# ----------------------------------------------------------------------------
 admin:
-  allowed-ips: 127.0.0.1
+  allowed-ips: 127.0.0.1,::1
+  allowed-emails: ""
+  security:
+    disabled: false
 
+# ----------------------------------------------------------------------------
+# FEATURE FLAGS — tudo desligado em testes (evita chamadas externas)
+# ----------------------------------------------------------------------------
 digest:
   enabled: false
-  chat-ids: 123
+  chat-ids: "123"
 
 bot:
-  allowed-chats: -100123
+  allowed-chats: "-100123"
 
 worldcup:
   enabled: false
   data:
-    file: worldcup2026.json
+    file: classpath:worldcup2026.json # prefixo classpath: obrigatório
   update:
     enabled: false
 
@@ -119,14 +168,14 @@ cache:
 auto:
   response:
     enabled: false
-    file: auto-responses.json
+    file: classpath:auto-responses.json
 
 easter-egg:
-  file: easter-eggs.json
+  file: classpath:easter-eggs.json
 
 weekly:
   reminder:
-    media-file: weekly-reminder.mp4
+    media-file: ""
 
 t1000:
   features:
@@ -134,10 +183,41 @@ t1000:
   audio:
     max-size-mb: 20
 
-server:
-  port: 8080
+podcast:
+  publish:
+    chat-id: -123456789 # negativo para casar com o "-${PODCAST_PUBLISH_CHAT_ID}" do application.properties
+  retry:
+    max-attempts: 3
+    delay-ms: 10
+  script:
+    max-tokens: 3000
+  compress:
+    timeout-seconds: 30
+  target:
+    user-id: 5003155230
 
+# ----------------------------------------------------------------------------
+# SERVIDOR
+# ----------------------------------------------------------------------------
+server:
+  port: 0 # porta aleatória em testes (evita conflito)
+
+# ----------------------------------------------------------------------------
+# MIGRAÇÃO — desabilitada em testes
+# ----------------------------------------------------------------------------
 migration:
   enabled: false
   sqlite:
     path: ./data/test-migration.db
+
+# ----------------------------------------------------------------------------
+# LOGGING — mais silencioso em testes
+# ----------------------------------------------------------------------------
+logging:
+  level:
+    root: WARN
+    net.ddns.adambravo79.tmill: INFO
+    org.springframework.kafka: WARN
+    org.testcontainers: WARN
+    com.github.dockerjava: WARN
+    io.ksilisk.telegrambot: WARN

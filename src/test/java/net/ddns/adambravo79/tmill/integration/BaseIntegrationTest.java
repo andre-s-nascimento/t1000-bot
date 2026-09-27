@@ -36,13 +36,27 @@ public abstract class BaseIntegrationTest {
     }
 
     @DynamicPropertySource
-    static void registerProps(DynamicPropertyRegistry registry) {
+    static void registerProps(DynamicPropertyRegistry registry) { // --- PostgreSQL ---
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
 
+        // --- MongoDB ---
+        registry.add("spring.data.mongodb.uri", MONGO::getReplicaSetUrl);
+
+        // --- Kafka ---
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
+        registry.add("spring.kafka.properties.security.protocol", () -> "PLAINTEXT");
+        registry.add("spring.kafka.properties.sasl.mechanism", () -> "");
+        registry.add("spring.kafka.properties.sasl.jaas.config", () -> "");
+        registry.add("spring.kafka.properties.ssl.truststore.location", () -> "");
+        registry.add("spring.kafka.properties.ssl.truststore.password", () -> "");
+        registry.add("spring.kafka.properties.ssl.truststore.type", () -> "");
 
-        registry.add("spring.mongodb.uri", MONGO::getReplicaSetUrl);
+        // --- Fallbacks para @Value sem default ---
+        registry.add("telegram.owner.id", () -> "0");
+        registry.add("podcast.publish.chat-id", () -> "-123456789");
+        registry.add("digest.chat-ids", () -> "");
     }
 }
