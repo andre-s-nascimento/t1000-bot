@@ -23,6 +23,7 @@ import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.service.cache.ChatTranscriptionCache;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 
 class AudioPipelineServiceTest {
 
@@ -38,7 +39,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -73,7 +77,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
 
@@ -97,7 +104,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -126,7 +136,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -151,7 +164,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -181,7 +197,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -218,7 +237,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -242,7 +264,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -269,7 +294,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -292,7 +320,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         assertThatThrownBy(() -> service.processarEArmazenar(null, 1L, 1L, "Usuário"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -305,7 +336,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         when(audio.converterParaWav(input))
@@ -327,7 +361,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
         File wav = Files.createFile(tempDir.resolve("a.wav")).toFile();
@@ -352,7 +389,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod("retryRefinamento", String.class);
@@ -382,7 +422,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod("retryRefinamento", String.class);
@@ -417,7 +460,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod(
@@ -440,7 +486,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod(
@@ -463,7 +512,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod("deletarSilenciosamente", File.class);
@@ -478,7 +530,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod("deletarSilenciosamente", File.class);
@@ -494,7 +549,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod("deletarSilenciosamente", File.class);
@@ -515,7 +573,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod(
@@ -533,7 +594,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod(
@@ -550,7 +614,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod(
@@ -572,7 +639,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         assertThatThrownBy(() -> service.processarFluxoAudio(null, 1L, 1L, "Usuário", (t, b) -> {}))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -586,7 +656,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         File input = Files.createFile(tempDir.resolve("a.oga")).toFile();
 
@@ -601,7 +674,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod(
@@ -623,7 +699,10 @@ class AudioPipelineServiceTest {
         var groq = mock(GroqClient.class);
         var cache = mock(ChatTranscriptionCache.class);
         var transcriptStoreService = mock(TranscriptStoreService.class);
-        var service = new AudioPipelineService(audio, groq, cache, transcriptStoreService);
+        var featureFlagAdminService = mock(FeatureFlagAdminService.class);
+        var service =
+                new AudioPipelineService(
+                        audio, groq, cache, transcriptStoreService, featureFlagAdminService);
 
         Method method =
                 AudioPipelineService.class.getDeclaredMethod("deletarSilenciosamente", File.class);

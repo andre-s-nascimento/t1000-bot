@@ -42,6 +42,7 @@ import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
 
@@ -67,6 +68,7 @@ class AdminControllerTest {
     @Mock private BirthdayService birthdayService;
     @Mock private BirthdayRepository birthdayRepository;
     @Mock private MigrationService migrationService;
+    @Mock private FeatureFlagAdminService featureFlagAdminService;
 
     private AdminController adminController;
     private ObjectMapper objectMapperSpy;
@@ -100,7 +102,8 @@ class AdminControllerTest {
                         tempDirService,
                         birthdayService,
                         birthdayRepository,
-                        migrationService);
+                        migrationService,
+                        featureFlagAdminService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
 

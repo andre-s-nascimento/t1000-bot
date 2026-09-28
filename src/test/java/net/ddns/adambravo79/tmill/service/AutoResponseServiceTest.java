@@ -32,6 +32,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.model.AutoResponseConfig;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import tools.jackson.databind.ObjectMapper;
 
@@ -40,7 +41,8 @@ class AutoResponseServiceTest {
 
     @Mock private ResourceLoader resourceLoader;
     @Mock private Resource resource;
-    @Mock private MetricsService metricsService; // 👈 NOVO
+    @Mock private MetricsService metricsService;
+    @Mock private FeatureFlagAdminService featureFlagAdminService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private AutoResponseService service;
@@ -125,7 +127,9 @@ class AutoResponseServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AutoResponseService(resourceLoader, objectMapper, metricsService);
+        service =
+                new AutoResponseService(
+                        resourceLoader, objectMapper, metricsService, featureFlagAdminService);
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "configFile", "classpath:auto-responses-test.json");
         ReflectionTestUtils.setField(service, "oncePerDayTriggersRaw", "bom dia");
