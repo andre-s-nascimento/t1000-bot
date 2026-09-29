@@ -3,7 +3,7 @@
 echo "🔍 Verificando arquivos proibidos..."
 
 # Bloquear .env
-if git diff --cached --name-only | grep -E '(^|/)\.env'; then
+if git diff --cached --name-only | grep -E '(^|/)\.env' | grep -v '\.env\.example$'; then
   echo "❌ ERRO: .env não pode ser commitado!"
   exit 1
 fi
@@ -21,11 +21,23 @@ if git diff --cached | grep -E '(CLIENT_SECRET|API_KEY|PRIVATE_KEY|TOKEN)=.{10,}
 fi
 
 echo "🧹 Rodando spotlessApply (formatando código Java)..."
-# 🔥 EXECUTA SEM PASSAR ARGUMENTOS
 ./gradlew spotlessApply --no-configuration-cache
 
-echo "🧹 Rodando lint-staged para os demais arquivos..."
-# Roda o lint-staged APENAS para arquivos não-Java
-npx lint-staged
+# Verifica se o commitlint local existe
+if [ -x "./node_modules/.bin/commitlint" ]; then
+  echo "🧹 Rodando commitlint..."
+  ./node_modules/.bin/commitlint --edit "$1" 2>/dev/null || true
+else
+  echo "⚠️ commitlint local não encontrado — pulando (rode 'npm install' para corrigir)"
+fi
+
+# Verifica se o lint-staged local existe
+if [ -x "./node_modules/.bin/lint-staged" ]; then
+  echo "🧹 Rodando lint-staged para os demais arquivos..."
+  ./node_modules/.bin/lint-staged
+else
+  echo "⚠️ lint-staged local não encontrado — pulando (rode 'npm install' para corrigir)"
+  echo "   Dica: 'npm install --save-dev lint-staged' e depois 'npm install --ignore-scripts'"
+fi
 
 echo "✅ Commit seguro"

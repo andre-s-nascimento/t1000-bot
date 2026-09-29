@@ -21,13 +21,15 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install commitlint
+      - name: Install commitlint (frozen from lockfile)
         run: npm ci --ignore-scripts
 
       - name: Validate commits (PR only)
         if: github.event_name == 'pull_request'
-        # 🔒 SEGURANÇA: SHAs via env, NÃO via ${{ }} dentro de run
+        # 🔒 SEGURANÇA:
+        #  - SHAs via env, não via ${{ }} dentro de run
+        #  - ./node_modules/.bin/commitlint evita download on-demand
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: npx commitlint --from="$BASE_SHA" --to="$HEAD_SHA" --verbose
+        run: ./node_modules/.bin/commitlint --from="$BASE_SHA" --to="$HEAD_SHA" --verbose
