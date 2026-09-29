@@ -671,8 +671,16 @@ public class AdminController {
                 targetChatId,
                 LogSanitizer.sanitizeMessageText(message));
 
-        // 4. Sintetiza o áudio
-        byte[] audio = azureTtsClient.synthesizeFullText(message);
+        // 4. Sintetiza o áudio — 👈 try/catch ADICIONADO
+        byte[] audio;
+        try {
+            audio = azureTtsClient.synthesizeFullText(message);
+        } catch (Exception e) {
+            log.error("❌ Erro na síntese TTS", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ " + MSG_ERRO_INTERNO);
+        }
+
         if (audio == null || audio.length == 0) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Falha na síntese (áudio vazio).");
@@ -999,15 +1007,16 @@ public class AdminController {
     }
 
     /** Dry-run: conta quantos registros existem em cada tabela do SQLite, sem migrar. */
+    @SuppressWarnings("null")
     @GetMapping("/migrate-sqlite/preview")
     public ResponseEntity<?> previewMigration() {
         try {
             Map<String, Integer> counts = migrationService.previewCounts();
-            return ResponseEntity.ok(
-                    Map.of(
-                            "arquivo", migrationSqlitePath,
-                            "contadores", counts,
-                            "total", counts.values().stream().mapToInt(Integer::intValue).sum()));
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("arquivo", migrationSqlitePath != null ? migrationSqlitePath : "?");
+            result.put("contadores", counts);
+            result.put("total", counts.values().stream().mapToInt(Integer::intValue).sum());
+            return ResponseEntity.ok(result);
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
                     .body(Map.of("erro", e.getMessage()));

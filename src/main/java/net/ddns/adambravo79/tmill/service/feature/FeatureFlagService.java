@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JavaType;
 import tools.jackson.databind.ObjectMapper;
 
@@ -52,6 +53,13 @@ public class FeatureFlagService {
     private final boolean persistEnabled;
 
     private final ConcurrentHashMap<String, FeatureFlagState> states = new ConcurrentHashMap<>();
+
+    // FeatureFlagService.java
+    public void init() {
+        if (persistEnabled) {
+            loadFromDisk();
+        }
+    }
 
     public FeatureFlagService(
             ObjectMapper objectMapper,
@@ -236,7 +244,7 @@ public class FeatureFlagService {
                     "🎛️ Feature flags carregadas do disco: {} aplicadas, {} read-only ignoradas",
                     aplicadas,
                     ignoradasReadOnly);
-        } catch (IOException e) {
+        } catch (IOException | JacksonException e) {
             log.warn(
                     "⚠️ Falha ao ler feature flags de {}: {}. Usando defaults.",
                     persistPath,

@@ -146,6 +146,9 @@ public final class AdminUtils {
      * @return {@link LocalDate} ou {@code null}
      */
     public static LocalDate tryParseWithPattern(String cleaned) {
+        if (cleaned == null || cleaned.isBlank()) {
+            return null;
+        }
         Matcher matcher = DATE_PATTERN.matcher(cleaned);
         if (!matcher.find()) {
             return null;

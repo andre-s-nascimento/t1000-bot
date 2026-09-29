@@ -56,6 +56,8 @@ public class FeatureFlagAdminService {
         registerBoolReadOnly(
                 "migration.enabled", false, "Migração SQLite → Postgres/Mongo (requer restart)");
 
+        flagService.init();
+
         log.info("🎛️ {} feature flags registradas", flagService.list().size());
     }
 

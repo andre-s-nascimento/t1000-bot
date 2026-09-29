@@ -164,6 +164,25 @@ test {
     environment 'MONGODB_URI',               System.getenv('MONGODB_URI')               ?: 'mongodb://localhost:27017/test'
     environment 'KAFKA_BOOTSTRAP_SERVERS',   System.getenv('KAFKA_BOOTSTRAP_SERVERS')   ?: 'localhost:9092'
 
+    testLogging {
+        events "skipped", "failed"
+        showStandardStreams = false
+        exceptionFormat = "full"
+    }
+
+    finalizedBy jacocoTestReport
+}
+
+tasks.register('unitTest', Test) {
+    group = 'verification'
+    description = 'Roda apenas testes unitários (sem Testcontainers)'
+    useJUnitPlatform()
+    systemProperty 'user.timezone', 'America/Sao_Paulo'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        excludeTestsMatching "net.ddns.adambravo79.tmill.integration.*"
+    }
     finalizedBy jacocoTestReport
 }
 

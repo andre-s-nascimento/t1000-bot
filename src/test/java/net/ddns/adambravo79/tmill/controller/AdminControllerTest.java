@@ -1,6 +1,7 @@
 package net.ddns.adambravo79.tmill.controller;
 
 import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_NOT_AVAILABLE;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -11,10 +12,12 @@ import java.io.ByteArrayInputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -36,12 +39,14 @@ import org.springframework.web.client.ResourceAccessException;
 
 import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
 
@@ -108,6 +113,7 @@ class AdminControllerTest {
                         featureFlagAdminService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
+        ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
 
         // Stub padrão: NUNCA retorna null. Se o arquivo real não existe no classpath,
         // retorna mockResource(false). Isso garante que AdminUtils.loadConfigFile
@@ -1066,5 +1072,778 @@ class AdminControllerTest {
         mockMvc.perform(get("/admin/auto-response-rules"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalRules").value(5));
+    }
+
+    // ========================= FEATURE FLAGS =========================
+
+    @Test
+    void listFeatures_deveRetornarLista() throws Exception {
+        FeatureFlagState state = new FeatureFlagState("a.enabled", true, "Desc", false);
+        when(featureFlagAdminService.list()).thenReturn(List.of(state));
+
+        mockMvc.perform(get("/admin/features"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].key").value("a.enabled"))
+                .andExpect(jsonPath("$[0].enabled").value(true))
+                .andExpect(jsonPath("$[0].description").value("Desc"))
+                .andExpect(jsonPath("$[0].readOnly").value(false));
+    }
+
+    @Test
+    void listFeatures_deveRetornarListaVazia() throws Exception {
+        when(featureFlagAdminService.list()).thenReturn(List.of());
+
+        mockMvc.perform(get("/admin/features"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void toggleFeature_deveAlterarERetornarChangedTrue() throws Exception {
+        when(featureFlagAdminService.isEnabled("a.enabled")).thenReturn(false, true);
+        doNothing().when(featureFlagAdminService).toggle("a.enabled", true);
+
+        mockMvc.perform(post("/admin/features/a.enabled").param("enabled", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.key").value("a.enabled"))
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.changed").value(true));
+
+        verify(featureFlagAdminService).toggle("a.enabled", true);
+    }
+
+    @Test
+    void toggleFeature_valorIgual_retornaChangedFalse() throws Exception {
+        when(featureFlagAdminService.isEnabled("a.enabled")).thenReturn(true);
+        doNothing().when(featureFlagAdminService).toggle("a.enabled", true);
+
+        mockMvc.perform(post("/admin/features/a.enabled").param("enabled", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changed").value(false));
+    }
+
+    @Test
+    void toggleFeature_flagDesconhecida_retornaBadRequest() throws Exception {
+        doThrow(new IllegalArgumentException("Flag desconhecida: foo.bar"))
+                .when(featureFlagAdminService)
+                .toggle("foo.bar", true);
+
+        mockMvc.perform(post("/admin/features/foo.bar").param("enabled", "true"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erro").value("Flag desconhecida: foo.bar"));
+    }
+
+    @Test
+    void toggleFeature_flagReadOnly_retornaConflict() throws Exception {
+        doThrow(new IllegalStateException("Flag 'migration.enabled' é read-only"))
+                .when(featureFlagAdminService)
+                .toggle("migration.enabled", true);
+
+        mockMvc.perform(post("/admin/features/migration.enabled").param("enabled", "true"))
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.erro")
+                                .value(org.hamcrest.Matchers.containsString("read-only")));
+    }
+
+    @Test
+    void toggleFeature_erroInesperado_retornaInternalServerError() throws Exception {
+        doThrow(new RuntimeException("boom"))
+                .when(featureFlagAdminService)
+                .toggle("a.enabled", true);
+
+        mockMvc.perform(post("/admin/features/a.enabled").param("enabled", "true"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.erro").exists());
+    }
+
+    // ========================= BIRTHDAYS =========================
+
+    @Test
+    void listBirthdays_deveRetornarLista() throws Exception {
+        when(birthdayRepository.findAll()).thenReturn(List.of());
+
+        mockMvc.perform(get("/admin/birthdays"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void birthdaysCount_deveRetornarTotal() throws Exception {
+        when(birthdayRepository.count()).thenReturn(5);
+
+        mockMvc.perform(get("/admin/birthdays/count"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(5));
+    }
+
+    @Test
+    void testBirthday_comDiaMesValidos_deveEnviar() throws Exception {
+        when(birthdayService.enviarParabensPara(5, 10)).thenReturn(3);
+
+        mockMvc.perform(post("/admin/birthdays/test/5/10"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Enviados: 3")));
+
+        verify(birthdayService).enviarParabensPara(5, 10);
+    }
+
+    @Test
+    void testBirthday_comDiaInvalido_retornaBadRequest() throws Exception {
+        mockMvc.perform(post("/admin/birthdays/test/0/5"))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        content()
+                                .string(org.hamcrest.Matchers.containsString("Dia/mês inválidos")));
+
+        verifyNoInteractions(birthdayService);
+    }
+
+    @Test
+    void testBirthday_comMesInvalido_retornaBadRequest() throws Exception {
+        mockMvc.perform(post("/admin/birthdays/test/5/13")).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(birthdayService);
+    }
+
+    @Test
+    void testBirthdayToday_deveEnviar() throws Exception {
+        doNothing().when(birthdayService).enviarParabensDoDia();
+
+        mockMvc.perform(post("/admin/birthdays/test-today"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("hoje")));
+
+        verify(birthdayService).enviarParabensDoDia();
+    }
+
+    @Test
+    void deleteBirthday_quandoExiste_retornaOk() throws Exception {
+        when(birthdayRepository.deleteByUserId(42L)).thenReturn(1);
+
+        mockMvc.perform(delete("/admin/birthdays/42"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("removido")));
+    }
+
+    @Test
+    void deleteBirthday_quandoNaoExiste_retornaNotFound() throws Exception {
+        when(birthdayRepository.deleteByUserId(99L)).thenReturn(0);
+
+        mockMvc.perform(delete("/admin/birthdays/99")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void clearBirthdays_deveRetornarNumeroDeletado() throws Exception {
+        when(birthdayRepository.deleteAll()).thenReturn(7);
+
+        mockMvc.perform(post("/admin/birthdays/clear"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("7 aniversário")));
+    }
+
+    // ========================= DEBUG CACHE =========================
+
+    @Test
+    void debugCache_quandoEncontrado_retornaDetalhes() throws Exception {
+        var entry =
+                new net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry(
+                        "texto bruto", "texto refinado", System.currentTimeMillis());
+        when(fileTranscriptionCacheService.get("file-id")).thenReturn(entry);
+
+        mockMvc.perform(get("/admin/debug/cache/file-id"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileId").value("file-id"))
+                .andExpect(jsonPath("$.brutoLength").value("texto bruto".length()))
+                .andExpect(jsonPath("$.refinadoLength").value("texto refinado".length()))
+                .andExpect(jsonPath("$.brutoVazio").value(false))
+                .andExpect(jsonPath("$.refinadoVazio").value(false));
+    }
+
+    @Test
+    void debugCache_quandoNaoEncontrado_retornaNotFound() throws Exception {
+        when(fileTranscriptionCacheService.get("nao-existe")).thenReturn(null);
+
+        mockMvc.perform(get("/admin/debug/cache/nao-existe"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.erro").exists());
+    }
+
+    @Test
+    void debugCache_comTextoVazio_retornaFlagsTrue() throws Exception {
+        var entry =
+                new net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry(
+                        "", null, System.currentTimeMillis());
+        when(fileTranscriptionCacheService.get("vazio")).thenReturn(entry);
+
+        mockMvc.perform(get("/admin/debug/cache/vazio"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.brutoVazio").value(true))
+                .andExpect(jsonPath("$.refinadoVazio").value(true));
+    }
+
+    // ========================= PODCAST =========================
+
+    @Test
+    void testPodcast_days_deveAceitar() throws Exception {
+        doNothing().when(podcastPublisherService).generateAndSendPodcast(any(), any(), anyLong());
+
+        mockMvc.perform(get("/admin/test-podcast-days").param("days", "3"))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void testPodcast_semParametros_usaSemanaPassada() throws Exception {
+        doNothing().when(podcastPublisherService).generateAndSendPodcast(any(), any(), anyLong());
+
+        mockMvc.perform(get("/admin/test-podcast")).andExpect(status().isAccepted());
+    }
+
+    @Test
+    void testPodcast_daysInvalido_retornaBadRequest() throws Exception {
+        mockMvc.perform(get("/admin/test-podcast-days").param("days", "0"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/admin/test-podcast-days").param("days", "31"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // =========================================================================
+    // 🧪 ONDA 3c — Cobertura do AdminController (REST)
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // falaT1000
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("falaT1000 com chatId explícito envia mensagem HTML")
+    void falaT1000_chatIdExplicito() throws Exception {
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(
+                        post("/admin/fala-t1000")
+                                .param("message", "olá mundo")
+                                .param("chatId", "999")
+                                .param("parseMode", "HTML"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("999")));
+
+        verify(telegramFacade).enviarMensagemHtml(eq(999L), eq("olá mundo"));
+    }
+
+    @Test
+    @DisplayName("falaT1000 sem chatId usa ownerId")
+    void falaT1000_usaOwnerId() throws Exception {
+        ReflectionTestUtils.setField(adminController, "ownerId", 42L);
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(post("/admin/fala-t1000").param("message", "oi"))
+                .andExpect(status().isOk());
+
+        verify(telegramFacade).enviarMensagemHtml(eq(42L), eq("oi"));
+    }
+
+    @Test
+    @DisplayName("falaT1000 com parseMode TEXT usa enviarMensagem")
+    void falaT1000_parseModeTexto() throws Exception {
+        doNothing().when(telegramFacade).enviarMensagem(anyLong(), anyString());
+
+        mockMvc.perform(
+                        post("/admin/fala-t1000")
+                                .param("message", "texto")
+                                .param("chatId", "100")
+                                .param("parseMode", "TEXT"))
+                .andExpect(status().isOk());
+
+        verify(telegramFacade).enviarMensagem(eq(100L), eq("texto"));
+        verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("falaT1000 sem mensagem retorna 400")
+    void falaT1000_semMensagem() throws Exception {
+        mockMvc.perform(post("/admin/fala-t1000").param("message", ""))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("falaT1000 sem chatId e ownerId 0 retorna 400")
+    void falaT1000_semChatIdNemOwner() throws Exception {
+        ReflectionTestUtils.setField(adminController, "ownerId", 0L);
+        // Força digestChatIds vazio
+        ReflectionTestUtils.setField(adminController, "digestChatIds", java.util.Set.of());
+
+        mockMvc.perform(post("/admin/fala-t1000").param("message", "oi"))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        content()
+                                .string(
+                                        org.hamcrest.Matchers.containsString(
+                                                "Nenhum chatId informado")));
+    }
+
+    @Test
+    @DisplayName("falaT1000 com Exception genérica retorna 500")
+    void falaT1000_excecao() throws Exception {
+        doThrow(new RuntimeException("boom"))
+                .when(telegramFacade)
+                .enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(post("/admin/fala-t1000").param("message", "oi").param("chatId", "100"))
+                .andExpect(status().isInternalServerError());
+    }
+
+    // -------------------------------------------------------------------------
+    // testAzureTts (GET /admin/test-azure-tts)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("testAzureTts com publishChatId 0 retorna 400")
+    void testAzureTts_publishChatIdZero() throws Exception {
+        ReflectionTestUtils.setField(adminController, "publishChatId", 0L);
+
+        mockMvc.perform(get("/admin/test-azure-tts"))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        content()
+                                .string(
+                                        org.hamcrest.Matchers.containsString(
+                                                "podcast.publish.chat-id não configurado")));
+    }
+
+    @Test
+    @DisplayName("testAzureTts com áudio vazio retorna 500")
+    void testAzureTts_audioVazio() throws Exception {
+        ReflectionTestUtils.setField(adminController, "publishChatId", -200L);
+        when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[0]);
+
+        mockMvc.perform(get("/admin/test-azure-tts"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(
+                        content().string(org.hamcrest.Matchers.containsString("Falha na síntese")));
+    }
+
+    @Test
+    @DisplayName("testAzureTts com sucesso envia mídia")
+    void testAzureTts_sucesso() throws Exception {
+        ReflectionTestUtils.setField(adminController, "publishChatId", -200L);
+        when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
+
+        var temp = java.nio.file.Files.createTempFile("test_azure_", ".mp3");
+        when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
+        doNothing().when(telegramFacade).enviarMidia(anyLong(), anyString(), anyString());
+
+        mockMvc.perform(get("/admin/test-azure-tts"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("-200")));
+
+        verify(telegramFacade).enviarMidia(eq(-200L), anyString(), eq("Teste Azure TTS"));
+    }
+
+    // -------------------------------------------------------------------------
+    // falaT1000Tts
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("falaT1000Tts com sucesso envia áudio")
+    void falaT1000Tts_sucesso() throws Exception {
+        ReflectionTestUtils.setField(adminController, "ownerId", 42L);
+        when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
+        var temp = java.nio.file.Files.createTempFile("tts_", ".mp3");
+        when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
+        doNothing().when(telegramFacade).enviarMidia(anyLong(), anyString(), anyString());
+
+        mockMvc.perform(
+                        post("/admin/fala-t1000-tts")
+                                .param("message", "olá")
+                                .param("chatId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("sucesso")));
+
+        verify(telegramFacade)
+                .enviarMidia(eq(100L), anyString(), eq("🔊 Áudios para a futura Skynet"));
+    }
+
+    @Test
+    @DisplayName("falaT1000Tts sem mensagem retorna 400")
+    void falaT1000Tts_semMensagem() throws Exception {
+        mockMvc.perform(post("/admin/fala-t1000-tts").param("message", ""))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("falaT1000Tts sem chatId e ownerId 0 retorna 400")
+    void falaT1000Tts_semChatId() throws Exception {
+        ReflectionTestUtils.setField(adminController, "ownerId", 0L);
+        ReflectionTestUtils.setField(adminController, "digestChatIds", java.util.Set.of());
+
+        mockMvc.perform(post("/admin/fala-t1000-tts").param("message", "oi"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("falaT1000Tts com áudio vazio retorna 500")
+    void falaT1000Tts_audioVazio() throws Exception {
+        when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[0]);
+
+        mockMvc.perform(post("/admin/fala-t1000-tts").param("message", "oi").param("chatId", "100"))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    @DisplayName("falaT1000Tts com Exception na síntese retorna 500")
+    void falaT1000Tts_excecao() throws Exception {
+        when(azureTtsClient.synthesizeFullText(anyString()))
+                .thenThrow(new RuntimeException("Azure down"));
+
+        mockMvc.perform(post("/admin/fala-t1000-tts").param("message", "oi").param("chatId", "100"))
+                .andExpect(status().isInternalServerError());
+    }
+
+    // -------------------------------------------------------------------------
+    // testPodcast
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("testPodcast com start e end válidos retorna 202")
+    void testPodcast_datasValidas() throws Exception {
+        mockMvc.perform(
+                        get("/admin/test-podcast")
+                                .param("chatId", "999")
+                                .param("start", "2026-09-01")
+                                .param("end", "2026-09-07"))
+                .andExpect(status().isAccepted());
+
+        // Aguarda o CompletableFuture.runAsync executar (até 2s)
+        org.awaitility.Awaitility.await()
+                .atMost(java.time.Duration.ofSeconds(2))
+                .untilAsserted(
+                        () ->
+                                verify(podcastPublisherService, org.mockito.Mockito.atLeastOnce())
+                                        .generateAndSendPodcast(any(), any(), eq(999L)));
+    }
+
+    @Test
+    @DisplayName("testPodcast com periodo válido retorna 202")
+    void testPodcast_comPeriodo() throws Exception {
+        mockMvc.perform(get("/admin/test-podcast").param("chatId", "999").param("periodo", "3"))
+                .andExpect(status().isAccepted());
+
+        org.awaitility.Awaitility.await()
+                .atMost(java.time.Duration.ofSeconds(2))
+                .untilAsserted(
+                        () ->
+                                verify(podcastPublisherService, org.mockito.Mockito.atLeastOnce())
+                                        .generateAndSendPodcast(any(), any(), eq(999L)));
+    }
+
+    @Test
+    @DisplayName("testPodcast sem parâmetros usa última semana completa")
+    void testPodcast_semParametros() throws Exception {
+        mockMvc.perform(get("/admin/test-podcast").param("chatId", "999"))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    @DisplayName("testPodcast com data inválida retorna 400")
+    void testPodcast_dataInvalida() throws Exception {
+        mockMvc.perform(
+                        get("/admin/test-podcast")
+                                .param("chatId", "999")
+                                .param("start", "invalido")
+                                .param("end", "2026-09-07"))
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        content().string(org.hamcrest.Matchers.containsString("Formato de data")));
+    }
+
+    @Test
+    @DisplayName("testPodcast com start > end retorna 400")
+    void testPodcast_startDepoisDeEnd() throws Exception {
+        mockMvc.perform(
+                        get("/admin/test-podcast")
+                                .param("chatId", "999")
+                                .param("start", "2026-09-10")
+                                .param("end", "2026-09-01"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("testPodcast sem chatId usa SHOWCASE")
+    void testPodcast_semChatId_usaShowcase() throws Exception {
+        mockMvc.perform(get("/admin/test-podcast")).andExpect(status().isAccepted());
+    }
+
+    // -------------------------------------------------------------------------
+    // testPodcastLatest
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("testPodcastLatest retorna 202")
+    void testPodcastLatest_sucesso() throws Exception {
+        mockMvc.perform(get("/admin/test-podcast-latest").param("chatId", "999"))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    @DisplayName("testPodcastLatest sem chatId retorna 202")
+    void testPodcastLatest_semChatId() throws Exception {
+        mockMvc.perform(get("/admin/test-podcast-latest")).andExpect(status().isAccepted());
+    }
+
+    // -------------------------------------------------------------------------
+    // migrateFromSqlite (POST)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("migrateFromSqlite com SUCCESS retorna 200")
+    void migrateFromSqlite_sucesso() throws Exception {
+        MigrationResult result =
+                MigrationResult.success(
+                        java.time.Instant.now(), java.time.Instant.now(), Map.of("messages", 10));
+        when(migrationService.migrateAll(false)).thenReturn(result);
+
+        mockMvc.perform(post("/admin/migrate-sqlite").param("dryRun", "false"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("migrateFromSqlite com PARTIAL retorna 207")
+    void migrateFromSqlite_partial() throws Exception {
+        MigrationResult result =
+                MigrationResult.partial(
+                        java.time.Instant.now(),
+                        java.time.Instant.now(),
+                        Map.of("messages", 5),
+                        java.util.List.of("Erro 1", "Erro 2"));
+        when(migrationService.migrateAll(false)).thenReturn(result);
+
+        mockMvc.perform(post("/admin/migrate-sqlite").param("dryRun", "false"))
+                .andExpect(status().isMultiStatus());
+    }
+
+    @Test
+    @DisplayName("migrateFromSqlite com FAILED retorna 500")
+    void migrateFromSqlite_failed() throws Exception {
+        MigrationResult result =
+                MigrationResult.failed(
+                        java.time.Instant.now(),
+                        java.time.Instant.now(),
+                        java.util.List.of("Erro crítico"));
+        when(migrationService.migrateAll(false)).thenReturn(result);
+
+        mockMvc.perform(post("/admin/migrate-sqlite").param("dryRun", "false"))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    @DisplayName("migrateFromSqlite com IllegalStateException retorna 412")
+    void migrateFromSqlite_illegalState() throws Exception {
+        when(migrationService.migrateAll(true))
+                .thenThrow(new IllegalStateException("Migração desabilitada"));
+
+        mockMvc.perform(post("/admin/migrate-sqlite").param("dryRun", "true"))
+                .andExpect(status().isPreconditionFailed());
+    }
+
+    @Test
+    @DisplayName("migrateFromSqlite com Exception genérica retorna 500")
+    void migrateFromSqlite_excecaoGenerica() throws Exception {
+        when(migrationService.migrateAll(false)).thenThrow(new RuntimeException("boom"));
+
+        mockMvc.perform(post("/admin/migrate-sqlite").param("dryRun", "false"))
+                .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    @DisplayName("migrateFromSqlite com dryRun default false")
+    void migrateFromSqlite_defaultDryRun() throws Exception {
+        MigrationResult result =
+                MigrationResult.success(java.time.Instant.now(), java.time.Instant.now(), Map.of());
+        when(migrationService.migrateAll(false)).thenReturn(result);
+
+        mockMvc.perform(post("/admin/migrate-sqlite")).andExpect(status().isOk());
+    }
+
+    // -------------------------------------------------------------------------
+    // previewMigration (GET)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("previewMigration retorna contadores e total")
+    void previewMigration_sucesso() throws Exception {
+        when(migrationService.previewCounts()).thenReturn(Map.of("messages", 5, "transcripts", 3));
+
+        mockMvc.perform(get("/admin/migrate-sqlite/preview"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.arquivo").value("./data/t1000.db"))
+                .andExpect(jsonPath("$.contadores.messages").value(5))
+                .andExpect(jsonPath("$.total").value(8));
+    }
+
+    @Test
+    @DisplayName("previewMigration com IllegalStateException retorna 412")
+    void previewMigration_illegalState() throws Exception {
+        when(migrationService.previewCounts())
+                .thenThrow(new IllegalStateException("Arquivo não encontrado"));
+
+        mockMvc.perform(get("/admin/migrate-sqlite/preview"))
+                .andExpect(status().isPreconditionFailed())
+                .andExpect(jsonPath("$.erro").value("Arquivo não encontrado"));
+    }
+
+    // -------------------------------------------------------------------------
+    // initChatIds (helpers privados via reflexão)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("initChatIds com string em branco não adiciona nada")
+    void initChatIds_stringVazia() throws Exception {
+        ReflectionTestUtils.setField(adminController, "digestChatIds", new java.util.HashSet<>());
+        ReflectionTestUtils.setField(adminController, "digestChatIdsStr", "");
+
+        adminController.initChatIds();
+
+        @SuppressWarnings("unchecked")
+        var ids =
+                (java.util.Set<Long>)
+                        ReflectionTestUtils.getField(adminController, "digestChatIds");
+        assertThat(ids).isEmpty();
+    }
+
+    @Test
+    @DisplayName("initChatIds com string null não adiciona nada")
+    void initChatIds_stringNull() throws Exception {
+        ReflectionTestUtils.setField(adminController, "digestChatIds", new java.util.HashSet<>());
+        ReflectionTestUtils.setField(adminController, "digestChatIdsStr", null);
+
+        adminController.initChatIds();
+
+        @SuppressWarnings("unchecked")
+        var ids =
+                (java.util.Set<Long>)
+                        ReflectionTestUtils.getField(adminController, "digestChatIds");
+        assertThat(ids).isEmpty();
+    }
+
+    @Test
+    @DisplayName("initChatIds com IDs mistos ignora os inválidos")
+    void initChatIds_idsMistos() {
+        ReflectionTestUtils.setField(adminController, "digestChatIds", new java.util.HashSet<>());
+        ReflectionTestUtils.setField(adminController, "digestChatIdsStr", "-100,abc,-200");
+
+        adminController.initChatIds();
+
+        @SuppressWarnings("unchecked")
+        var ids =
+                (java.util.Set<Long>)
+                        ReflectionTestUtils.getField(adminController, "digestChatIds");
+        assertThat(ids).containsExactlyInAnyOrder(-100L, -200L);
+    }
+
+    // -------------------------------------------------------------------------
+    // Branches parciais — getConfigFiles
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("getConfigFiles com IOException retorna 'Arquivo não encontrado'")
+    void getConfigFiles_ioException() throws Exception {
+        when(resourceLoader.getResource(anyString()))
+                .thenAnswer(
+                        invocation -> {
+                            var resource = mock(org.springframework.core.io.Resource.class);
+                            when(resource.exists()).thenReturn(false);
+                            return resource;
+                        });
+
+        mockMvc.perform(get("/admin/config-files"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$['easter-eggs.json']")
+                                .value(
+                                        org.hamcrest.Matchers.containsString(
+                                                "Arquivo não encontrado")));
+    }
+
+    // -------------------------------------------------------------------------
+    // Branches parciais — testWorldCup*Showcase (chatId == null)
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("testWorldCupNoonShowcase sem chatId usa SHOWCASE")
+    void testWorldCupNoonShowcase_semChatId() throws Exception {
+        doNothing().when(worldCupSchedulerService).sendNoonMatchesToChat(anyLong());
+
+        mockMvc.perform(post("/admin/test-worldcup-noon-showcase"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("-5283244164")));
+
+        verify(worldCupSchedulerService).sendNoonMatchesToChat(-5283244164L);
+    }
+
+    @Test
+    @DisplayName("testWorldCupEveningShowcase sem chatId usa SHOWCASE")
+    void testWorldCupEveningShowcase_semChatId() throws Exception {
+        doNothing().when(worldCupSchedulerService).sendEveningMatchesToChat(anyLong());
+
+        mockMvc.perform(post("/admin/test-worldcup-evening-showcase"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("-5283244164")));
+
+        verify(worldCupSchedulerService).sendEveningMatchesToChat(-5283244164L);
+    }
+
+    @Test
+    @DisplayName("testWorldCupResultsShowcase sem chatId usa SHOWCASE")
+    void testWorldCupResultsShowcase_semChatId() throws Exception {
+        doNothing()
+                .when(worldCupSchedulerService)
+                .sendResultsToChat(eq(-5283244164L), any(LocalDate.class));
+
+        mockMvc.perform(post("/admin/test-worldcup-results-showcase").param("dateParam", "hoje"))
+                .andExpect(status().isOk());
+
+        verify(worldCupSchedulerService).sendResultsToChat(eq(-5283244164L), any(LocalDate.class));
+    }
+
+    // -------------------------------------------------------------------------
+    // testAutoResponse — branches parciais
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("testAutoResponse com animation inválida envia apenas texto")
+    void testAutoResponse_animationInvalida() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta", "nao-e-url-valida");
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("chatId", "999"))
+                .andExpect(status().isOk());
+
+        verify(telegramFacade, never()).enviarMidia(anyLong(), anyString(), anyString());
+        verify(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+    }
+
+    // -------------------------------------------------------------------------
+    // debugAutoResponse — branch com regra encontrada
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("debugAutoResponse com regra encontrada retorna response + animation")
+    void debugAutoResponse_encontrada() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta", "https://exemplo.com/anim.gif");
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        mockMvc.perform(get("/admin/debug-auto-response").param("message", "teste"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.found").value(true))
+                .andExpect(jsonPath("$.response").value("Resposta"))
+                .andExpect(jsonPath("$.animation").value("https://exemplo.com/anim.gif"));
     }
 }

@@ -33,6 +33,12 @@ public class CallbackHandler {
             return;
         }
 
+        String data = callback.data();
+        if (data == null || data.isBlank()) {
+            log.warn("Callback sem data — ignorando (id={})", callback.id());
+            return;
+        }
+
         var msg = callback.maybeInaccessibleMessage();
         if (msg == null) {
             log.warn("Callback sem mensagem acessível (pode ter sido deletada)");
@@ -42,7 +48,6 @@ public class CallbackHandler {
         }
 
         long chatId = msg.chat().id();
-        String data = callback.data();
 
         log.debug("Callback: chatId={}, data={}", chatId, data);
 

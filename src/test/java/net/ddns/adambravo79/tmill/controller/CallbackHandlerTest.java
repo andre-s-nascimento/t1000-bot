@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -232,9 +233,13 @@ class CallbackHandlerTest {
 
     // 2. Mensagem inacessível (msg == null)
     @Test
+    @DisplayName("handleCallbackUpdate com msg null e data válida responde aviso")
     void handleCallbackUpdate_comMsgNull_deveResponderERetornar() {
+        when(callback.data()).thenReturn("id:123"); // 👈 ADICIONAR
         when(callback.maybeInaccessibleMessage()).thenReturn(null);
+
         callbackHandler.handleCallbackUpdate(update);
+
         verify(telegramFacade)
                 .answerCallbackQuery("cb123", "Mensagem original não disponível", true);
         verifyNoInteractions(movieService, audioHandler);
@@ -284,5 +289,16 @@ class CallbackHandlerTest {
         }
         InlineKeyboardMarkup markup = callbackHandler.criarBotoesDesambiguacao(lista);
         assertThat(markup).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Callback com data null não faz nada e não responde")
+    void nullData_noOp() {
+        when(callback.data()).thenReturn(null);
+
+        callbackHandler.handleCallbackUpdate(update);
+
+        verify(telegramFacade, never()).answerCallbackQuery(anyString(), anyString(), anyBoolean());
+        verifyNoInteractions(movieService, audioHandler);
     }
 }
