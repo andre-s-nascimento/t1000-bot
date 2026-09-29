@@ -32,10 +32,12 @@ public class WorldCupUpdaterService {
     private String destinationPath;
 
     public WorldCupUpdaterService(
-            StaticWorldCupService worldCupService, FeatureFlagAdminService featureFlags) {
+            StaticWorldCupService worldCupService,
+            FeatureFlagAdminService featureFlags,
+            RestClient restClient) { // <-- ADICIONAR
         this.worldCupService = worldCupService;
-        this.restClient = RestClient.builder().build();
         this.featureFlags = featureFlags;
+        this.restClient = restClient; // <-- usa o injetado
     }
 
     @PostConstruct

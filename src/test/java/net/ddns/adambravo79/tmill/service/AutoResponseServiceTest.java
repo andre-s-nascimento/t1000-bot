@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -39,6 +40,7 @@ import tools.jackson.databind.ObjectMapper;
 @ExtendWith(MockitoExtension.class)
 class AutoResponseServiceTest {
 
+    private static final String FLAG_AUTO_RESPONSE_ENABLED = "auto.response.enabled";
     @Mock private ResourceLoader resourceLoader;
     @Mock private Resource resource;
     @Mock private MetricsService metricsService;
@@ -130,10 +132,16 @@ class AutoResponseServiceTest {
         service =
                 new AutoResponseService(
                         resourceLoader, objectMapper, metricsService, featureFlagAdminService);
-        ReflectionTestUtils.setField(service, "enabled", true);
+
         ReflectionTestUtils.setField(service, "configFile", "classpath:auto-responses-test.json");
         ReflectionTestUtils.setField(service, "oncePerDayTriggersRaw", "bom dia");
         ReflectionTestUtils.invokeMethod(service, "parseOncePerDayTriggers");
+
+        // Flag habilitada por padrão em todos os testes.
+        // lenient() evita UnnecessaryStubbingException nos testes que não a usam.
+        lenient()
+                .when(featureFlagAdminService.isEnabled(FLAG_AUTO_RESPONSE_ENABLED))
+                .thenReturn(true);
     }
 
     // ============================================================
@@ -344,7 +352,7 @@ class AutoResponseServiceTest {
     @Test
     @DisplayName("Serviço desabilitado: não registra métrica")
     void desabilitado_nenhumaMetrica() throws Exception {
-        ReflectionTestUtils.setField(service, "enabled", false);
+        when(featureFlagAdminService.isEnabled(FLAG_AUTO_RESPONSE_ENABLED)).thenReturn(false);
         carregarRegras();
 
         assertThat(service.getResponseRule(1L, "bom dia")).isEmpty();
@@ -575,11 +583,11 @@ class AutoResponseServiceTest {
     // ============================================================
 
     @Test
-    @DisplayName("isEnabled: retorna valor configurado")
+    @DisplayName("isEnabled: delega para FeatureFlagAdminService")
     void isEnabled_retornaValor() {
-        ReflectionTestUtils.setField(service, "enabled", true);
-        assertThat(service.isEnabled()).isTrue();
-        ReflectionTestUtils.setField(service, "enabled", false);
+        assertThat(service.isEnabled()).isTrue(); // herda do setUp
+
+        when(featureFlagAdminService.isEnabled(FLAG_AUTO_RESPONSE_ENABLED)).thenReturn(false);
         assertThat(service.isEnabled()).isFalse();
     }
 
@@ -607,9 +615,9 @@ class AutoResponseServiceTest {
     // ============================================================
 
     @Test
-    @DisplayName("init: enabled=false não carrega")
+    @DisplayName("init: flag desabilitada não carrega")
     void init_enabledFalse() {
-        ReflectionTestUtils.setField(service, "enabled", false);
+        when(featureFlagAdminService.isEnabled(FLAG_AUTO_RESPONSE_ENABLED)).thenReturn(false);
         service.init();
         assertThat(service.getRulesCount()).isZero();
     }
@@ -659,17 +667,16 @@ class AutoResponseServiceTest {
 
     @Test
     @DisplayName("recordResponse só grava para triggers once-per-day")
+    @SuppressWarnings("unchecked")
     void recordResponse_soGravaOncePerDay() throws Exception {
         carregarRegras();
 
-        // "obrigado" NÃO é once-per-day → não deve gravar
         service.getResponseRule(1L, "obrigado");
         Map<Long, Map<String, LocalDate>> cooldown =
                 (Map<Long, Map<String, LocalDate>>)
                         ReflectionTestUtils.getField(service, "userTriggerCooldown");
         assertThat(cooldown).isEmpty();
 
-        // "bom dia" É once-per-day → deve gravar
         service.getResponseRule(1L, "bom dia");
         assertThat(cooldown).containsKey(1L);
         assertThat(cooldown.get(1L)).containsKey("bom dia");
@@ -681,9 +688,9 @@ class AutoResponseServiceTest {
 
     private void carregarRegras() throws Exception {
         InputStream is = new ByteArrayInputStream(JSON_VALIDO.getBytes());
-        when(resourceLoader.getResource(anyString())).thenReturn(resource);
-        when(resource.exists()).thenReturn(true);
-        when(resource.getInputStream()).thenReturn(is);
+        lenient().when(resourceLoader.getResource(anyString())).thenReturn(resource);
+        lenient().when(resource.exists()).thenReturn(true);
+        lenient().when(resource.getInputStream()).thenReturn(is);
         service.loadResponses();
     }
 }

@@ -1,6 +1,8 @@
 /* (c) 2026 | 26/09/2026 */
 package net.ddns.adambravo79.tmill.service.feature;
 
+import org.jspecify.annotations.NonNull;
+
 /**
  * Definição de uma feature flag.
  *
@@ -10,7 +12,7 @@ package net.ddns.adambravo79.tmill.service.feature;
  * @param defaultValue valor inicial lido do {@code application.properties}
  */
 public record FeatureFlagDefinition(
-        String key, String description, boolean readOnly, boolean defaultValue) {
+        @NonNull String key, @NonNull String description, boolean readOnly, boolean defaultValue) {
 
     public FeatureFlagDefinition {
         if (key == null || key.isBlank()) {

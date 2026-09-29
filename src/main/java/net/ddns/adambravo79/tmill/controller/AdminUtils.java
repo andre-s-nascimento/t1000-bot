@@ -269,6 +269,9 @@ public final class AdminUtils {
      * <p>Isso garante que o controller leia o arquivo <b>do mesmo local que os services</b> (ex.:
      * {@code EasterEggService}, {@code AutoResponseService}, {@code StaticWorldCupService}).
      *
+     * <p><b>Robustez:</b> cada tentativa passa por {@link #tryLoad}, que trata {@code null} do {@link
+     * ResourceLoader} e {@code resource.exists() == false} sem lançar NPE.
+     *
      * @param resourceLoader loader do Spring
      * @param environment ambiente do Spring (para resolver a propriedade)
      * @param objectMapper mapper Jackson
@@ -287,29 +290,29 @@ public final class AdminUtils {
             String defaultLocation)
             throws IOException {
 
-        // 1. Tenta pela propriedade específica (ex: easter-egg.file)
+        // 1. Propriedade específica (ex: easter-egg.file)
         String configuredLocation = environment.getProperty(propertyKey, defaultLocation);
-        Resource resource = resourceLoader.getResource(configuredLocation);
-        if (resource.exists()) {
-            return objectMapper.readValue(resource.getInputStream(), Object.class);
+        Object content = tryLoad(resourceLoader, objectMapper, configuredLocation);
+        if (content != null) {
+            return content;
         }
 
-        // 2. Tenta classpath
-        Resource classpathResource = resourceLoader.getResource("classpath:" + fileName);
-        if (classpathResource.exists()) {
-            return objectMapper.readValue(classpathResource.getInputStream(), Object.class);
+        // 2. classpath:
+        content = tryLoad(resourceLoader, objectMapper, "classpath:" + fileName);
+        if (content != null) {
+            return content;
         }
 
-        // 3. Tenta /app/config/ (container prod)
-        Resource prodResource = resourceLoader.getResource("file:/app/config/" + fileName);
-        if (prodResource.exists()) {
-            return objectMapper.readValue(prodResource.getInputStream(), Object.class);
+        // 3. /app/config/ (container prod)
+        content = tryLoad(resourceLoader, objectMapper, "file:/app/config/" + fileName);
+        if (content != null) {
+            return content;
         }
 
-        // 4. Tenta ./config/ (dev local)
-        Resource devResource = resourceLoader.getResource("file:./config/" + fileName);
-        if (devResource.exists()) {
-            return objectMapper.readValue(devResource.getInputStream(), Object.class);
+        // 4. ./config/ (dev local)
+        content = tryLoad(resourceLoader, objectMapper, "file:./config/" + fileName);
+        if (content != null) {
+            return content;
         }
 
         throw new IOException(
@@ -349,22 +352,57 @@ public final class AdminUtils {
             ResourceLoader resourceLoader, ObjectMapper objectMapper, String fileName)
             throws IOException {
 
-        Resource resource = resourceLoader.getResource("classpath:" + fileName);
-        if (resource.exists()) {
-            return objectMapper.readValue(resource.getInputStream(), Object.class);
+        Object content = tryLoad(resourceLoader, objectMapper, "classpath:" + fileName);
+        if (content != null) {
+            return content;
         }
 
-        Resource prodResource = resourceLoader.getResource("file:/app/config/" + fileName);
-        if (prodResource.exists()) {
-            return objectMapper.readValue(prodResource.getInputStream(), Object.class);
+        content = tryLoad(resourceLoader, objectMapper, "file:/app/config/" + fileName);
+        if (content != null) {
+            return content;
         }
 
-        Resource devResource = resourceLoader.getResource("file:./config/" + fileName);
-        if (devResource.exists()) {
-            return objectMapper.readValue(devResource.getInputStream(), Object.class);
+        content = tryLoad(resourceLoader, objectMapper, "file:./config/" + fileName);
+        if (content != null) {
+            return content;
         }
 
         throw new IOException("Arquivo não encontrado em nenhum local: " + fileName);
+    }
+
+    /**
+     * Tenta carregar e parsear um recurso. Retorna {@code null} se:
+     *
+     * <ul>
+     *   <li>o {@link ResourceLoader} retornar {@code null} para a localização
+     *   <li>o {@link Resource} não existir ({@code exists() == false})
+     *   <li>o {@code location} for {@code null} ou blank
+     * </ul>
+     *
+     * <p>Este método é a <b>única</b> fronteira segura para interagir com {@link ResourceLoader} —
+     * todo {@code loadConfigFile} passa por aqui. Isso evita NPE quando o loader é mal configurado
+     * (ex.: mock de teste que não cobre um path específico).
+     *
+     * @param resourceLoader loader do Spring
+     * @param objectMapper mapper Jackson
+     * @param location localização do recurso (ex.: {@code "classpath:foo.json"})
+     * @return conteúdo parseado, ou {@code null} se não carregável
+     * @throws IOException se o parse JSON falhar (não silencia erros de sintaxe)
+     */
+    private static Object tryLoad(
+            ResourceLoader resourceLoader, ObjectMapper objectMapper, String location)
+            throws IOException {
+
+        if (location == null || location.isBlank()) {
+            return null;
+        }
+
+        Resource resource = resourceLoader.getResource(location);
+        if (resource == null || !resource.exists()) {
+            return null;
+        }
+
+        return objectMapper.readValue(resource.getInputStream(), Object.class);
     }
 
     // =========================================================================

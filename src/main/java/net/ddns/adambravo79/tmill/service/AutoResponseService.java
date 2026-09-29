@@ -324,4 +324,9 @@ public class AutoResponseService {
         return oncePerDayTriggers.stream()
                 .anyMatch(prefix -> t.equals(prefix) || t.startsWith(prefix + " "));
     }
+
+    /** Exposto para health checks e para o controller consultar o estado da flag. */
+    public boolean isEnabled() {
+        return featureFlags.isEnabled("auto.response.enabled");
+    }
 }

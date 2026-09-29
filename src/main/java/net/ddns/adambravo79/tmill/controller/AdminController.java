@@ -45,8 +45,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +69,7 @@ import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -475,7 +474,7 @@ public class AdminController {
                                 file.name(),
                                 file.defaultLocation());
                 result.put(file.name(), content);
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 log.error("Erro ao parsear JSON do arquivo: {}", file.name(), e);
                 result.put(file.name(), "❌ Erro ao parsear JSON");
             } catch (IOException e) {

@@ -12,13 +12,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.JavaType;
 import tools.jackson.databind.ObjectMapper;
@@ -54,7 +52,6 @@ public class FeatureFlagService {
     private final boolean persistEnabled;
 
     private final ConcurrentHashMap<String, FeatureFlagState> states = new ConcurrentHashMap<>();
-    private final AtomicBoolean initialized = new AtomicBoolean(false);
 
     public FeatureFlagService(
             ObjectMapper objectMapper,
@@ -69,20 +66,6 @@ public class FeatureFlagService {
     // =========================================================================
     // CICLO DE VIDA
     // =========================================================================
-
-    @PostConstruct
-    public void init() {
-        if (!initialized.compareAndSet(false, true)) {
-            return;
-        }
-        if (persistEnabled) {
-            loadFromDisk();
-        }
-        log.info(
-                "🎛️ FeatureFlagService inicializado: {} flags registradas (persist={})",
-                states.size(),
-                persistEnabled);
-    }
 
     /**
      * Registra uma flag editável em runtime. Deve ser chamado antes de {@link #init()}, portanto
@@ -219,6 +202,11 @@ public class FeatureFlagService {
             for (Map.Entry<String, FeatureFlagState> entry : loaded.entrySet()) {
                 String key = entry.getKey();
                 FeatureFlagState persisted = entry.getValue();
+
+                if (persisted == null) {
+                    log.warn("⚠️ Flag '{}' presente no disco com valor null. Ignorando.", key);
+                    continue;
+                }
 
                 // Só aplica se a flag já foi registrada (ou será registrada depois) e não é RO
                 FeatureFlagState current = states.get(key);
