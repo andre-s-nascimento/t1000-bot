@@ -5,34 +5,66 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   create-tag:
     runs-on: ubuntu-latest
     if: startsWith(github.event.head_commit.message, 'Merge pull request')
+
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
-
-      - name: Setup Git user
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Extract version from merge commit message
         id: vars
         run: |
           PR_TITLE=$(git log -1 --pretty=%s)
           VERSION=$(echo "$PR_TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/v//' || echo "")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "📦 Versão extraída do merge: $VERSION"
 
-      - name: Create tag
+      - name: Create tag via GitHub API
         if: steps.vars.outputs.version != ''
-        run: |
-          if git rev-parse "v${{ steps.vars.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag v${{ steps.vars.outputs.version }} já existe. Nada a fazer."
-          else
-            git tag -a "v${{ steps.vars.outputs.version }}" -m "Release v${{ steps.vars.outputs.version }}"
-            git push origin "v${{ steps.vars.outputs.version }}"
-          fi
+        # 🔒 SEGURANÇA: VERSION via env
+        env:
+          VERSION: ${{ steps.vars.outputs.version }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const version = process.env.VERSION;
+            const tag = `v${version}`;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            console.log(`🔍 Verificando se tag ${tag} já existe...`);
+
+            try {
+              await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `tags/${tag}`
+              });
+              console.log(`✅ Tag ${tag} já existe. Nada a fazer.`);
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`🏷️ Criando tag ${tag} no commit ${context.sha.substring(0, 7)}...`);
+                await github.rest.git.createRef({
+                  owner,
+                  repo,
+                  ref: `refs/tags/${tag}`,
+                  sha: context.sha
+                });
+                console.log(`✅ Tag ${tag} criada com sucesso.`);
+              } else {
+                console.error(`❌ Erro ao verificar tag: ${error.message}`);
+                throw error;
+              }
+            }
+
+      - name: No version detected
+        if: steps.vars.outputs.version == ''
+        run: echo "⏭️ Nenhuma versão vX.Y.Z encontrada no merge — pulando criação de tag"
