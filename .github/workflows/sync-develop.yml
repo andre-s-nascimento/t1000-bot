@@ -1,28 +1,102 @@
-name: Sync develop after release
+name: Sync develop after main update
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   sync-develop:
+    # Dispara se o PR foi mergeado OU se foi executado manualmente
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-    if: startsWith(github.event.head_commit.message, 'Merge pull request') && contains(github.event.head_commit.message, 'release/')
+
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           token: ${{ secrets.GH_PAT }}
-      - name: Create PR to sync develop
+          fetch-depth: 0
+
+      - name: Ensure sync label exists
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          gh pr create --base develop --head main \
-            --title "chore: sync main into develop after release" \
-            --body "Sincronização automática" \
-            --label "sync" || echo "PR already exists"
+          gh label create sync \
+            --description "Sync PR" \
+            --color "0E8A16" 2>/dev/null \
+            || echo "Label sync já existe"
 
-      - name: Create sync label if missing
-        run: gh label create sync --description "Sync PR" --color "0E8A16" || true
+      - name: Check if develop is behind main
+        id: check
+        run: |
+          git fetch origin main develop
+
+          BEHIND=$(git rev-list --count origin/develop..origin/main)
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          echo "📊 develop está $BEHIND commits atrás de main"
+
+      - name: Create sync PR if needed
+        if: steps.check.outputs.behind != '0'
+        # 🔒 SEGURANÇA: dados do usuário passam por env, NÃO por ${{ }} dentro de run
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BEHIND: ${{ steps.check.outputs.behind }}
+        run: |
+          # Verifica se já existe PR aberto de main → develop
+          EXISTING_PR=$(gh pr list \
+            --base develop \
+            --head main \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "✅ PR #$EXISTING_PR já existe para main → develop"
+            exit 0
+          fi
+
+          # 🔒 Constrói o corpo do PR usando variáveis de ambiente
+          BODY_FILE=$(mktemp)
+          cat > "$BODY_FILE" <<EOF
+          ## 🧾 Descrição
+
+          Sincronização automática de \`main\` para \`develop\`.
+
+          **Motivo**: merge do PR #${PR_NUMBER} na \`main\` (por @${PR_AUTHOR}).
+
+          **Título original**: ${PR_TITLE}
+
+          **Commits à frente**: ${BEHIND}
+
+          ## ⚠️ Atenção
+
+          Este PR foi criado automaticamente. Revise os conflitos antes de mergear.
+
+          ## ✅ Checklist
+
+          - [ ] Sem conflitos com \`develop\`
+          - [ ] CI verde
+          - [ ] Aplicar label \`sync\`
+          EOF
+
+          gh pr create \
+            --base develop \
+            --head main \
+            --title "chore: sync main into develop" \
+            --body-file "$BODY_FILE" \
+            --label "sync"
+
+          rm -f "$BODY_FILE"
+
+      - name: Nothing to sync
+        if: steps.check.outputs.behind == '0'
+        run: echo "✅ develop já está sincronizada com main — nada a fazer"

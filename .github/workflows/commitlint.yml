@@ -11,13 +11,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
 
-      - name: Install commitlint
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install commitlint (frozen from lockfile)
         run: npm ci --ignore-scripts
 
       - name: Validate commits (PR only)
         if: github.event_name == 'pull_request'
-        run: npx commitlint --from=${{ github.event.pull_request.base.sha }} --to=HEAD --verbose
+        # 🔒 SEGURANÇA:
+        #  - SHAs via env, não via ${{ }} dentro de run
+        #  - ./node_modules/.bin/commitlint evita download on-demand
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./node_modules/.bin/commitlint --from="$BASE_SHA" --to="$HEAD_SHA" --verbose

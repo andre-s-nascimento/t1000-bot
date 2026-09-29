@@ -90,10 +90,6 @@ config/feature-flags.json.tmp
 *.p12
 *.pfx
 
-# Permite a pasta certs com o truststore
-!certs/
-!certs/aiven-truststore.jks
-
 # ============================================================================
 # CI/CD local
 # ============================================================================
