@@ -1,6 +1,7 @@
 package net.ddns.adambravo79.tmill.dto;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,7 +20,7 @@ public record MigrationResult(
         Instant finishedAt,
         long durationMs,
         Map<String, Integer> tablesMigrated,
-        java.util.List<String> errors) {
+        List<String> errors) {
 
     public static MigrationResult success(Instant start, Instant end, Map<String, Integer> tables) {
         return new MigrationResult(
@@ -28,7 +29,7 @@ public record MigrationResult(
                 end,
                 end.toEpochMilli() - start.toEpochMilli(),
                 tables,
-                java.util.List.of());
+                List.of());
     }
 
     public static MigrationResult partial(

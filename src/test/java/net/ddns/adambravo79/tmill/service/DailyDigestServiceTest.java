@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -41,6 +42,7 @@ import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.exception.DigestGenerationException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
@@ -51,6 +53,7 @@ class DailyDigestServiceTest {
     @Mock private GroqClient groqClient;
     @Mock private TelegramFacade telegramFacade;
     @Mock private MetricsService metricsService;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private DailyDigestService service;
 
@@ -59,8 +62,12 @@ class DailyDigestServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "digestChatIds", new HashSet<>());
-        ReflectionTestUtils.setField(service, "digestEnabled", true);
         ReflectionTestUtils.setField(service, "digestChatIdsStr", String.valueOf(CHAT_ID));
+
+        // Flag de digest habilitada por padrão em todos os testes.
+        // lenient() evita UnnecessaryStubbingException nos testes que não consultam a flag.
+        lenient().when(featureFlags.isEnabled("digest.enabled")).thenReturn(true);
+
         service.init();
     }
 
@@ -322,7 +329,6 @@ class DailyDigestServiceTest {
                 .thenReturn(messages)
                 .thenReturn(List.of());
 
-        // 👇 Use GroqRateLimitException DIRETAMENTE.
         // O GroqClient já encapsula o TooManyRequests → GroqRateLimitException.
         when(groqClient.gerarResumoDigest(anyString(), any(DigestPersona.class), anyString()))
                 .thenThrow(new GroqRateLimitException("Rate limit", null));
@@ -546,7 +552,7 @@ class DailyDigestServiceTest {
     @Test
     @DisplayName("generateMorningDigest: desabilitado não faz nada")
     void morningDigest_desabilitado() {
-        ReflectionTestUtils.setField(service, "digestEnabled", false);
+        when(featureFlags.isEnabled("digest.enabled")).thenReturn(false);
         service.generateMorningDigest();
         verifyNoInteractions(jdbcTemplate, groqClient, telegramFacade, metricsService);
     }
@@ -562,7 +568,7 @@ class DailyDigestServiceTest {
     @Test
     @DisplayName("generateEveningDigest: desabilitado não faz nada")
     void eveningDigest_desabilitado() {
-        ReflectionTestUtils.setField(service, "digestEnabled", false);
+        when(featureFlags.isEnabled("digest.enabled")).thenReturn(false);
         service.generateEveningDigest();
         verifyNoInteractions(jdbcTemplate, groqClient, telegramFacade, metricsService);
     }

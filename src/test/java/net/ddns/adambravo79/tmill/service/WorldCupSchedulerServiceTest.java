@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -38,6 +39,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
@@ -48,20 +50,21 @@ class WorldCupSchedulerServiceTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private WorldCupUpdaterService worldCupUpdaterService;
     @Mock private MetricsService metricsService;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private WorldCupSchedulerService service;
 
     @BeforeEach
     void setUp() {
-        // Clock default: system default zone (evita NPE no construtor)
-        // Como usamos @Mock Clock, garantimos que não seja null.
-        // Porém, os testes que precisam de tempo controlado sobrescrevem com Clock.fixed.
+        // Flag da Copa habilitada por padrão em todos os testes.
+        // lenient() evita UnnecessaryStubbingException nos testes que não consultam a flag.
+        lenient().when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(true);
 
         Set<Long> mutableAllowedGroups = new HashSet<>();
         mutableAllowedGroups.add(-100L);
         ReflectionTestUtils.setField(service, "allowedGroups", mutableAllowedGroups);
-        ReflectionTestUtils.setField(service, "worldcupEnabled", true);
         ReflectionTestUtils.setField(service, "allowedChatsStr", "");
+
         service.init();
     }
 
@@ -152,7 +155,7 @@ class WorldCupSchedulerServiceTest {
     void sendMatchesMessage_comJogos_registraSuccess() throws Exception {
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         Method m =
                 WorldCupSchedulerService.class.getDeclaredMethod(
@@ -169,7 +172,7 @@ class WorldCupSchedulerServiceTest {
     @DisplayName("sendMatchesMessage: sem jogos registra error('worldcup_sem_jogos')")
     void sendMatchesMessage_semJogos_registraError() throws Exception {
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of());
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of());
 
         Method m =
                 WorldCupSchedulerService.class.getDeclaredMethod(
@@ -198,7 +201,7 @@ class WorldCupSchedulerServiceTest {
                         null,
                         List.of(),
                         List.of());
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         Method m =
                 WorldCupSchedulerService.class.getDeclaredMethod(
@@ -240,7 +243,7 @@ class WorldCupSchedulerServiceTest {
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatchComPlacar(date, "Brazil", "Argentina", 2, 1);
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendResultsToChat(chatId, date);
 
@@ -254,7 +257,7 @@ class WorldCupSchedulerServiceTest {
     void sendResultsToChat_semJogos_registraError() {
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of());
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of());
 
         service.sendResultsToChat(chatId, date);
 
@@ -266,7 +269,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("sendResultsToChat: disabled registra error('worldcup_desabilitado')")
     void sendResultsToChat_disabled_registraError() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
 
@@ -285,7 +288,7 @@ class WorldCupSchedulerServiceTest {
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         Score score = new Score(List.of(1, 1), null, List.of(2, 1), List.of(4, 3));
         WorldCupMatch match = criarMatchComScore(date, "Brazil", "Argentina", score);
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendResultsToChat(chatId, date);
 
@@ -300,7 +303,7 @@ class WorldCupSchedulerServiceTest {
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatchSemPlacar(date, "Brazil", "Argentina");
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendResultsToChat(chatId, date);
 
@@ -328,7 +331,7 @@ class WorldCupSchedulerServiceTest {
                         score,
                         List.of(g1),
                         List.of(g2));
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendResultsToChat(chatId, date);
 
@@ -355,7 +358,7 @@ class WorldCupSchedulerServiceTest {
                         score,
                         List.of(g),
                         List.of());
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendResultsToChat(chatId, date);
 
@@ -372,7 +375,7 @@ class WorldCupSchedulerServiceTest {
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendMatchesToChat(chatId, date);
 
@@ -385,7 +388,7 @@ class WorldCupSchedulerServiceTest {
     void sendMatchesToChat_semJogos() {
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of());
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of());
 
         service.sendMatchesToChat(chatId, date);
 
@@ -396,7 +399,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("sendMatchesToChat: disabled registra error")
     void sendMatchesToChat_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
 
@@ -417,7 +420,7 @@ class WorldCupSchedulerServiceTest {
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         Method m =
                 WorldCupSchedulerService.class.getDeclaredMethod(
@@ -434,7 +437,7 @@ class WorldCupSchedulerServiceTest {
     void sendMatchesMessageToChat_semJogos() throws Exception {
         long chatId = 12345L;
         LocalDate date = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of());
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of());
 
         Method m =
                 WorldCupSchedulerService.class.getDeclaredMethod(
@@ -463,7 +466,7 @@ class WorldCupSchedulerServiceTest {
                         null,
                         List.of(),
                         List.of());
-        when(worldCupService.getMatchesForDay(date)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         Method m =
                 WorldCupSchedulerService.class.getDeclaredMethod(
@@ -484,7 +487,7 @@ class WorldCupSchedulerServiceTest {
     void sendNoonMatchesToChat_comJogos() {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendNoonMatchesToChat(123L);
 
@@ -495,7 +498,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("sendNoonMatchesToChat: disabled registra error")
     void sendNoonMatchesToChat_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.sendNoonMatchesToChat(123L);
         verify(telegramFacade).enviarMensagemHtml(eq(123L), contains("Servico de Copa desativado"));
         verify(metricsService).error("worldcup_desabilitado");
@@ -506,7 +509,7 @@ class WorldCupSchedulerServiceTest {
     void sendEveningMatchesToChat_comJogos() {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "18:30 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendEveningMatchesToChat(123L);
 
@@ -517,7 +520,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("sendEveningMatchesToChat: disabled registra error")
     void sendEveningMatchesToChat_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.sendEveningMatchesToChat(123L);
         verify(telegramFacade).enviarMensagemHtml(eq(123L), contains("Servico de Copa desativado"));
         verify(metricsService).error("worldcup_desabilitado");
@@ -528,7 +531,7 @@ class WorldCupSchedulerServiceTest {
     void sendManualTestToChat_comJogos() {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendManualTestToChat(123L);
 
@@ -539,7 +542,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("sendManualTestToChat: disabled registra error")
     void sendManualTestToChat_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.sendManualTestToChat(123L);
         verify(telegramFacade).enviarMensagemHtml(eq(123L), contains("Servico de Copa desativado"));
         verify(metricsService).error("worldcup_desabilitado");
@@ -552,7 +555,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("sendManualTest: disabled registra error('worldcup_desabilitado')")
     void sendManualTest_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.sendManualTest();
         verifyNoInteractions(telegramFacade);
         verify(metricsService).error("worldcup_desabilitado");
@@ -572,7 +575,7 @@ class WorldCupSchedulerServiceTest {
     void sendManualTest_comJogos() {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendManualTest();
 
@@ -587,16 +590,31 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("checkThirtyMinutesBeforeEachMatch: 11:30 dispara lembrete e registra métrica")
     void checkThirtyMinutos_disparaRegistraMetrica() {
-        Clock fixed =
-                Clock.fixed(
-                        Instant.parse("2026-07-01T11:30:01-03:00"), ZoneId.of("America/Sao_Paulo"));
-        ReflectionTestUtils.setField(service, "clock", fixed);
+        ZoneId zone = ZoneId.of("America/Sao_Paulo");
+        // 2026-07-01 11:30:01 BRT = 14:30:01 UTC
+        Clock fixed = Clock.fixed(Instant.parse("2026-07-01T14:30:01Z"), zone);
+
+        // Reconstrói o serviço com o Clock fixo (o campo é final, não pode ser alterado via
+        // reflection)
+        WorldCupSchedulerService serviceWithClock =
+                new WorldCupSchedulerService(
+                        worldCupService,
+                        telegramFacade,
+                        worldCupUpdaterService,
+                        fixed,
+                        metricsService,
+                        featureFlags);
+
+        Set<Long> groups = new HashSet<>();
+        groups.add(-100L);
+        ReflectionTestUtils.setField(serviceWithClock, "allowedGroups", groups);
+        ReflectionTestUtils.setField(serviceWithClock, "allowedChatsStr", "");
 
         LocalDate date = LocalDate.now(fixed);
         WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(any())).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
-        service.checkThirtyMinutesBeforeEachMatch();
+        serviceWithClock.checkThirtyMinutesBeforeEachMatch();
 
         verify(telegramFacade).enviarMensagemHtml(eq(-100L), contains("Faltam 30 minutos"));
         verify(metricsService).success("worldcup_lembrete_30min_enviado");
@@ -608,7 +626,7 @@ class WorldCupSchedulerServiceTest {
         ZoneId zone = ZoneId.of("America/Sao_Paulo");
         LocalDate today = LocalDate.now(zone);
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         Set<String> sent = new HashSet<>();
         sent.add(today + "_Brazil_Argentina");
@@ -622,7 +640,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("checkThirtyMinutes: disabled não faz nada")
     void checkThirtyMinutos_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.checkThirtyMinutesBeforeEachMatch();
         verifyNoInteractions(worldCupService, telegramFacade, metricsService);
     }
@@ -642,7 +660,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("sendNoonMatches: disabled não faz nada")
     void sendNoonMatches_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.sendNoonMatches();
         verifyNoInteractions(worldCupService, telegramFacade, metricsService);
     }
@@ -660,7 +678,7 @@ class WorldCupSchedulerServiceTest {
     void sendNoonMatches_comJogos() {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendNoonMatches();
 
@@ -673,7 +691,7 @@ class WorldCupSchedulerServiceTest {
     void sendEveningMatches_comJogos() {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "18:30 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendEveningMatches();
 
@@ -719,7 +737,7 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("init: disabled não configura grupos")
     void init_disabled() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", false);
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         Set<Long> groups = new HashSet<>();
         ReflectionTestUtils.setField(service, "allowedGroups", groups);
         service.init();
@@ -729,7 +747,6 @@ class WorldCupSchedulerServiceTest {
     @Test
     @DisplayName("init: ignora IDs inválidos e positivos")
     void init_idsInvalidos() {
-        ReflectionTestUtils.setField(service, "worldcupEnabled", true);
         ReflectionTestUtils.setField(service, "allowedChatsStr", "-100,abc,123,-200");
         Set<Long> groups = new HashSet<>();
         ReflectionTestUtils.setField(service, "allowedGroups", groups);
@@ -746,7 +763,7 @@ class WorldCupSchedulerServiceTest {
     void fluxoComplexo() {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
 
         service.sendNoonMatches();
         service.sendEveningMatches();
@@ -762,13 +779,13 @@ class WorldCupSchedulerServiceTest {
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
 
         // 1) Sem jogos
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of());
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of());
         service.sendNoonMatches();
         verify(metricsService).error("worldcup_sem_jogos");
 
         // 2) Com jogos
         WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(today)).thenReturn(List.of(match));
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
         service.sendEveningMatches();
 
         verify(metricsService, times(1)).error("worldcup_sem_jogos");

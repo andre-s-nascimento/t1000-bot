@@ -81,3 +81,5 @@ certs/
 EOF
 .env.prod
 /test-migration-speed.sh
+
+/config/feature-flags.json

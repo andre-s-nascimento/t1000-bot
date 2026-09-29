@@ -9,10 +9,12 @@ import static org.mockito.Mockito.*;
 
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -1040,5 +1042,94 @@ class AudioHandlerTest {
 
         verify(audioService, never()).processarEArmazenar(any(), anyLong(), anyLong(), anyString());
         verify(audioEventPublisher).publish(any());
+    }
+
+    // =========================================================================
+    // 🧪 COBERTURA ADICIONAL — ONDA 3b
+    // =========================================================================
+
+    @Test
+    @DisplayName("onAudioProcessed com sucesso envia botões")
+    void onAudioProcessed_success_sendsButtons() {
+        AudioProcessedEvent event =
+                new AudioProcessedEvent(FILE_ID, GROUP_CHAT_ID, USER_ID, "User", true, null, 100);
+
+        audioHandler.onAudioProcessed(event);
+
+        verify(telegramFacade).enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("onAudioProcessed com falha envia mensagem de erro")
+    void onAudioProcessed_failure_sendsErrorMessage() {
+        AudioProcessedEvent event =
+                new AudioProcessedEvent(
+                        FILE_ID, GROUP_CHAT_ID, USER_ID, "User", false, "FFmpeg falhou", 0);
+
+        audioHandler.onAudioProcessed(event);
+
+        verify(telegramFacade)
+                .enviarMensagem(eq(GROUP_CHAT_ID), argThat(msg -> msg.contains("FFmpeg falhou")));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("handleTranscriptionCallback com cache miss e entrega OK")
+    void callback_cacheMiss_deliversTranscription() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        Message callbackMessage = mock(Message.class);
+        Chat chat = mock(Chat.class);
+        User callbackUser = mock(User.class);
+
+        when(callback.from()).thenReturn(callbackUser);
+        when(callbackUser.id()).thenReturn(USER_ID);
+        when(callback.id()).thenReturn("cb-123");
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        // Registra um pedido pendente
+        String token = "token-abc";
+        AudioRequest request =
+                new AudioRequest(
+                        FILE_ID, GROUP_CHAT_ID, System.currentTimeMillis(), USER_ID, "User");
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", new ConcurrentHashMap<>());
+        var pending =
+                (ConcurrentHashMap<String, AudioRequest>)
+                        ReflectionTestUtils.getField(audioHandler, "pendingRequests");
+        pending.put(token, request);
+
+        // Cache HIT
+        var entry =
+                new net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry(
+                        "bruto", "refinado", System.currentTimeMillis());
+        when(cacheService.get(FILE_ID)).thenReturn(entry);
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|" + token);
+
+        verify(telegramFacade)
+                .enviarMensagem(eq(USER_ID), argThat(msg -> msg.contains("refinado")));
+    }
+
+    @Test
+    @DisplayName("handleTranscriptionCallback com token inválido responde alerta")
+    void callback_invalidToken() {
+        CallbackQuery callback = mock(CallbackQuery.class);
+        Message callbackMessage = mock(Message.class);
+        Chat chat = mock(Chat.class);
+        User callbackUser = mock(User.class);
+
+        when(callback.from()).thenReturn(callbackUser);
+        when(callbackUser.id()).thenReturn(USER_ID);
+        when(callback.id()).thenReturn("cb-123");
+        when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
+        when(callbackMessage.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+
+        ReflectionTestUtils.setField(audioHandler, "pendingRequests", new ConcurrentHashMap<>());
+
+        audioHandler.handleTranscriptionCallback(callback, "trans_refinado|inexistente");
+
+        verify(telegramFacade).answerCallbackQuery(eq("cb-123"), anyString(), eq(true));
     }
 }
