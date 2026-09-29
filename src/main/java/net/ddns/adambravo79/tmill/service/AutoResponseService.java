@@ -20,6 +20,7 @@ import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.AutoResponseRule;
 import net.ddns.adambravo79.tmill.model.AutoResponseRuleEntry;
 import net.ddns.adambravo79.tmill.model.UserOverride;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import tools.jackson.databind.ObjectMapper;
 
@@ -31,12 +32,10 @@ public class AutoResponseService {
     private final ObjectMapper objectMapper;
     private final ResourceLoader resourceLoader;
     private final MetricsService metricsService;
+    private final FeatureFlagAdminService featureFlags;
 
     private static final ZoneId BRAZIL_ZONE = ZoneId.of("America/Sao_Paulo");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
-
-    @Value("${auto.response.enabled:false}")
-    private boolean enabled;
 
     @Value("${auto.response.file:classpath:auto-responses.json}")
     private String configFile;
@@ -52,16 +51,18 @@ public class AutoResponseService {
     public AutoResponseService(
             ResourceLoader resourceLoader,
             ObjectMapper objectMapper,
-            MetricsService metricsService) {
+            MetricsService metricsService,
+            FeatureFlagAdminService featureFlags) {
         this.resourceLoader = resourceLoader;
         this.objectMapper = objectMapper;
         this.metricsService = metricsService;
+        this.featureFlags = featureFlags;
     }
 
     @PostConstruct
     public void init() {
         parseOncePerDayTriggers();
-        if (enabled) {
+        if (featureFlags.isEnabled("auto.response.enabled")) {
             loadResponses();
         }
     }
@@ -217,7 +218,9 @@ public class AutoResponseService {
 
     public Optional<AutoResponseOverride> getResponseRule(
             Long userId, String message, LocalTime time) {
-        if (!enabled || message == null || message.isBlank()) {
+        if (!featureFlags.isEnabled("auto.response.enabled")
+                || message == null
+                || message.isBlank()) {
             return Optional.empty();
         }
 
@@ -283,10 +286,6 @@ public class AutoResponseService {
     // ========================= MÉTODOS DE ESTATÍSTICA E DEBUG
     // =========================
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
     public int getRulesCount() {
         return triggerToRule.size();
     }
@@ -324,5 +323,10 @@ public class AutoResponseService {
         String t = trigger.toLowerCase();
         return oncePerDayTriggers.stream()
                 .anyMatch(prefix -> t.equals(prefix) || t.startsWith(prefix + " "));
+    }
+
+    /** Exposto para health checks e para o controller consultar o estado da flag. */
+    public boolean isEnabled() {
+        return featureFlags.isEnabled("auto.response.enabled");
     }
 }

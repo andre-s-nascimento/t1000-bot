@@ -37,6 +37,8 @@ import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.EditMessageText;
 import com.pengrad.telegrambot.request.GetFile;
 import com.pengrad.telegrambot.request.SendAnimation;
+import com.pengrad.telegrambot.request.SendAudio;
+import com.pengrad.telegrambot.request.SendDocument;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.pengrad.telegrambot.request.SendPhoto;
 import com.pengrad.telegrambot.request.SendVideo;
@@ -400,5 +402,81 @@ class TelegramFacadeTest {
         assertThatThrownBy(() -> spyFacade.downloadFile(file))
                 .isInstanceOf(TelegramFileException.class)
                 .hasCauseInstanceOf(IOException.class);
+    }
+
+    // =========================================================================
+    // 🧪 COBERTURA ADICIONAL — ONDA 3b
+    // =========================================================================
+
+    @Test
+    @DisplayName("enviarMidia com .mp4 usa SendVideo")
+    void enviarMidia_mp4_usesSendVideo() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        facade.enviarMidia(123L, "http://exemplo.com/video.mp4", "legenda");
+
+        verify(executor).execute(any(SendVideo.class));
+    }
+
+    @Test
+    @DisplayName("enviarMidia com .gif usa SendAnimation")
+    void enviarMidia_gif_usesSendAnimation() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        facade.enviarMidia(123L, "http://exemplo.com/anim.gif", "legenda");
+
+        verify(executor).execute(any(SendAnimation.class));
+    }
+
+    @Test
+    @DisplayName("enviarMidia com .jpg usa SendPhoto")
+    void enviarMidia_jpg_usesSendPhoto() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        facade.enviarMidia(123L, "http://exemplo.com/foto.jpg", "legenda");
+
+        verify(executor).execute(any(SendPhoto.class));
+    }
+
+    @Test
+    @DisplayName("enviarMidia com extensão desconhecida usa SendPhoto como fallback")
+    void enviarMidia_unknown_fallsBackToPhoto() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        facade.enviarMidia(123L, "http://exemplo.com/arquivo.xyz", "legenda");
+
+        verify(executor).execute(any(SendPhoto.class));
+    }
+
+    @Test
+    @DisplayName("enviarMidia com caminho de arquivo local .mp3 usa SendAudio")
+    void enviarMidia_localMp3_usesSendAudio() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        java.nio.file.Path temp = java.nio.file.Files.createTempFile("test-", ".mp3");
+        java.nio.file.Files.writeString(temp, "audio");
+
+        try {
+            facade.enviarMidia(123L, temp.toString(), "legenda");
+            verify(executor).execute(any(SendAudio.class));
+        } finally {
+            java.nio.file.Files.deleteIfExists(temp);
+        }
+    }
+
+    @Test
+    @DisplayName("enviarMidia com arquivo local desconhecido usa SendDocument")
+    void enviarMidia_localUnknown_usesSendDocument() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        java.nio.file.Path temp = java.nio.file.Files.createTempFile("test-", ".xyz");
+        java.nio.file.Files.writeString(temp, "data");
+
+        try {
+            facade.enviarMidia(123L, temp.toString(), "legenda");
+            verify(executor).execute(any(SendDocument.class));
+        } finally {
+            java.nio.file.Files.deleteIfExists(temp);
+        }
     }
 }

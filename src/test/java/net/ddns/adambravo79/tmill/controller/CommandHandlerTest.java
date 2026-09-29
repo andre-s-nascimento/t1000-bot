@@ -1113,4 +1113,64 @@ class CommandHandlerTest {
         assertThatCode(() -> commandHandler.handleTextUpdate(update)).doesNotThrowAnyException();
         verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Digite a ideia"));
     }
+
+    // ============================================================
+    // 🧪 COBERTURA ADICIONAL — ONDA 3a
+    // ============================================================
+
+    @Test
+    @DisplayName("Comando 't1000 anotar ideia' sem argumento pede a ideia")
+    void anotarIdeiaSemArgumento() {
+        when(message.text()).thenReturn("t1000 anotar ideia");
+
+        commandHandler.handleTextUpdate(update);
+
+        verify(telegramFacade)
+                .enviarMensagem(eq(CHAT_ID), contains(BotMessages.IDEIA_DIGITE_APOS_COMANDO));
+    }
+
+    @Test
+    @DisplayName("Comando 't1000 anotar ideia :' (dois-pontos vazio) retorna IDEIA_VAZIA")
+    void anotarIdeiaSoComDoisPontos() {
+        when(message.text()).thenReturn("t1000 anotar ideia :");
+
+        commandHandler.handleTextUpdate(update);
+
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains(BotMessages.IDEIA_VAZIA));
+    }
+
+    @Test
+    @DisplayName("Comando não reconhecido com link loga mas não processa link")
+    void comandoComLinkNaoReconhecido() {
+        when(message.text()).thenReturn("t1000 desconhecido http://exemplo.com");
+
+        commandHandler.handleTextUpdate(update);
+
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Comando nao reconhecido"));
+    }
+
+    @Test
+    @DisplayName("Comando de aniversário sem acento é reconhecido")
+    void aniversarioSemAcento() {
+        when(message.text()).thenReturn("t1000 registrar aniversario 15/03");
+        when(birthdayService.registrar(eq(USER_ID), anyString(), eq("15/03")))
+                .thenReturn("✅ Registrado");
+
+        commandHandler.handleTextUpdate(update);
+
+        verify(birthdayService).registrar(eq(USER_ID), anyString(), eq("15/03"));
+    }
+
+    @Test
+    @DisplayName("Comando de busca com termo exatamente 3 caracteres é aceito")
+    void buscaComTermoDe3Chars() {
+        when(message.text()).thenReturn("t1000 buscar abc");
+        when(movieService.buscarFilme("abc"))
+                .thenThrow(new MovieNotFoundException("Filme não encontrado"));
+
+        commandHandler.handleTextUpdate(update);
+
+        verify(movieService).buscarFilme("abc");
+        verify(metricsService).success("comando_buscar");
+    }
 }

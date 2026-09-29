@@ -1,11 +1,16 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
 # ==============================
 # 🔧 CONFIGURAÇÕES
 # ==============================
 APP_NAME="t1000-bot"
 IMAGE_NAME="andresnascimento/t1000-bot"
+IMAGE_TAG="latest"
+DOCKER_IMAGE="$IMAGE_NAME:$IMAGE_TAG"
+
+TEMP_PATH="$(pwd)/temp_audio"
+ENV_FILE=""
 
 # Cores
 RED='\033[0;31m'
@@ -13,6 +18,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# ==============================
+# 📋 LOG
+# ==============================
 timestamp() { date +"%Y-%m-%d %H:%M:%S"; }
 log_info()  { echo -e "$(timestamp) ${GREEN}[INFO]${NC} $1"; }
 log_warn()  { echo -e "$(timestamp) ${YELLOW}[WARN]${NC} $1"; }
@@ -29,103 +37,152 @@ check_docker() {
 }
 
 load_env() {
-    if [ -f .env ]; then
-        set -a
-        source .env
-        set +a
-        log_info "Variáveis carregadas do .env"
+    if [ -f .env.prod ]; then
+        ENV_FILE=".env.prod"
+    elif [ -f .env ]; then
+        ENV_FILE=".env"
+        log_warn "Usando .env (dev) — ideal é .env.prod em produção"
     else
-        log_error "Arquivo .env não encontrado!"
+        log_error "Nenhum arquivo .env ou .env.prod encontrado!"
         exit 1
+    fi
+
+    set -a
+    source "$ENV_FILE"
+    set +a
+    log_info "Variáveis carregadas de $ENV_FILE"
+}
+
+# ==============================
+# 📦 PULL
+# ==============================
+pull_image() {
+    log_info "Baixando imagem do Docker Hub: $DOCKER_IMAGE"
+    docker pull "$DOCKER_IMAGE" || {
+        log_error "Falha ao baixar imagem. Verifique sua conexão e login."
+        exit 1
+    }
+    log_info "✅ Imagem baixada."
+}
+
+# ==============================
+# 💾 BACKUP
+# ==============================
+backup_database() {
+    log_info "Iniciando backup do banco de dados..."
+    if [ -f "data/t1000.db" ]; then
+        BACKUP_FILE="data/t1000_backup_$(date +%Y%m%d_%H%M%S).db"
+        cp data/t1000.db "$BACKUP_FILE"
+        log_info "✅ Backup concluído: $BACKUP_FILE"
+    else
+        log_warn "Banco de dados não encontrado em data/t1000.db. Pulando backup."
     fi
 }
 
 # ==============================
-# 🏷️ VERSÃO DO build.gradle
+# 🧹 LIMPEZA
 # ==============================
-extract_version() {
-    if [ ! -f build.gradle ]; then
-        log_error "build.gradle não encontrado!"
-        exit 1
-    fi
-    VERSION=$(grep -E "^version = " build.gradle | head -1 | sed -E "s/version = ['\"]([^'\"]+)['\"].*/\1/")
-    if [ -z "$VERSION" ]; then
-        log_error "Não foi possível extrair a versão do build.gradle"
-        exit 1
-    fi
-    log_info "Versão detectada: $VERSION"
+stop_container() {
+    log_info "🛑 Parando container antigo (se existir)..."
+    docker stop "$APP_NAME" &>/dev/null || true
+    docker rm "$APP_NAME" &>/dev/null || true
+}
+
+cleanup_docker() {
+    log_info "🧹 Removendo imagens não utilizadas (opcional)..."
+    docker image prune -f &>/dev/null || true
 }
 
 # ==============================
-# 🔐 LOGIN NO DOCKER HUB
+# 🚀 RUN
 # ==============================
-docker_login() {
-    if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_TOKEN" ]; then
-        log_error "DOCKER_USERNAME e/ou DOCKER_TOKEN não definidos no .env"
-        exit 1
-    fi
-    log_info "Fazendo login no Docker Hub como $DOCKER_USERNAME..."
-    echo "$DOCKER_TOKEN" | docker login -u "$DOCKER_USERNAME" --password-stdin
-    log_info "✅ Login concluído."
+run_container() {
+    log_info "Iniciando container do $APP_NAME (env: $ENV_FILE)"
+
+    mkdir -p "$TEMP_PATH"
+    mkdir -p "$(pwd)/data"
+    mkdir -p "$(pwd)/media"
+    mkdir -p "$(pwd)/config"
+    # ⚠️ NÃO criar "$(pwd)/logs" — logs ficam dentro do container
+
+    sudo chown -R "$(id -u):$(id -g)" "$TEMP_PATH" "$(pwd)/data" "$(pwd)/media" 2>/dev/null || true
+
+    docker run -d \
+        --name "$APP_NAME" \
+        --restart unless-stopped \
+        --env-file "$ENV_FILE" \
+        -p 8082:8082 \
+        -e TZ=America/Sao_Paulo \
+        -v "$TEMP_PATH:/app/temp" \
+        -v "$(pwd)/data:/app/data" \
+        -v "$(pwd)/media:/app/media" \
+        -v "$(pwd)/config/easter-eggs.json:/app/config/easter-eggs.json:ro" \
+        -v "$(pwd)/config/auto-responses.json:/app/config/auto-responses.json:ro" \
+        -v "$(pwd)/config/worldcup2026.json:/app/config/worldcup2026.json:ro" \
+        --memory="700m" \
+        --memory-reservation="512m" \
+        --cpus="0.8" \
+        "$IMAGE_NAME:latest" || {
+            log_error "Erro ao iniciar container"
+            exit 1
+        }
+
+    log_info "✅ Container rodando!"
+    log_info "   Logs: docker logs -f $APP_NAME"
 }
 
 # ==============================
-# 🏗️ BUILD
+# 📊 STATUS & LOGS
 # ==============================
-build_image() {
-    log_info "Buildando imagem: $IMAGE_NAME:$VERSION"
-    docker build \
-        -t "$IMAGE_NAME:latest" \
-        -t "$IMAGE_NAME:$VERSION" \
-        -t "$IMAGE_NAME:$(git rev-parse --short HEAD 2>/dev/null || echo 'nogit')" \
-        .
-    log_info "✅ Imagem buildada."
-}
-
-# ==============================
-# 🚀 PUSH
-# ==============================
-push_image() {
-    log_info "Enviando tags para o Docker Hub..."
-    docker push "$IMAGE_NAME:latest"
-    docker push "$IMAGE_NAME:$VERSION"
-    SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "")
-    if [ -n "$SHORT_SHA" ]; then
-        docker push "$IMAGE_NAME:$SHORT_SHA"
-    fi
-    log_info "✅ Push concluído."
-}
+show_status() { docker ps --filter "name=$APP_NAME"; }
+show_logs()   { docker logs --tail 50 "$APP_NAME"; }
+logs_follow() { docker logs -f "$APP_NAME"; }
 
 # ==============================
 # 🚀 MAIN
 # ==============================
 main() {
     echo "========================================="
-    echo "🏗️  Build & Push - $APP_NAME"
+    echo "☁️ Deploy OCI - $APP_NAME (pull da imagem)"
     echo "========================================="
 
     check_docker
     load_env
-    extract_version
 
-    case "${1:-build-push}" in
-        build-push)
-            log_info "Modo: build + push"
-            docker_login
-            build_image
-            push_image
-            log_info "🎉 Tudo pronto! Tags enviadas:"
-            echo "   - $IMAGE_NAME:latest"
-            echo "   - $IMAGE_NAME:$VERSION"
-            echo "   - $IMAGE_NAME:$(git rev-parse --short HEAD 2>/dev/null || echo 'nogit')"
+    case "${1:-deploy}" in
+        deploy)
+            log_info "Modo: deploy OCI completo (pull + restart)"
+            backup_database
+            pull_image
+            stop_container
+            run_container
+            cleanup_docker
+            show_status
+            show_logs
             ;;
-        build)
-            log_info "Modo: build apenas (sem push)"
-            build_image
-            log_info "✅ Imagem buildada localmente. Nada foi enviado."
+        restart)
+            log_info "Modo: restart apenas"
+            backup_database
+            pull_image
+            stop_container
+            run_container
+            show_status
+            ;;
+        stop)
+            stop_container
+            log_info "Container parado"
+            ;;
+        logs)
+            logs_follow
+            ;;
+        status)
+            show_status
+            ;;
+        pull)
+            pull_image
             ;;
         *)
-            echo "Uso: $0 {build-push|build}"
+            echo "Uso: $0 {deploy|restart|stop|logs|status|pull}"
             exit 1
             ;;
     esac

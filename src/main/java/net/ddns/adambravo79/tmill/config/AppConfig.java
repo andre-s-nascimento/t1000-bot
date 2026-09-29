@@ -9,8 +9,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.core.task.support.TaskExecutorAdapter;
+import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Configuration
@@ -32,5 +34,15 @@ public class AppConfig {
         // Isso força o Spring a usar Virtual Threads para qualquer @Async
         log.info("⚙️ Configurando AsyncTaskExecutor com Virtual Threads");
         return new TaskExecutorAdapter(Executors.newVirtualThreadPerTaskExecutor());
+    }
+
+    @Bean
+    public RestClient restClient() {
+        return RestClient.builder().build();
+    }
+
+    @Bean
+    public ObjectMapper toolsObjectMapper() {
+        return new ObjectMapper();
     }
 }

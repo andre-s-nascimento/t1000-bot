@@ -7,9 +7,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,28 +24,33 @@ import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
 class TelegramFileServiceTest {
 
     @Mock private TelegramFacade telegramFacade;
+    @Mock private TempDirService tempDirService;
+
     @InjectMocks private TelegramFileService service;
+
+    @TempDir Path tempDir;
 
     private static final String FILE_ID = "test-file-id";
     private static final byte[] DATA = "conteúdo do arquivo".getBytes();
 
     @Test
-    @Disabled("Ajustar PRD")
+    @SneakyThrows
     void deveBaixarArquivoComSucesso() {
+        Path tempFile = tempDir.resolve("audio-test.oga");
+
         File tgFile = mock(File.class);
         when(telegramFacade.getFile(FILE_ID)).thenReturn(tgFile);
         when(telegramFacade.downloadFile(tgFile)).thenReturn(DATA);
+        when(tempDirService.createTempFile("audio", ".oga")).thenReturn(tempFile);
 
         java.io.File result = service.baixarArquivo(FILE_ID);
 
         assertThat(result).exists().hasContent("conteúdo do arquivo");
-
         assertThat(result.getName()).startsWith("audio").endsWith(".oga");
 
         verify(telegramFacade).getFile(FILE_ID);
         verify(telegramFacade).downloadFile(tgFile);
-
-        result.delete();
+        verify(tempDirService).createTempFile("audio", ".oga");
     }
 
     @Test

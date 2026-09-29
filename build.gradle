@@ -3,25 +3,30 @@ plugins {
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'jacoco'
-    id "com.diffplug.spotless" version "6.25.0"
-    id "org.sonarqube" version "7.3.1.8318"
+    id 'com.diffplug.spotless' version '6.25.0'
+    id 'org.sonarqube' version '7.3.1.8318'
 }
 
 group = 'net.ddns.adambravo79'
-version = '2.5.4'
+version = '2.5.5'
 
 java {
-    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 repositories {
     mavenCentral()
     // Repositório obrigatório para o SDK de Fala da Azure
     maven {
-        url "https://azureai.azureedge.net/maven/"
+        url = uri('https://azureai.azureedge.net/maven/')
     }
 }
 
+// ============================================================================
+// DEPENDÊNCIAS
+// ============================================================================
 dependencies {
     // Spring Boot
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -29,7 +34,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // Spring Security
     implementation 'org.springframework.security:spring-security-core:7.1.1'
     implementation 'org.springframework.security:spring-security-web:7.1.1'
     implementation 'org.springframework.security:spring-security-config:7.1.1'
@@ -37,12 +44,11 @@ dependencies {
     implementation 'org.springframework.security:spring-security-oauth2-core:7.1.1'
     implementation 'org.springframework.security:spring-security-oauth2-client:7.1.1'
     implementation 'org.springframework.security:spring-security-oauth2-jose:7.1.1'
-        
-    // define a BOM and its version
-    implementation(platform("com.squareup.okhttp3:okhttp-bom:5.4.0"))
-    // define any required OkHttp artifacts without version
-    implementation("com.squareup.okhttp3:okhttp")
-    implementation("com.squareup.okhttp3:logging-interceptor")
+
+    // OkHttp (BOM)
+    implementation platform('com.squareup.okhttp3:okhttp-bom:5.4.0')
+    implementation 'com.squareup.okhttp3:okhttp'
+    implementation 'com.squareup.okhttp3:logging-interceptor'
 
     // Cache
     implementation 'com.github.ben-manes.caffeine:caffeine:3.2.3'
@@ -50,37 +56,30 @@ dependencies {
     // SQLite
     implementation 'org.xerial:sqlite-jdbc:3.45.3.0'
 
-    // Reactor (para async)
+    // Reactor (async)
     implementation 'io.projectreactor:reactor-core:3.7.0'
 
     // FFmpeg wrapper
     implementation 'net.bramp.ffmpeg:ffmpeg:0.8.0'
 
-    // ========== TELEGRAM (substituição) ==========
+    // Telegram (starter + meta)
     implementation 'io.github.ksilisk:telegram-bot-spring-boot-starter:0.7.0'
-
-    // (Opcional) Se precisar de modelos específicos, o starter já inclui o meta-client.
-    // Mas para evitar ambiguidades, você pode forçar a versão:
     implementation 'org.telegram:telegrambots-meta:6.9.7.1'
 
-    // ========== Azure Speech SDK (para TTS) ==========
-    // SDK oficial da Microsoft para Java (TTS, STT, etc.)
-    implementation 'com.azure:azure-core:1.54.1'  
+    // Azure Speech SDK
+    implementation 'com.azure:azure-core:1.54.1'
 
     // HTML
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
 
-    // Drivers para migração futura (Postgres e Mongo)
-    // Driver do PostgreSQL
+    // Bancos (Postgres + Mongo)
     implementation 'org.postgresql:postgresql'
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 
-    // Observabilidade - Sprint 3
+    // Observabilidade
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
-    //implementation 'net.logstash.logback:logstash-logback-encoder'
-    // Source: https://mvnrepository.com/artifact/net.logstash.logback/logstash-logback-encoder
     implementation 'net.logstash.logback:logstash-logback-encoder:9.0'
 
     // Lombok
@@ -89,7 +88,9 @@ dependencies {
     testCompileOnly 'org.projectlombok:lombok:1.18.34'
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.34'
 
-    // Testes
+    // ========================================================================
+    // TESTES
+    // ========================================================================
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.mockito:mockito-core'
@@ -98,16 +99,21 @@ dependencies {
     testImplementation 'org.awaitility:awaitility:4.2.2'
     testImplementation 'com.squareup.okhttp3:mockwebserver3:5.4.0'
     testImplementation 'com.squareup.okhttp3:mockwebserver3-junit5:5.4.0'
-    
-    // Testcontainers Core & Modules
+
+    // Testcontainers
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
     testImplementation 'org.testcontainers:testcontainers-kafka'
     testImplementation 'org.testcontainers:testcontainers-mongodb'
+
+    // Força versão do commons-io
     testImplementation 'commons-io:commons-io:2.22.0'
 }
 
+// ============================================================================
+// RESOLUÇÃO DE DEPENDÊNCIAS
+// ============================================================================
 configurations.all {
     resolutionStrategy {
         cacheChangingModulesFor 0, 'seconds'
@@ -115,71 +121,22 @@ configurations.all {
     }
 }
 
-// Spotless (configuração mantida)
+// ============================================================================
+// SPOTLESS
+// ============================================================================
 tasks.withType(com.diffplug.gradle.spotless.SpotlessTask).configureEach {
-    notCompatibleWithConfigurationCache("Spotless has compatibility issues with configuration cache")
+    notCompatibleWithConfigurationCache('Spotless has compatibility issues with configuration cache')
 }
-
-// Configuração do SonarCloud
-sonar {
-    properties {
-        property "sonar.projectKey", "andre-s-nascimento_t1000-bot"
-        property "sonar.organization", "andre-s-nascimento"
-        property "sonar.host.url", "https://sonarcloud.io"
-        property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml"
-        property "sonar.exclusions", "**/build/**,**/src/test/**"
-        property "sonar.java.source", "21"
-    }
-}
-
-tasks.withType(JavaCompile) {
-    options.fork = true
-    options.forkOptions.memoryMaximumSize = '256m'
-}
-
-jacoco {
-    toolVersion = "0.8.11"
-}
-
-test {
-    useJUnitPlatform()
-    environment 'TELEGRAM_BOT_TOKEN', System.getenv('TELEGRAM_BOT_TOKEN') ?: 'dummy-token-para-testes'
-    // Força o fuso horário dos testes para coincidir com a regra de negócio
-    systemProperty 'user.timezone', 'America/Sao_Paulo'
-    finalizedBy jacocoTestReport
-}
-
-jacocoTestReport {
-    dependsOn test
-    reports {
-        xml.required = true
-        html.required = true
-    }
-    afterEvaluate {
-        classDirectories.setFrom(files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: [
-                'net/ddns/adambravo79/tmill/client/**',
-                'net/ddns/adambravo79/tmill/config/**',
-                'net/ddns/adambravo79/tmill/TmillApplication*'
-            ])
-        }))
-    }
-}
-
-jacocoTestCoverageVerification {
-    violationRules {
-        rule {
-            limit { minimum = 0.40 }
-        }
-    }
-}
-
-check.dependsOn jacocoTestCoverageVerification
 
 spotless {
     java {
         target 'src/**/*.java'
-        googleJavaFormat('1.35.0').aosp().reflowLongStrings().formatJavadoc(false).reorderImports(false).groupArtifact('com.google.googlejavaformat:google-java-format') 
+        googleJavaFormat('1.35.0')
+                .aosp()
+                .reflowLongStrings()
+                .formatJavadoc(false)
+                .reorderImports(false)
+                .groupArtifact('com.google.googlejavaformat:google-java-format')
         removeUnusedImports()
         importOrder('java', 'javax', 'org', 'com', '')
         trimTrailingWhitespace()
@@ -187,34 +144,231 @@ spotless {
     }
 }
 
-tasks.named("check") {
-    dependsOn("spotlessCheck")
+// ============================================================================
+// SONARQUBE
+// ============================================================================
+sonar {
+    properties {
+        property 'sonar.projectKey', 'andre-s-nascimento_t1000-bot'
+        property 'sonar.organization', 'andre-s-nascimento'
+        property 'sonar.host.url', 'https://sonarcloud.io'
+        property 'sonar.coverage.jacoco.xmlReportPaths',
+                layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml')
+                        .get().asFile.absolutePath
+        property 'sonar.exclusions', '**/build/**,**/src/test/**'
+        property 'sonar.java.source', '21'
+    }
 }
 
-tasks.named("sonar") {
-    dependsOn("jacocoTestReport")
+// ============================================================================
+// COMPILAÇÃO
+// ============================================================================
+tasks.withType(JavaCompile).configureEach {
+    options.fork = true
+    options.forkOptions.memoryMaximumSize = '256m'
 }
 
+// ============================================================================
+// JACOCO
+// ============================================================================
+jacoco {
+    toolVersion = '0.8.11'
+}
+
+// ============================================================================
+// TESTES
+// ============================================================================
+test {
+    useJUnitPlatform()
+    systemProperty 'user.timezone', 'America/Sao_Paulo'
+
+    // Usa providers (config-cache friendly) em vez de System.getenv
+    // Formato: VAR_AMBIENTE=vem_do_ambiente_ou_fallback
+    def envVars = [
+            'TELEGRAM_BOT_TOKEN'              : 'dummy-token',
+            'TELEGRAM_BOT_USERNAME'           : 'test_bot',
+            'TELEGRAM_OWNER_ID'               : '0',
+            'GROQ_API_KEY'                    : 'dummy',
+            'TMDB_READ_TOKEN'                 : 'dummy',
+            'WATCHMODE_API_KEY'               : 'dummy',
+            'STREAMING_AVAILABILITY_API_KEY'  : 'dummy',
+            'AZURE_SPEECH_KEY'                : 'dummy',
+            'AZURE_SPEECH_REGION'             : 'brazilsouth',
+            'PODCAST_PUBLISH_CHAT_ID'         : '123456789',
+            'POSTGRES_DATABASE_URL'           : 'jdbc:postgresql://localhost:5432/test',
+            'POSTGRES_DATABASE_USER'          : 'test',
+            'POSTGRES_DATABASE_PASSWORD'      : 'test',
+            'MONGODB_URI'                     : 'mongodb://localhost:27017/test',
+            'KAFKA_BOOTSTRAP_SERVERS'         : 'localhost:9092'
+    ]
+
+    envVars.each { key, fallback ->
+        environment key,
+                providers.environmentVariable(key).getOrElse(fallback)
+    }
+
+    testLogging {
+        events 'skipped', 'failed'
+        showStandardStreams = false
+        exceptionFormat = 'full'
+    }
+
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+// ============================================================================
+// UNIT TEST (sem Testcontainers) — task customizada
+// ============================================================================
+tasks.register('unitTest', Test) {
+    group = 'verification'
+    description = 'Roda apenas testes unitários (sem Testcontainers)'
+    useJUnitPlatform()
+    systemProperty 'user.timezone', 'America/Sao_Paulo'
+
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    filter {
+        excludeTestsMatching 'net.ddns.adambravo79.tmill.integration.*'
+    }
+
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+// ============================================================================
+// JACOCO REPORT
+// ============================================================================
+jacocoTestReport {
+    dependsOn tasks.named('test')
+
+    reports {
+        xml.required = true
+        html.required = true
+    }
+
+    // Substitui afterEvaluate por configuração direta (deprecated em Gradle 8+)
+    classDirectories.setFrom(
+            files(
+                    classDirectories.files.collect { dir ->
+                        fileTree(dir: dir, exclude: [
+                                'net/ddns/adambravo79/tmill/client/**',
+                                'net/ddns/adambravo79/tmill/config/**',
+                                'net/ddns/adambravo79/tmill/TmillApplication*'
+                        ])
+                    }
+            )
+    )
+}
+
+// ============================================================================
+// JACOCO COVERAGE VERIFICATION
+// ============================================================================
+jacocoTestCoverageVerification {
+    dependsOn tasks.named('jacocoTestReport')
+
+    // Aplica as mesmas exclusões do relatório
+    classDirectories.setFrom(
+            files(
+                    classDirectories.files.collect { dir ->
+                        fileTree(dir: dir, exclude: [
+                                'net/ddns/adambravo79/tmill/client/**',
+                                'net/ddns/adambravo79/tmill/config/**',
+                                'net/ddns/adambravo79/tmill/TmillApplication*'
+                        ])
+                    }
+            )
+    )
+
+    violationRules {
+
+        // Regra 1 — cobertura global mínima de 90%
+        rule {
+            element = 'BUNDLE'
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.90
+            }
+        }
+
+        // Regra 2 — cada classe com mínimo 70% (exceções abaixo)
+        rule {
+            element = 'CLASS'
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.70
+            }
+            excludes = [
+                    'net.ddns.adambravo79.tmill.TmillApplication',
+                    'net.ddns.adambravo79.tmill.config.*',
+                    'net.ddns.adambravo79.tmill.client.*',
+                    'net.ddns.adambravo79.tmill.constant.*',
+                    '*.dto.*',
+                    '*.model.*',
+                    '*.document.*',
+                    // Schedulers — wrappers finos do scheduler, dificilmente testáveis
+                    'net.ddns.adambravo79.tmill.service.BirthdayScheduler'
+            ]
+        }
+    }
+}
+// ============================================================================
+// CHECK — agrega todas as verificações
+// ============================================================================
+tasks.named('check') {
+    dependsOn tasks.named('spotlessCheck')
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}
+
+tasks.named('sonar') {
+    dependsOn tasks.named('jacocoTestReport')
+}
+
+// ============================================================================
+// BOOTRUN — carrega .env
+// ============================================================================
 tasks.named('bootRun') {
-    notCompatibleWithConfigurationCache("Carrega variáveis do .env")
+    notCompatibleWithConfigurationCache('Carrega variáveis do .env')
+
     def envFile = project.file('.env')
     if (envFile.exists()) {
         def envVars = envFile.readLines()
-                .findAll { !it.startsWith('#') && it.contains('=') }
-                .collect { it.split('=', 2) }
+                .collect { it.trim() }
+                .findAll { it && !it.startsWith('#') && it.contains('=') }
+                .collect { line ->
+                    def cleaned = line.replaceFirst(/^export\s+/, '')
+                    def (key, value) = cleaned.split('=', 2)
+                    value = value.trim()
+                    if ((value.startsWith('"') && value.endsWith('"')) ||
+                            (value.startsWith("'") && value.endsWith("'"))) {
+                        value = value.substring(1, value.length() - 1)
+                    }
+                    [key.trim(), value]
+                }
                 .collectEntries { [it[0], it[1]] }
+
         environment(envVars)
+        logger.lifecycle("✅ Carregadas ${envVars.size()} variáveis do .env")
+    } else {
+        logger.lifecycle('⚠️ Arquivo .env não encontrado — usando variáveis de ambiente do sistema')
     }
-    // 👇 Limita a JVM do app
+
     jvmArgs = [
-        '-Xmx512m',
-        '-XX:MaxMetaspaceSize=192m',
-        '-XX:+UseG1GC',
-        '-XX:MaxGCPauseMillis=200'
+            '-Xmx512m',
+            '-XX:MaxMetaspaceSize=192m',
+            '-XX:+UseG1GC',
+            '-XX:MaxGCPauseMillis=200'
     ]
 }
 
+// ============================================================================
+// COPY DEPENDENCIES
+// ============================================================================
 tasks.register('copyDependencies', Copy) {
+    description = 'Copia as dependências de runtime para build/dependencies'
+    group = 'build'
+
     from configurations.runtimeClasspath
-    into "$buildDir/dependencies"
+    into layout.buildDirectory.dir('dependencies')
 }

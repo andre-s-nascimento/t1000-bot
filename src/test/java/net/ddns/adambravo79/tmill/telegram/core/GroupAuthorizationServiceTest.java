@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -155,6 +156,23 @@ class GroupAuthorizationServiceTest {
         when(update.message()).thenReturn(null);
         when(update.callbackQuery()).thenReturn(null);
 
+        assertThat(service.isAuthorized(update)).isTrue();
+    }
+
+    @Test
+    @DisplayName("init com string em branco não restringe nenhum grupo")
+    void init_blankString_allowsAll() {
+        ReflectionTestUtils.setField(service, "allowedChatsStr", "   ");
+        service.init();
+
+        Update update = mock(Update.class);
+        Message message = mock(Message.class);
+        Chat chat = mock(Chat.class);
+        when(update.message()).thenReturn(message);
+        when(message.chat()).thenReturn(chat);
+        when(chat.id()).thenReturn(-100999L);
+
+        // Nenhum grupo configurado → libera todos
         assertThat(service.isAuthorized(update)).isTrue();
     }
 

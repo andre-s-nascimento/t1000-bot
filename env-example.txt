@@ -1,51 +1,124 @@
-# ============================================================
-# TEMPLATE — Copie para .env (dev) ou .env.prod (container)
-# ============================================================
+# ============================================================================
+# .env.example — Template de variáveis de ambiente do Tmill Bot
+# ----------------------------------------------------------------------------
+# Copie para .env (local) ou .env.prod (servidor) e preencha os valores reais.
+# NUNCA commite .env nem .env.prod — apenas este arquivo.
+# ============================================================================
 
-# Supabase
+# ----------------------------------------------------------------------------
+# PERFIL SPRING
+# ----------------------------------------------------------------------------
+# Em dev, deixe vazio (usa application.properties).
+# Em prd, defina SPRING_PROFILES_ACTIVE=prod.
+SPRING_PROFILES_ACTIVE=
+
+# ----------------------------------------------------------------------------
+# BANCOS DE DADOS
+# ----------------------------------------------------------------------------
+# DEV (Docker local):
+#   POSTGRES_DATABASE_URL=jdbc:postgresql://localhost:5432/t1000
+#   POSTGRES_DATABASE_USER=postgres
+#   POSTGRES_DATABASE_PASSWORD=postgres
+#   MONGODB_URI=mongodb://localhost:27017/t1000
+#
+# PRD (Supabase / MongoDB Atlas):
+#   POSTGRES_DATABASE_URL=jdbc:postgresql://db.<projeto>.supabase.co:5432/postgres
+#   POSTGRES_DATABASE_USER=postgres.<projeto>
+#   POSTGRES_DATABASE_PASSWORD=<senha>
+#   MONGODB_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/t1000
+# ----------------------------------------------------------------------------
 POSTGRES_DATABASE_URL=
-# Usuário com project ref (formato do pooler)
 POSTGRES_DATABASE_USER=
-# Senha (percent-encode se tiver símbolos especiais)
 POSTGRES_DATABASE_PASSWORD=
+MONGODB_URI=
 
-# Atlas
-MONGODB_URI=mongodb+srv://user
-
-# Aiven Kafka
-KAFKA_BOOTSTRAP_SERVERS=SEU_HOST.aivencloud.com:PORTA
-KAFKA_SASL_USERNAME=avnadmin
-KAFKA_SASL_PASSWORD=
-
-# ⚠️ Ajuste este path conforme o ambiente:
-#   - Dev (host):  /home/SEU_USUARIO/.kafka-certs/aiven-truststore.jks
-#   - Prod (container): /app/certs/aiven-truststore.jks
-KAFKA_TRUSTSTORE_PATH=/app/certs/aiven-truststor.jks
+# ----------------------------------------------------------------------------
+# KAFKA
+# ----------------------------------------------------------------------------
+# DEV (Docker local): KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+# PRD (Aiven):        KAFKA_BOOTSTRAP_SERVERS=<host>:<port>
+#                     KAFKA_SECURITY_PROTOCOL=SASL_SSL
+#                     KAFKA_SASL_MECHANISM=SCRAM-SHA-256
+#                     KAFKA_SASL_JAAS_CONFIG=org.apache.kafka.common.security.scram.ScramLoginModule required username="..." password="...";
+#                     KAFKA_TRUSTSTORE_PATH=/app/config/aiven-truststore.jks
+#                     KAFKA_TRUSTSTORE_PASSWORD=...
+#                     KAFKA_TRUSTSTORE_TYPE=JKS
+# ----------------------------------------------------------------------------
+KAFKA_BOOTSTRAP_SERVERS=
+KAFKA_SECURITY_PROTOCOL=PLAINTEXT
+KAFKA_SASL_MECHANISM=
+KAFKA_SASL_JAAS_CONFIG=
+KAFKA_TRUSTSTORE_PATH=
 KAFKA_TRUSTSTORE_PASSWORD=
+KAFKA_TRUSTSTORE_TYPE=JKS
 
-# Telegram
-TELEGRAM_BOT_TOKEN=seu_token
-TELEGRAM_BOT_USERNAME=seu_bot
-TELEGRAM_OWNER_ID=seu_id
+# ----------------------------------------------------------------------------
+# TELEGRAM
+# ----------------------------------------------------------------------------
+# TELEGRAM_BOT_TOKEN: formato "123456789:ABC..." — preencha com o valor real
+# TELEGRAM_OWNER_ID:  seu user_id numérico do Telegram
+# ----------------------------------------------------------------------------
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+TELEGRAM_BOT_USERNAME=
+TELEGRAM_OWNER_ID=
 
-# APIs
-TMDB_READ_TOKEN=seu_token
-GROQ_API_KEY=sua_chave
-WATCHMODE_API_KEY=sua_chave
-STREAMING_AVAILABILITY_API_KEY=sua_chave
-AZURE_SPEECH_KEY=sua_chave
+# ----------------------------------------------------------------------------
+# CHATS AUTORIZADOS (separados por vírgula; grupos são negativos)
+# ----------------------------------------------------------------------------
+BOT_ALLOWED_CHATS=
+DIGEST_ALLOWED_CHATS=
+PODCAST_PUBLISH_CHAT_ID=
+
+# ----------------------------------------------------------------------------
+# APIs EXTERNAS
+# ----------------------------------------------------------------------------
+GROQ_API_KEY=
+TMDB_READ_TOKEN=
+WATCHMODE_API_KEY=
+STREAMING_AVAILABILITY_API_KEY=
+
+# ----------------------------------------------------------------------------
+# AZURE TTS
+# ----------------------------------------------------------------------------
+# Região típica: brazilsouth
+AZURE_SPEECH_KEY=
 AZURE_SPEECH_REGION=brazilsouth
 
-# Admin / OAuth
-GOOGLE_CLIENT_ID=seu_id
+# ----------------------------------------------------------------------------
+# GOOGLE OAUTH2 / ADMIN
+# ----------------------------------------------------------------------------
+# ADMIN_ALLOWED_EMAILS: e-mails separados por vírgula
+# ADMIN_ALLOWED_IPS:    IPs separados por vírgula (vazio = libera tudo, dev)
+# ----------------------------------------------------------------------------
+GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-ADMIN_ALLOWED_EMAILS=seu@email.com
+ADMIN_ALLOWED_EMAILS=
+ADMIN_ALLOWED_IPS=127.0.0.1,::1
+ADMIN_SECURITY_DISABLED=false
 
-# Podcast / Digest
-PODCAST_PUBLISH_CHAT_ID=seu_chat_id
-DIGEST_ALLOWED_CHATS=seu_chat_id
-BOT_ALLOWED_CHATS=seu_chat_id
-
-# Migração
+# ----------------------------------------------------------------------------
+# FEATURE FLAGS
+# ----------------------------------------------------------------------------
+WORLD_CUP_ENABLED=false
+WORLDCUP_UPDATE_ENABLED=false
+TRANSCRIPTION_ENABLED=false
 MIGRATION_ENABLED=false
 MIGRATION_SQLITE_PATH=./data/t1000.db
+
+# ----------------------------------------------------------------------------
+# ARQUIVOS DE CONFIGURAÇÃO (opcionais — sobrepõem os classpath)
+# ----------------------------------------------------------------------------
+# AUTO_RESPONSE_FILE=classpath:auto-responses.json
+# EASTER_EGG_FILE=classpath:easter-eggs.json
+# WORLD_CUP_FILE=classpath:worldcup2026.json
+# QUATRO_HORAS_QUARTA_FILE=https://.../videos/quatro-horas-de-quarta-feira.mp4
+AUTO_RESPONSE_FILE=
+EASTER_EGG_FILE=
+WORLD_CUP_FILE=
+QUATRO_HORAS_QUARTA_FILE=
+
+# ----------------------------------------------------------------------------
+# OBSERVABILIDADE
+# ----------------------------------------------------------------------------
+# DEV: health,info,prometheus   PRD: health,info
+MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus

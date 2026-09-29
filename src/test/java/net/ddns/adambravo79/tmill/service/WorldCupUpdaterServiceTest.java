@@ -2,8 +2,15 @@ package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,6 +30,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class WorldCupUpdaterServiceTest {
@@ -32,6 +41,7 @@ class WorldCupUpdaterServiceTest {
     @Mock private RestClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
     @Mock private RestClient.RequestHeadersSpec<?> requestHeadersSpec;
     @Mock private RestClient.ResponseSpec responseSpec;
+    @Mock private FeatureFlagAdminService featureFlags; // <-- ADICIONAR
 
     @Spy @InjectMocks private WorldCupUpdaterService service;
 
@@ -39,13 +49,15 @@ class WorldCupUpdaterServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Flag de update da Copa habilitada por padrão em todos os testes.
+        lenient().when(featureFlags.isEnabled("worldcup.update.enabled")).thenReturn(true);
 
-        ReflectionTestUtils.setField(service, "restClient", restClient);
-        ReflectionTestUtils.setField(service, "updateEnabled", true);
+        // @Value fields — não injetados por Mockito
         ReflectionTestUtils.setField(service, "updateUrl", "https://test.com/worldcup.json");
         ReflectionTestUtils.setField(
                 service, "destinationPath", tempDir.resolve("worldcup.json").toString());
 
+        // Cadeia fluent do RestClient
         doReturn(requestHeadersUriSpec).when(restClient).get();
         doReturn(requestHeadersSpec).when(requestHeadersUriSpec).uri(anyString());
         doReturn(responseSpec).when(requestHeadersSpec).retrieve();
@@ -62,7 +74,7 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void init_deveLogarQuandoUpdateEnabledFalse() {
-        ReflectionTestUtils.setField(service, "updateEnabled", false);
+        when(featureFlags.isEnabled("worldcup.update.enabled")).thenReturn(false);
         assertThatCode(() -> service.init()).doesNotThrowAnyException();
     }
 
@@ -90,7 +102,7 @@ class WorldCupUpdaterServiceTest {
 
     @Test
     void updateWorldCupData_deveIgnorarQuandoUpdateEnabledFalse() {
-        ReflectionTestUtils.setField(service, "updateEnabled", false);
+        when(featureFlags.isEnabled("worldcup.update.enabled")).thenReturn(false);
         service.updateWorldCupData();
         verifyNoInteractions(restClient);
         verifyNoInteractions(worldCupService);

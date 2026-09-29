@@ -23,6 +23,7 @@ import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
@@ -39,9 +40,7 @@ public class WorldCupSchedulerService {
     private final WorldCupUpdaterService worldCupUpdaterService;
     private final Clock clock;
     private final MetricsService metricsService;
-
-    @Value(BotMessages.DEFAULT_WORLDCUP_ENABLED)
-    private boolean worldcupEnabled;
+    private final FeatureFlagAdminService featureFlags;
 
     @Value(BotMessages.DEFAULT_BOT_ALLOWED_CHATS)
     private String allowedChatsStr;
@@ -51,17 +50,19 @@ public class WorldCupSchedulerService {
             TelegramFacade telegramFacade,
             WorldCupUpdaterService worldCupUpdaterService,
             Clock clock,
-            MetricsService metricsService) {
+            MetricsService metricsService,
+            FeatureFlagAdminService featureFlags) {
         this.worldCupService = worldCupService;
         this.telegramFacade = telegramFacade;
         this.worldCupUpdaterService = worldCupUpdaterService;
         this.clock = clock != null ? clock : Clock.systemDefaultZone();
         this.metricsService = metricsService;
+        this.featureFlags = featureFlags;
     }
 
     @PostConstruct
     public void init() {
-        if (!worldcupEnabled) return;
+        if (!featureFlags.isEnabled("worldcup.enabled")) return;
         if (allowedChatsStr != null && !allowedChatsStr.isBlank()) {
             for (String s : allowedChatsStr.split(",")) {
                 try {
@@ -77,21 +78,21 @@ public class WorldCupSchedulerService {
 
     @Scheduled(cron = "0 0 12 * * *", zone = BotMessages.BRAZIL_ZONE)
     public void sendNoonMatches() {
-        if (!worldcupEnabled || allowedGroups.isEmpty()) return;
+        if (!featureFlags.isEnabled("worldcup.enabled") || allowedGroups.isEmpty()) return;
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessage(today, "🏆 JOGOS DE HOJE (meio-dia)");
     }
 
     @Scheduled(cron = "0 30 18 * * *", zone = BotMessages.BRAZIL_ZONE)
     public void sendEveningMatches() {
-        if (!worldcupEnabled || allowedGroups.isEmpty()) return;
+        if (!featureFlags.isEnabled("worldcup.enabled") || allowedGroups.isEmpty()) return;
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessage(today, "🏆 RESUMO DOS JOGOS DE HOJE");
     }
 
     @Scheduled(cron = "0 * * * * *", zone = BotMessages.BRAZIL_ZONE)
     public void checkThirtyMinutesBeforeEachMatch() {
-        if (!worldcupEnabled || allowedGroups.isEmpty()) return;
+        if (!featureFlags.isEnabled("worldcup.enabled") || allowedGroups.isEmpty()) return;
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         LocalDateTime now = LocalDateTime.now(clock);
 
@@ -177,7 +178,7 @@ public class WorldCupSchedulerService {
     }
 
     public void sendResultsToChat(long chatId, LocalDate date) {
-        if (!worldcupEnabled) {
+        if (!featureFlags.isEnabled("worldcup.enabled")) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             metricsService.error("worldcup_desabilitado");
             return;
@@ -342,7 +343,7 @@ public class WorldCupSchedulerService {
     }
 
     public void sendNoonMatchesToChat(long chatId) {
-        if (!worldcupEnabled) {
+        if (!featureFlags.isEnabled("worldcup.enabled")) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             metricsService.error("worldcup_desabilitado");
             return;
@@ -352,7 +353,7 @@ public class WorldCupSchedulerService {
     }
 
     public void sendEveningMatchesToChat(long chatId) {
-        if (!worldcupEnabled) {
+        if (!featureFlags.isEnabled("worldcup.enabled")) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             metricsService.error("worldcup_desabilitado");
             return;
@@ -362,7 +363,7 @@ public class WorldCupSchedulerService {
     }
 
     public void sendManualTestToChat(long chatId) {
-        if (!worldcupEnabled) {
+        if (!featureFlags.isEnabled("worldcup.enabled")) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             metricsService.error("worldcup_desabilitado");
             return;
@@ -402,7 +403,7 @@ public class WorldCupSchedulerService {
     }
 
     public void sendManualTest() {
-        if (!worldcupEnabled || allowedGroups.isEmpty()) {
+        if (!featureFlags.isEnabled("worldcup.enabled") || allowedGroups.isEmpty()) {
             log.warn("Teste manual ignorado: servico desabilitado ou sem grupos");
             metricsService.error("worldcup_desabilitado");
             return;
@@ -426,7 +427,7 @@ public class WorldCupSchedulerService {
     }
 
     public void sendMatchesToChat(long chatId, LocalDate date) {
-        if (!worldcupEnabled) {
+        if (!featureFlags.isEnabled("worldcup.enabled")) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.WORLD_CUP_DISABLED);
             metricsService.error("worldcup_desabilitado");
             return;

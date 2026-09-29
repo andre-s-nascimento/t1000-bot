@@ -1,10 +1,10 @@
+/* (c) 2026 | 26/09/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
-import static net.ddns.adambravo79.tmill.constant.BotMessages.*;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.BRAZIL_ZONE;
+import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM_SS;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -12,27 +12,29 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
-import java.time.temporal.ChronoField;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.concurrent.CompletableFuture;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
-import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -42,29 +44,65 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
-import net.ddns.adambravo79.tmill.constant.BotMessages;
+import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
-import net.ddns.adambravo79.tmill.service.*;
+import net.ddns.adambravo79.tmill.service.AutoResponseService;
+import net.ddns.adambravo79.tmill.service.BirthdayService;
+import net.ddns.adambravo79.tmill.service.DailyDigestService;
+import net.ddns.adambravo79.tmill.service.DailyReleasesService;
+import net.ddns.adambravo79.tmill.service.EasterEggService;
+import net.ddns.adambravo79.tmill.service.MigrationService;
+import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
+import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
+import net.ddns.adambravo79.tmill.service.TempDirService;
+import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
+import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.databind.ObjectMapper;
 
+/**
+ * Controller do painel administrativo (Thymeleaf).
+ *
+ * <p>Complementa o {@link AdminController} (API REST) expondo as mesmas funcionalidades para uso
+ * via interface web.
+ *
+ * <p>Diferenças em relação ao REST:
+ *
+ * <ul>
+ *   <li>Retorna strings de redirect + {@link RedirectAttributes} em vez de {@link ResponseEntity}.
+ *   <li>Erros 5xx retornam mensagem genérica (nunca expõem stacktrace).
+ *   <li>CSRF ignorado via {@code SecurityConfig} (não precisa de hidden nos forms).
+ *   <li>Processamento assíncrono usa {@link CompletableFuture#runAsync} (virtual threads).
+ * </ul>
+ *
+ * <p>Utilitários compartilhados com o {@link AdminController} ficam em {@link AdminUtils}.
+ */
 @Controller
 @RequestMapping("/admin-web")
 @RequiredArgsConstructor
 @Slf4j
 public class AdminWebController {
 
-    private static final long SHOWCASE_CHAT_ID = -5283244164L;
+    // =========================================================================
+    // CONSTANTES
+    // =========================================================================
+
+    private static final String MSG_ERRO_INTERNO = "Erro interno. Verifique os logs do servidor.";
+
     private static final String COPA_DESABILITADA = "Copa desabilitada.";
-    private static final String ERRO = "Erro: ";
     private static final String SUCCESS = "success";
     private static final String ERROR = "error";
     private static final String REDIRECT_ADMIN_WEB = "redirect:/admin-web";
 
-    // Serviços injetados
+    // =========================================================================
+    // DEPENDÊNCIAS
+    // =========================================================================
+
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
     private final WeeklyReminderService weeklyReminderService;
@@ -83,6 +121,12 @@ public class AdminWebController {
     private final TempDirService tempDirService;
     private final BirthdayService birthdayService;
     private final BirthdayRepository birthdayRepository;
+    private final MigrationService migrationService;
+    private final FeatureFlagAdminService featureFlagAdminService;
+
+    // =========================================================================
+    // @Value
+    // =========================================================================
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -97,9 +141,15 @@ public class AdminWebController {
     private String botAllowedChats;
 
     @Value("${digest.chat-ids:}")
-    private String digestChatIds;
+    private String digestChatIdsStr;
 
-    // Página principal
+    @Value("${migration.sqlite.path:./data/t1000.db}")
+    private String migrationSqlitePath;
+
+    // =========================================================================
+    // PÁGINA PRINCIPAL
+    // =========================================================================
+
     @GetMapping
     public String adminPage(Model model) {
         model.addAttribute("worldcupEnabled", worldcupEnabled);
@@ -109,7 +159,8 @@ public class AdminWebController {
                 "now",
                 LocalDateTime.now(ZoneId.of(BRAZIL_ZONE))
                         .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")));
-        // Lógica nova: unifica as duas listas de chats em um Set para evitar IDs duplicados
+
+        // Unifica botAllowedChats + digestChatIds em um Set para a UI
         Set<String> allChats = new LinkedHashSet<>();
         if (botAllowedChats != null && !botAllowedChats.isBlank()) {
             Arrays.stream(botAllowedChats.split(","))
@@ -117,19 +168,20 @@ public class AdminWebController {
                     .filter(s -> !s.isEmpty())
                     .forEach(allChats::add);
         }
-        if (digestChatIds != null && !digestChatIds.isBlank()) {
-            Arrays.stream(digestChatIds.split(","))
+        if (digestChatIdsStr != null && !digestChatIdsStr.isBlank()) {
+            Arrays.stream(digestChatIdsStr.split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
                     .forEach(allChats::add);
         }
-        // Envia a lista para o Thymeleaf
         model.addAttribute("availableChatIds", allChats);
 
         return "admin";
     }
 
-    // ========================= MENSAGENS E ÁUDIO =========================
+    // =========================================================================
+    // MENSAGENS E ÁUDIO
+    // =========================================================================
 
     @PostMapping("/fala-t1000")
     @ResponseBody
@@ -137,12 +189,23 @@ public class AdminWebController {
             @RequestParam String message,
             @RequestParam(required = false) Long chatId,
             @RequestParam(defaultValue = "HTML") String parseMode) {
+
+        if (message == null || message.isBlank()) {
+            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+        }
+
+        long targetChatId = resolveTargetChatId(chatId);
+        if (targetChatId == 0) {
+            return ResponseEntity.badRequest()
+                    .body("❌ Nenhum chatId informado e nenhum chat padrão configurado.");
+        }
+
+        log.info(
+                "📤 [web] Enviando mensagem para chat {}: {}",
+                targetChatId,
+                LogSanitizer.sanitizeMessageText(message));
+
         try {
-            long targetChatId = (chatId != null) ? chatId : ownerId;
-            if (targetChatId == 0) {
-                return ResponseEntity.badRequest()
-                        .body("❌ Nenhum chatId informado e ownerId não configurado.");
-            }
             if ("HTML".equalsIgnoreCase(parseMode)) {
                 telegramFacade.enviarMensagemHtml(targetChatId, message);
             } else {
@@ -150,9 +213,9 @@ public class AdminWebController {
             }
             return ResponseEntity.ok("✅ Mensagem enviada para o chat " + targetChatId);
         } catch (Exception e) {
-            log.error("Erro ao enviar mensagem", e);
+            log.error("❌ Erro ao enviar mensagem para chat {}", targetChatId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Erro: " + e.getMessage());
+                    .body("❌ " + MSG_ERRO_INTERNO);
         }
     }
 
@@ -162,28 +225,37 @@ public class AdminWebController {
             @RequestParam(required = false) String message,
             @RequestParam(required = false) Long chatId) {
 
-        // 1. Validação
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
         }
 
-        // 2. Define chat alvo
-        long targetChatId = (chatId != null) ? chatId : ownerId;
+        long targetChatId = resolveTargetChatId(chatId);
         if (targetChatId == 0) {
             return ResponseEntity.badRequest()
-                    .body("❌ Nenhum chatId informado e ownerId não configurado.");
+                    .body("❌ Nenhum chatId informado e nenhum chat padrão configurado.");
+        }
+
+        log.info(
+                "🎤 [web] Sintetizando áudio para chat {}: {}",
+                targetChatId,
+                LogSanitizer.sanitizeMessageText(message));
+
+        byte[] audio;
+        try {
+            audio = azureTtsClient.synthesizeFullText(message);
+        } catch (Exception e) {
+            log.error("❌ Erro na síntese TTS", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ " + MSG_ERRO_INTERNO);
+        }
+
+        if (audio == null || audio.length == 0) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Falha na síntese (áudio vazio).");
         }
 
         Path tempFile = null;
         try {
-            // 3. Sintetiza áudio (dentro do try!)
-            byte[] audio = azureTtsClient.synthesizeFullText(message);
-            if (audio == null || audio.length == 0) {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body("❌ Falha na síntese (áudio vazio).");
-            }
-
-            // 4. Salva com nome personalizado
             String fileName =
                     String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
             tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
@@ -191,7 +263,6 @@ public class AdminWebController {
             Files.write(tempFile, audio);
             Files.move(tempFile, finalFile);
 
-            // 5. Envia
             telegramFacade.enviarMidia(
                     targetChatId,
                     finalFile.toAbsolutePath().toString(),
@@ -201,50 +272,55 @@ public class AdminWebController {
             return ResponseEntity.ok("✅ Áudio enviado com sucesso para o chat " + targetChatId);
 
         } catch (Exception e) {
-            log.error("Erro no TTS", e);
+            log.error("❌ Erro ao salvar ou enviar áudio", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Erro ao salvar áudio: " + e.getMessage());
+                    .body("❌ " + MSG_ERRO_INTERNO);
         } finally {
-            if (tempFile != null && Files.exists(tempFile)) {
-                try {
-                    Files.deleteIfExists(tempFile);
-                } catch (IOException ignored) {
-                    log.debug("Não foi possível deletar arquivo: {}", tempFile);
-                }
-            }
+            deleteSilently(tempFile);
         }
     }
 
+    /**
+     * Testa a síntese de voz com uma mensagem fixa, enviando para o chat de publicação do podcast.
+     */
     @PostMapping("/test-azure-tts")
     public String testAzureTts(RedirectAttributes redirectAttrs) {
+        if (publishChatId == 0) {
+            redirectAttrs.addFlashAttribute(ERROR, "publishChatId não configurado.");
+            return REDIRECT_ADMIN_WEB;
+        }
+
         try {
             String text =
                     "Bem vindos ao espetacular... ah deixa de papo furado. Dadinho é o cara leo,"
                             + " meu nome agora é Zé Pequeno.";
             byte[] audio = azureTtsClient.synthesizeFullText(text);
-            if (audio.length > 0) {
-                // Envia para o chat de publicação
-                if (publishChatId == 0) {
-                    redirectAttrs.addFlashAttribute(ERROR, "publishChatId não configurado.");
-                    return REDIRECT_ADMIN_WEB;
-                }
-                Path tempFile = tempDirService.createTempFile("test_azure_", ".mp3");
+
+            if (audio == null || audio.length == 0) {
+                redirectAttrs.addFlashAttribute(ERROR, "Falha na síntese (áudio vazio).");
+                return REDIRECT_ADMIN_WEB;
+            }
+
+            Path tempFile = tempDirService.createTempFile("test_azure_", ".mp3");
+            try {
                 Files.write(tempFile, audio);
                 telegramFacade.enviarMidia(
                         publishChatId, tempFile.toAbsolutePath().toString(), "Teste Azure TTS");
-                Files.deleteIfExists(tempFile);
                 redirectAttrs.addFlashAttribute(
                         SUCCESS, "Áudio de teste enviado para " + publishChatId);
-            } else {
-                redirectAttrs.addFlashAttribute(ERROR, "Falha na síntese (áudio vazio).");
+            } finally {
+                deleteSilently(tempFile);
             }
         } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+            log.error("❌ Erro no teste Azure TTS", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
     }
 
-    // ========================= COPA DO MUNDO =========================
+    // =========================================================================
+    // COPA DO MUNDO
+    // =========================================================================
 
     @PostMapping("/test-worldcup")
     public String testWorldCup(RedirectAttributes redirectAttrs) {
@@ -265,7 +341,7 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
             return REDIRECT_ADMIN_WEB;
         }
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = resolveTargetChatId(chatId);
         worldCupSchedulerService.sendManualTestToChat(targetChatId);
         redirectAttrs.addFlashAttribute(
                 SUCCESS, "Envio manual da Copa enviado para o chat " + targetChatId);
@@ -290,7 +366,7 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
             return REDIRECT_ADMIN_WEB;
         }
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = resolveTargetChatId(chatId);
         worldCupSchedulerService.sendNoonMatchesToChat(targetChatId);
         redirectAttrs.addFlashAttribute(
                 SUCCESS, "Envio do meio-dia da Copa enviado para o chat " + targetChatId);
@@ -315,7 +391,7 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
             return REDIRECT_ADMIN_WEB;
         }
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = resolveTargetChatId(chatId);
         worldCupSchedulerService.sendEveningMatchesToChat(targetChatId);
         redirectAttrs.addFlashAttribute(
                 SUCCESS, "Envio da noite da Copa enviado para o chat " + targetChatId);
@@ -332,8 +408,9 @@ public class AdminWebController {
     @PostMapping("/reload-worldcup-showcase")
     public String reloadWorldCupShowcase(
             @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = resolveTargetChatId(chatId);
         staticWorldCupService.reload();
+
         String msg =
                 "✅ Dados da Copa recarregados do arquivo JSON às "
                         + LocalDateTime.now(ZoneId.of(BRAZIL_ZONE))
@@ -343,6 +420,7 @@ public class AdminWebController {
         } catch (HttpClientErrorException | ResourceAccessException e) {
             log.warn("Erro ao enviar notificação de reload para chat {}", targetChatId, e);
         }
+
         redirectAttrs.addFlashAttribute(
                 SUCCESS, "Dados recarregados e notificação enviada para " + targetChatId);
         return REDIRECT_ADMIN_WEB;
@@ -357,18 +435,20 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
             return REDIRECT_ADMIN_WEB;
         }
-        LocalDate date = parseDateParam(dateParam);
+        LocalDate date = AdminUtils.parseDateParam(dateParam);
         if (date == null) {
             redirectAttrs.addFlashAttribute(ERROR, "Data inválida.");
             return REDIRECT_ADMIN_WEB;
         }
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = resolveTargetChatId(chatId);
         worldCupSchedulerService.sendResultsToChat(targetChatId, date);
         redirectAttrs.addFlashAttribute(SUCCESS, "Resultados enviados para o chat " + targetChatId);
         return REDIRECT_ADMIN_WEB;
     }
 
-    // ========================= DIGEST E RELEASES =========================
+    // =========================================================================
+    // DIGEST E RELEASES
+    // =========================================================================
 
     @PostMapping("/test-morning-digest")
     public String testMorningDigest(RedirectAttributes redirectAttrs) {
@@ -399,8 +479,11 @@ public class AdminWebController {
             dailyDigestService.generateDigestCustom(from, to, chatId);
             redirectAttrs.addFlashAttribute(
                     SUCCESS, "Digest personalizado gerado para " + start + " até " + end);
+        } catch (DateTimeParseException e) {
+            redirectAttrs.addFlashAttribute(ERROR, "Formato de data inválido. Use yyyy-MM-dd.");
         } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+            log.error("Erro ao gerar digest customizado", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
     }
@@ -419,7 +502,9 @@ public class AdminWebController {
         return REDIRECT_ADMIN_WEB;
     }
 
-    // ========================= LEMBRETES =========================
+    // =========================================================================
+    // LEMBRETES
+    // =========================================================================
 
     @PostMapping("/test-weekly-reminder")
     public String testWeeklyReminder(RedirectAttributes redirectAttrs) {
@@ -431,14 +516,16 @@ public class AdminWebController {
     @PostMapping("/test-weekly-reminder-showcase")
     public String testWeeklyReminderShowcase(
             @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
-        long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
+        long targetChatId = resolveTargetChatId(chatId);
         weeklyReminderService.sendReminderToChat(targetChatId);
         redirectAttrs.addFlashAttribute(
                 SUCCESS, "Lembrete semanal enviado para o chat " + targetChatId);
         return REDIRECT_ADMIN_WEB;
     }
 
-    // ========================= AUTO-RESPONSE =========================
+    // =========================================================================
+    // AUTO-RESPONSE
+    // =========================================================================
 
     @PostMapping("/test-auto-response")
     @ResponseBody
@@ -447,15 +534,23 @@ public class AdminWebController {
             @RequestParam String message,
             @RequestParam(required = false) Long chatId,
             @RequestParam(required = false) String time) {
+
+        if (message == null || message.isBlank()) {
+            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+        }
+
+        long targetChatId = resolveTargetChatId(chatId);
+        LocalTime simulatedTime = AdminUtils.parseTime(time);
+
         try {
-            long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
-            LocalTime simulatedTime = parseTime(time);
             Optional<AutoResponseOverride> responseOpt =
                     autoResponseService.getResponseRule(userId, message, simulatedTime);
+
             if (responseOpt.isEmpty()) {
                 return ResponseEntity.ok(
                         "⚠️ Nenhuma resposta automática encontrada para essa mensagem.");
             }
+
             AutoResponseOverride response = responseOpt.get();
             String finalMsg =
                     "🧪 *Teste de Auto-Response*\n\n"
@@ -470,18 +565,20 @@ public class AdminWebController {
                             + "\n\n"
                             + "✅ Resposta: "
                             + response.response();
+
             if (response.animation() != null
                     && !response.animation().isBlank()
-                    && isValidUrl(response.animation())) {
+                    && AdminUtils.isValidUrl(response.animation())) {
                 telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
             } else {
                 telegramFacade.enviarMensagemHtml(targetChatId, finalMsg);
             }
             return ResponseEntity.ok("✅ Resposta automática enviada para o chat " + targetChatId);
+
         } catch (Exception e) {
-            log.error("Erro no auto-response test", e);
+            log.error("Erro no teste de auto-response", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Erro: " + e.getMessage());
+                    .body("❌ " + MSG_ERRO_INTERNO);
         }
     }
 
@@ -491,9 +588,11 @@ public class AdminWebController {
             @RequestParam(required = false) Long userId,
             @RequestParam String message,
             @RequestParam(required = false) String time) {
-        LocalTime simulatedTime = parseTime(time);
+
+        LocalTime simulatedTime = AdminUtils.parseTime(time);
         Optional<AutoResponseOverride> responseOpt =
                 autoResponseService.getResponseRule(userId, message, simulatedTime);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("userId", userId);
         result.put("message", message);
@@ -516,7 +615,9 @@ public class AdminWebController {
                 "rules", autoResponseService.getRulesSummary());
     }
 
-    // ========================= ADMINISTRAÇÃO (LIMPEZA E RECARREGAMENTO) =========================
+    // =========================================================================
+    // ADMINISTRAÇÃO (LIMPEZA E RECARREGAMENTO)
+    // =========================================================================
 
     @PostMapping("/clear-releases")
     public String clearReleases(RedirectAttributes redirectAttrs) {
@@ -524,7 +625,8 @@ public class AdminWebController {
             releaseNotifiedRepository.clearAll();
             redirectAttrs.addFlashAttribute(SUCCESS, "Tabela de lançamentos limpa.");
         } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(ERROR, "Erro ao limpar: " + e.getMessage());
+            log.error("Erro ao limpar releases", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
     }
@@ -536,8 +638,8 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(
                     SUCCESS, "Dados removidos: " + deleted + " lançamentos deletados.");
         } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(
-                    ERROR, "Erro ao limpar todos os dados: " + e.getMessage());
+            log.error("Erro ao limpar todos os dados", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
     }
@@ -556,7 +658,9 @@ public class AdminWebController {
         return REDIRECT_ADMIN_WEB;
     }
 
-    // ========================= PODCAST =========================
+    // =========================================================================
+    // PODCAST
+    // =========================================================================
 
     @PostMapping("/test-podcast")
     public String testPodcast(
@@ -564,49 +668,101 @@ public class AdminWebController {
             @RequestParam(required = false) String end,
             @RequestParam(required = false) Long chatId,
             RedirectAttributes redirectAttrs) {
+
+        LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate endDate;
+        LocalDate startDate;
+
         try {
-            LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
-            LocalDate endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) : today;
-            LocalDate startDate =
+            endDate = (end != null && !end.isBlank()) ? LocalDate.parse(end) : today;
+            startDate =
                     (start != null && !start.isBlank())
                             ? LocalDate.parse(start)
                             : today.minusDays(7);
-            if (startDate.isAfter(endDate)) {
-                redirectAttrs.addFlashAttribute(
-                        ERROR, "Data de início não pode ser posterior à data de fim.");
-                return REDIRECT_ADMIN_WEB;
-            }
-            long targetChatId = (chatId != null) ? chatId : SHOWCASE_CHAT_ID;
-            // Executa assíncrono (como no original)
-            new Thread(
-                            () -> {
-                                try {
-                                    podcastPublisherService.generateAndSendPodcast(
-                                            startDate, endDate, targetChatId);
-                                } catch (Exception e) {
-                                    log.error("Erro ao gerar podcast", e);
-                                }
-                            })
-                    .start();
-            redirectAttrs.addFlashAttribute(
-                    SUCCESS,
-                    "Podcast agendado para o período "
-                            + startDate
-                            + " a "
-                            + endDate
-                            + ". Você receberá em breve no chat "
-                            + targetChatId);
-        } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+        } catch (DateTimeParseException e) {
+            redirectAttrs.addFlashAttribute(ERROR, "Formato de data inválido. Use yyyy-MM-dd.");
+            return REDIRECT_ADMIN_WEB;
         }
+
+        if (startDate.isAfter(endDate)) {
+            redirectAttrs.addFlashAttribute(
+                    ERROR, "Data de início não pode ser posterior à data de fim.");
+            return REDIRECT_ADMIN_WEB;
+        }
+
+        long targetChatId = resolveTargetChatId(chatId);
+        final LocalDate finalStart = startDate;
+        final LocalDate finalEnd = endDate;
+        final long finalChatId = targetChatId;
+
+        // Assíncrono via virtual threads (AsyncTaskExecutor configurado no AppConfig)
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        log.info(
+                                "📥 [web] Iniciando geração assíncrona de podcast para chat {}",
+                                finalChatId);
+                        podcastPublisherService.generateAndSendPodcast(
+                                finalStart, finalEnd, finalChatId);
+                        log.info("✅ [web] Podcast finalizado para chat {}", finalChatId);
+                    } catch (Exception e) {
+                        log.error("❌ Erro ao gerar podcast para chat {}", finalChatId, e);
+                        try {
+                            telegramFacade.enviarMensagem(
+                                    finalChatId, "❌ Erro ao gerar podcast. Verifique os logs.");
+                        } catch (Exception ignored) {
+                            log.debug("Não foi possível enviar mensagem de erro");
+                        }
+                    }
+                });
+
+        redirectAttrs.addFlashAttribute(
+                SUCCESS,
+                "Podcast agendado para "
+                        + finalStart
+                        + " a "
+                        + finalEnd
+                        + ". Será enviado para o chat "
+                        + finalChatId
+                        + " em alguns minutos.");
         return REDIRECT_ADMIN_WEB;
     }
 
-    // ========================= ANIVERSÁRIOS =========================
+    @PostMapping("/test-podcast-latest")
+    public String testPodcastLatest(
+            @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
+        LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate startDate = endDate.minusDays(7);
+        return testPodcast(startDate.toString(), endDate.toString(), chatId, redirectAttrs);
+    }
+
+    @PostMapping("/test-podcast-days")
+    public String testPodcastDays(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
+
+        if (days <= 0 || days > 30) {
+            redirectAttrs.addFlashAttribute(ERROR, "O número de dias deve ser entre 1 e 30.");
+            return REDIRECT_ADMIN_WEB;
+        }
+
+        LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        LocalDate startDate = endDate.minusDays(days);
+        return testPodcast(startDate.toString(), endDate.toString(), chatId, redirectAttrs);
+    }
+
+    // =========================================================================
+    // ANIVERSÁRIOS
+    // =========================================================================
 
     @PostMapping("/test-birthday")
     public String testBirthday(
             @RequestParam int day, @RequestParam int month, RedirectAttributes redirectAttrs) {
+        if (day < 1 || day > 31 || month < 1 || month > 12) {
+            redirectAttrs.addFlashAttribute(ERROR, "Dia/mês inválidos.");
+            return REDIRECT_ADMIN_WEB;
+        }
         try {
             int enviados = birthdayService.enviarParabensPara(day, month);
             redirectAttrs.addFlashAttribute(
@@ -617,7 +773,20 @@ public class AdminWebController {
                             + enviados
                             + " enviados)");
         } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+            log.error("Erro ao disparar parabéns para {}/{}", day, month, e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    @PostMapping("/test-birthday-today")
+    public String testBirthdayToday(RedirectAttributes redirectAttrs) {
+        try {
+            birthdayService.enviarParabensDoDia();
+            redirectAttrs.addFlashAttribute(SUCCESS, "🎂 Parabéns disparados para hoje.");
+        } catch (Exception e) {
+            log.error("Erro ao disparar parabéns de hoje", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
     }
@@ -632,7 +801,8 @@ public class AdminWebController {
                 redirectAttrs.addFlashAttribute(SUCCESS, "✅ Aniversário removido.");
             }
         } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+            log.error("Erro ao remover aniversário userId={}", userId, e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
     }
@@ -644,7 +814,8 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(
                     SUCCESS, "✅ " + deleted + " aniversário(s) removido(s).");
         } catch (Exception e) {
-            redirectAttrs.addFlashAttribute(ERROR, ERRO + e.getMessage());
+            log.error("Erro ao limpar aniversários", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
     }
@@ -657,12 +828,161 @@ public class AdminWebController {
                 "birthdays", birthdayRepository.findAll());
     }
 
-    // ========================= MONITORAMENTO =========================
+    // =========================================================================
+    // MIGRAÇÃO SQLITE → POSTGRES/MONGO
+    // =========================================================================
+
+    @PostMapping("/migrate-sqlite")
+    public String migrateFromSqlite(
+            @RequestParam(defaultValue = "false") boolean dryRun,
+            RedirectAttributes redirectAttrs) {
+        try {
+            MigrationResult result = migrationService.migrateAll(dryRun);
+            log.info(
+                    "🚚 [web] Migração{} concluída: status={}, duração={}ms",
+                    dryRun ? " (DRY-RUN)" : "",
+                    result.status(),
+                    result.durationMs());
+
+            String msg =
+                    String.format(
+                            "Migração%s: status=%s, duração=%dms, contadores=%s",
+                            dryRun ? " (DRY-RUN)" : "",
+                            result.status(),
+                            result.durationMs(),
+                            result.tablesMigrated());
+            redirectAttrs.addFlashAttribute(SUCCESS, msg);
+
+        } catch (IllegalStateException e) {
+            log.warn("Migração rejeitada: {}", e.getMessage());
+            redirectAttrs.addFlashAttribute(ERROR, e.getMessage());
+        } catch (Exception e) {
+            log.error("Erro inesperado na migração", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    @GetMapping("/migrate-sqlite/preview")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> previewMigration() {
+        try {
+            Map<String, Integer> counts = migrationService.previewCounts();
+            return ResponseEntity.ok(
+                    Map.of(
+                            "arquivo", migrationSqlitePath,
+                            "contadores", counts,
+                            "total", counts.values().stream().mapToInt(Integer::intValue).sum()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
+                    .body(Map.of("erro", e.getMessage()));
+        }
+    }
+
+    // =========================================================================
+    // FEATURE FLAGS
+    // =========================================================================
+
+    /**
+     * Lista todas as feature flags no formato mapa (casa com o JS do admin.html).
+     *
+     * <p>Formato:
+     *
+     * <pre>
+     * {
+     *   "worldcup.enabled": { "enabled": true, "description": "...", "readOnly": false },
+     *   ...
+     * }
+     * </pre>
+     */
+    @GetMapping("/features")
+    @ResponseBody
+    public Map<String, Map<String, Object>> listFeatures() {
+        return featureFlagAdminService.listAsMap();
+    }
+
+    /**
+     * Altera uma feature flag em runtime, redirecionando de volta ao painel.
+     *
+     * <p>Erros:
+     *
+     * <ul>
+     *   <li>Flag desconhecida → flash error
+     *   <li>Flag read-only → flash error
+     * </ul>
+     */
+    @PostMapping("/features/{key}")
+    public String toggleFeature(
+            @PathVariable String key,
+            @RequestParam boolean enabled,
+            RedirectAttributes redirectAttrs) {
+        try {
+            boolean antes = featureFlagAdminService.isEnabled(key);
+            featureFlagAdminService.toggle(key, enabled);
+            boolean depois = featureFlagAdminService.isEnabled(key);
+
+            log.info("🎛️ [web] Flag '{}': {} → {}", key, antes, depois);
+
+            if (antes == depois) {
+                redirectAttrs.addFlashAttribute(
+                        SUCCESS, "Flag '" + key + "' já estava em " + enabled + ".");
+            } else {
+                redirectAttrs.addFlashAttribute(
+                        SUCCESS,
+                        "Flag '" + key + "' → " + (enabled ? "ativada" : "desativada") + ".");
+            }
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Flag desconhecida: {}", key);
+            redirectAttrs.addFlashAttribute(ERROR, e.getMessage());
+
+        } catch (IllegalStateException e) {
+            log.warn("Tentativa de alterar flag read-only: {}", key);
+            redirectAttrs.addFlashAttribute(ERROR, e.getMessage());
+
+        } catch (Exception e) {
+            log.error("Erro ao alterar flag '{}'", key, e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    // =========================================================================
+    // MONITORAMENTO
+    // =========================================================================
 
     @GetMapping("/cache-stats")
     @ResponseBody
     public Map<String, Long> cacheStats() {
         return cacheService.getStats();
+    }
+
+    @GetMapping("/debug/cache/{fileId}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> debugCache(@PathVariable String fileId) {
+        var entry = cacheService.get(fileId);
+        if (entry == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("erro", "fileId não encontrado no cache", "fileId", fileId));
+        }
+
+        String bruto = entry.textoBruto();
+        String refinado = entry.textoRefinado();
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("fileId", fileId);
+        result.put("brutoLength", bruto == null ? 0 : bruto.length());
+        result.put("refinadoLength", refinado == null ? 0 : refinado.length());
+        result.put("brutoVazio", bruto == null || bruto.isBlank());
+        result.put("refinadoVazio", refinado == null || refinado.isBlank());
+        result.put("timestamp", entry.timestamp());
+        result.put(
+                "primeiros200Bruto",
+                bruto == null ? "" : bruto.substring(0, Math.min(200, bruto.length())));
+        result.put(
+                "primeiros200Refinado",
+                refinado == null ? "" : refinado.substring(0, Math.min(200, refinado.length())));
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/properties")
@@ -683,9 +1003,11 @@ public class AdminWebController {
                 environment.getProperty("telegram.bot.polling.timeout"));
         props.put("telegram.message.limit", environment.getProperty("telegram.message.limit"));
         props.put("telegram.owner.id", environment.getProperty("telegram.owner.id"));
-        props.put("telegram.bot.token", maskToken(environment.getProperty("telegram.bot.token")));
-        props.put("groq.api.key", maskToken(environment.getProperty("groq.api.key")));
-        props.put("tmdb.token", maskToken(environment.getProperty("tmdb.token")));
+        props.put(
+                "telegram.bot.token",
+                AdminUtils.maskToken(environment.getProperty("telegram.bot.token")));
+        props.put("groq.api.key", AdminUtils.maskToken(environment.getProperty("groq.api.key")));
+        props.put("tmdb.token", AdminUtils.maskToken(environment.getProperty("tmdb.token")));
         props.put("groq.model.transcription", environment.getProperty("groq.model.transcription"));
         props.put("groq.model.refinement", environment.getProperty("groq.model.refinement"));
         props.put("groq.model.digest", environment.getProperty("groq.model.digest"));
@@ -706,124 +1028,106 @@ public class AdminWebController {
         props.put(
                 "weekly.reminder.media-file",
                 environment.getProperty("weekly.reminder.media-file"));
-        props.put(
-                "t1000.features.transcription-enabled",
-                environment.getProperty("t1000.features.transcription-enabled"));
+        props.put("transcription.enabled", environment.getProperty("transcription.enabled"));
         props.put("t1000.audio.max-size-mb", environment.getProperty("t1000.audio.max-size-mb"));
         props.put("bot.allowed-chats", environment.getProperty("bot.allowed-chats"));
+        props.put("migration.sqlite.path", migrationSqlitePath);
         return props;
     }
 
+    /**
+     * Carrega os arquivos de configuração (easter-eggs, auto-responses, worldcup) usando o {@code
+     * ResourceLoader} e respeitando as propriedades do {@code application.properties} (ex.: {@code
+     * easter-egg.file}, {@code auto.response.file}, {@code worldcup.data.file}).
+     *
+     * <p>Isso garante que o painel leia os mesmos arquivos que os services usam (ex.: {@code
+     * EasterEggService}), tanto em dev ({@code file:./config/...}) quanto em prod ({@code
+     * file:/app/config/...}).
+     */
     @GetMapping("/config-files")
     @ResponseBody
     public Map<String, Object> configFiles() {
         Map<String, Object> result = new LinkedHashMap<>();
-        String[] files = {"easter-eggs.json", "auto-responses.json", "worldcup2026.json"};
-        for (String fileName : files) {
+
+        // Definição: nome do arquivo → (chave da propriedade, default)
+        record ConfigFile(String name, String propertyKey, String defaultLocation) {}
+
+        List<ConfigFile> files =
+                List.of(
+                        new ConfigFile(
+                                "easter-eggs.json",
+                                "easter-egg.file",
+                                "classpath:easter-eggs.json"),
+                        new ConfigFile(
+                                "auto-responses.json",
+                                "auto.response.file",
+                                "classpath:auto-responses.json"),
+                        new ConfigFile(
+                                "worldcup2026.json",
+                                "worldcup.data.file",
+                                "classpath:worldcup2026.json"));
+
+        for (ConfigFile file : files) {
             try {
-                Object content = loadConfigFile(fileName);
-                result.put(fileName, content);
+                Object content =
+                        AdminUtils.loadConfigFile(
+                                resourceLoader,
+                                environment,
+                                objectMapper,
+                                file.propertyKey(),
+                                file.name(),
+                                file.defaultLocation());
+                result.put(file.name(), content);
             } catch (JsonProcessingException e) {
-                log.error("Erro ao parsear JSON do arquivo: {}", fileName, e);
-                result.put(fileName, "❌ Erro ao parsear JSON");
+                log.error("Erro ao parsear JSON do arquivo: {}", file.name(), e);
+                result.put(file.name(), "❌ Erro ao parsear JSON");
             } catch (IOException e) {
-                log.warn("Arquivo de configuração não encontrado ou ilegível: {}", fileName);
-                result.put(fileName, "❌ Arquivo não encontrado");
+                log.warn(
+                        "Arquivo de configuração não encontrado: {} (propriedade='{}')",
+                        file.name(),
+                        file.propertyKey());
+                result.put(file.name(), "❌ Arquivo não encontrado");
             }
         }
         return result;
     }
 
-    // ========================= MÉTODOS AUXILIARES (copiados do AdminController)
-    // =========================
+    // =========================================================================
+    // HELPERS PRIVADOS
+    // =========================================================================
 
-    private Object loadConfigFile(String fileName) throws IOException {
-        Resource resource = resourceLoader.getResource("classpath:" + fileName);
-        if (!resource.exists()) {
-            resource = resourceLoader.getResource("file:/app/config/" + fileName);
-            if (!resource.exists()) {
-                throw new IOException("Arquivo não encontrado: " + fileName);
-            }
+    /**
+     * Resolve o chat alvo da ação seguindo a ordem: parâmetro explícito → ownerId → primeiro
+     * digestChatId → showcase. Retorna {@code 0} se nada estiver disponível.
+     */
+    private long resolveTargetChatId(Long chatIdParam) {
+        if (chatIdParam != null) {
+            return chatIdParam;
         }
-        return objectMapper.readValue(resource.getInputStream(), Object.class);
-    }
-
-    private String maskToken(String token) {
-        if (token == null || token.length() < 8) return "***";
-        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
-    }
-
-    private LocalDate parseDateParam(String param) {
-        if (param == null || param.isBlank()) return null;
-        String lower = param.toLowerCase().trim();
-        if (lower.equals("hoje") || lower.equals("de hoje"))
-            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
-        if (lower.equals("ontem") || lower.equals("de ontem"))
-            return LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE)).minusDays(1);
-
-        String cleaned = param.replaceAll("(?i)\\b(do|dia|de|da|as|os|dias)\\b", " ").trim();
-        LocalDate parsed = tryParseWithPattern(cleaned);
-        if (parsed != null) return parsed;
-        parsed = tryParseFallback(param, "dd/MM", "dd-MM");
-        return parsed;
-    }
-
-    private LocalDate tryParseWithPattern(String cleaned) {
-        Pattern pattern =
-                Pattern.compile("\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
-        Matcher m = pattern.matcher(cleaned);
-        if (m.find()) {
-            String dateStr = m.group(1).trim();
-            try {
-                if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}")) return LocalDate.parse(dateStr);
-                if (dateStr.matches("\\d{1,2}[/-]\\d{2}")) {
-                    DateTimeFormatter fmt =
-                            new DateTimeFormatterBuilder()
-                                    .appendPattern(dateStr.contains("/") ? "dd/MM" : "dd-MM")
-                                    .parseDefaulting(ChronoField.YEAR, 2026)
-                                    .toFormatter();
-                    return LocalDate.parse(dateStr, fmt);
+        if (ownerId != 0) {
+            return ownerId;
+        }
+        if (digestChatIdsStr != null && !digestChatIdsStr.isBlank()) {
+            for (String s : digestChatIdsStr.split(",")) {
+                try {
+                    return Long.parseLong(s.trim());
+                } catch (NumberFormatException ignored) {
+                    // continua
                 }
-            } catch (DateTimeParseException ignored) {
             }
         }
-        return null;
+        return AdminUtils.SHOWCASE_CHAT_ID;
     }
 
-    private LocalDate tryParseFallback(String param, String... patterns) {
-        for (String p : patterns) {
-            try {
-                DateTimeFormatter fmt =
-                        new DateTimeFormatterBuilder()
-                                .appendPattern(p)
-                                .parseDefaulting(ChronoField.YEAR, 2026)
-                                .toFormatter();
-                return LocalDate.parse(param, fmt);
-            } catch (DateTimeParseException ignored) {
-            }
+    /** Deleta arquivo temporário silenciosamente. */
+    private void deleteSilently(Path file) {
+        if (file == null) {
+            return;
         }
-        return null;
-    }
-
-    private LocalTime parseTime(String timeStr) {
-        if (timeStr == null || timeStr.isBlank()) return null;
         try {
-            return LocalTime.parse(timeStr, DateTimeFormatter.ofPattern(FMT_HH_MM));
-        } catch (DateTimeParseException e) {
-            return null;
-        }
-    }
-
-    private boolean isValidUrl(String url) {
-        if (url == null || url.isBlank()) return false;
-        try {
-            URI uri = new URI(url);
-            String scheme = uri.getScheme();
-            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                    && uri.getHost() != null
-                    && !uri.getHost().isBlank();
-        } catch (URISyntaxException e) {
-            return false;
+            Files.deleteIfExists(file);
+        } catch (IOException ignored) {
+            log.debug("Não foi possível deletar arquivo: {}", file);
         }
     }
 }
