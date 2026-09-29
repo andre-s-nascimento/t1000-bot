@@ -5,6 +5,10 @@ on:
     branches:
       - "hotfix/**"
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   create-pr:
     runs-on: ubuntu-latest
@@ -12,21 +16,77 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           token: ${{ secrets.GH_PAT }}
+
       - name: Setup Git user
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Ensure hotfix label exists
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           gh label create hotfix \
             --description "Correção urgente em produção" \
-            --color "b60205" 2>/dev/null || true
+            --color "b60205" 2>/dev/null || echo "Label já existe"
+
       - name: Create PR to main
+        # 🔒 Dados do usuário via env, não via ${{ }}
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          PR_TITLE="fix: hotfix $(echo ${{ github.ref_name }} | sed 's/hotfix\///')"
-          PR_BODY="## 🧾 Descrição\n\nCorreção urgente.\n\n## 🧪 Como testar\n...\n## ✅ Checklist"
-          gh pr create --base main --head "${{ github.ref_name }}" --title "$PR_TITLE" --body "$PR_BODY" --label "hotfix" || echo "PR already exists"
+          SUFFIX=$(echo "$BRANCH_NAME" | sed 's|^hotfix/||')
+          PR_TITLE="fix: hotfix ${SUFFIX}"
+
+          # Última tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+
+          BODY_FILE=$(mktemp)
+          cat > "$BODY_FILE" <<EOF
+          ## 🧾 Descrição
+
+          Hotfix urgente a partir de \`${BRANCH_NAME}\`.
+
+          **Última tag em main**: \`${LAST_TAG}\`
+
+          ## ⚠️ Impacto
+
+          - [ ] Corrige bug crítico em produção
+          - [ ] Aplicar em \`main\` com prioridade
+          - [ ] Sincronizar \`develop\` após o merge
+
+          ## 🧪 Como testar
+
+          1. ...
+          2. ...
+          3. ...
+
+          ## ✅ Checklist
+
+          - [ ] Código revisado
+          - [ ] CI verde
+          - [ ] Testes cobrindo o cenário do bug
+          EOF
+
+          # Verifica se PR já existe
+          EXISTING_PR=$(gh pr list \
+            --head "$BRANCH_NAME" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "✅ PR #$EXISTING_PR já existe"
+            gh pr edit "$EXISTING_PR" --add-label hotfix || true
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "$PR_TITLE" \
+              --body-file "$BODY_FILE" \
+              --label "hotfix"
+          fi
+
+          rm -f "$BODY_FILE"

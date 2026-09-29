@@ -13,8 +13,7 @@ permissions:
 
 jobs:
   sync-develop:
-    # Dispara se o PR foi MERGEADO (não apenas fechado)
-    # ou se alguém rodou manualmente
+    # Dispara se o PR foi mergeado OU se foi executado manualmente
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
@@ -39,13 +38,18 @@ jobs:
           git fetch origin main develop
 
           BEHIND=$(git rev-list --count origin/develop..origin/main)
-          echo "behind=$BEHIND" >> $GITHUB_OUTPUT
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
           echo "📊 develop está $BEHIND commits atrás de main"
 
       - name: Create sync PR if needed
         if: steps.check.outputs.behind != '0'
+        # 🔒 SEGURANÇA: dados do usuário passam por env, NÃO por ${{ }} dentro de run
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BEHIND: ${{ steps.check.outputs.behind }}
         run: |
           # Verifica se já existe PR aberto de main → develop
           EXISTING_PR=$(gh pr list \
@@ -60,18 +64,18 @@ jobs:
             exit 0
           fi
 
-          gh pr create \
-            --base develop \
-            --head main \
-            --title "chore: sync main into develop" \
-            --body "$(cat <<EOF
+          # 🔒 Constrói o corpo do PR usando variáveis de ambiente
+          BODY_FILE=$(mktemp)
+          cat > "$BODY_FILE" <<EOF
           ## 🧾 Descrição
 
           Sincronização automática de \`main\` para \`develop\`.
 
-          **Motivo**: merge de PR na \`main\` (\`${{ github.event.pull_request.title }}\`).
+          **Motivo**: merge do PR #${PR_NUMBER} na \`main\` (por @${PR_AUTHOR}).
 
-          **Commits à frente**: ${{ steps.check.outputs.behind }}
+          **Título original**: ${PR_TITLE}
+
+          **Commits à frente**: ${BEHIND}
 
           ## ⚠️ Atenção
 
@@ -83,8 +87,15 @@ jobs:
           - [ ] CI verde
           - [ ] Aplicar label \`sync\`
           EOF
-          )" \
+
+          gh pr create \
+            --base develop \
+            --head main \
+            --title "chore: sync main into develop" \
+            --body-file "$BODY_FILE" \
             --label "sync"
+
+          rm -f "$BODY_FILE"
 
       - name: Nothing to sync
         if: steps.check.outputs.behind == '0'

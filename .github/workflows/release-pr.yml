@@ -5,11 +5,16 @@ on:
     branches:
       - "release/**"
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   create-pr:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
@@ -21,15 +26,54 @@ jobs:
 
       - name: Extract version from branch name
         id: vars
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          # 🔒 BRANCH_NAME vem via env, não via ${{ }} dentro de run
           VERSION=$(echo "$BRANCH_NAME" | sed -E 's/^release\/v?//')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "📦 Versão extraída: $VERSION"
 
       - name: Create Pull Request to main
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          VERSION: ${{ steps.vars.outputs.version }}
         run: |
-          PR_TITLE="chore: release v${{ steps.vars.outputs.version }}"
-          PR_BODY="## 🧾 Descrição\n\nRelease da versão ${{ steps.vars.outputs.version }}\n\n## ✅ Checklist\n- [ ] Revisão aprovada"
-          gh pr create --base main --head "${{ github.ref_name }}" --title "$PR_TITLE" --body "$PR_BODY" --label "release" || echo "PR may already exist"
+          PR_TITLE="chore: release v${VERSION}"
+
+          # 🔒 Corpo do PR via arquivo temporário
+          BODY_FILE=$(mktemp)
+          cat > "$BODY_FILE" <<EOF
+          ## 🧾 Descrição
+
+          Release da versão **v${VERSION}**.
+
+          ## ✅ Checklist
+
+          - [ ] Revisão aprovada
+          - [ ] CI verde
+          - [ ] Changelog atualizado
+          - [ ] Sincronizar \`develop\` após o merge (automático)
+          EOF
+
+          # Verifica se o PR já existe
+          EXISTING_PR=$(gh pr list \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "✅ PR #$EXISTING_PR já existe para $BRANCH_NAME → main"
+          else
+            gh pr create \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --title "$PR_TITLE" \
+              --body-file "$BODY_FILE" \
+              --label "release"
+          fi
+
+          rm -f "$BODY_FILE"
