@@ -132,6 +132,13 @@ run_container() {
     mkdir -p "$(pwd)/media"
     mkdir -p "$(pwd)/config"
 
+    # Antes do docker run, verifica se o truststore existe
+if [ ! -f "$(pwd)/certs/aiven-truststore.jks" ]; then
+    log_error "❌ certs/aiven-truststore.jks não encontrado no host!"
+    log_error "   Baixe o truststore do Aiven e coloque em $(pwd)/certs/"
+    exit 1
+fi
+
     # 🔥 NOVO — garantir que os arquivos de config existem no host
     # Sem isso, um primeiro deploy deixaria /app/config vazio dentro do container
     ensure_config_files
@@ -146,21 +153,22 @@ run_container() {
 
     # 🔧 FIX CRÍTICO: --env-file "$ENV_FILE"
     docker run -d \
-        --name "$APP_NAME" \
-        --restart unless-stopped \
-        --user "$(id -u):$(id -g)" \
-        --env-file "$ENV_FILE" \
-        -p 8082:8082 \
-        -e TZ=America/Sao_Paulo \
-        -v "$TEMP_PATH:/app/temp" \
-        -v "$(pwd)/data:/app/data" \
-        -v "$(pwd)/logs:/app/logs" \
-        -v "$(pwd)/config:/app/config" \
-        -v "$(pwd)/media:/app/media" \
-        --memory="700m" \
-        --memory-reservation="512m" \
-        --cpus="0.8" \
-        "$DOCKER_IMAGE" || {
+    --name "$APP_NAME" \
+    --restart unless-stopped \
+    --user "$(id -u):$(id -g)" \
+    --env-file "$ENV_FILE" \
+    -p 8082:8082 \
+    -e TZ=America/Sao_Paulo \
+    -v "$TEMP_PATH:/app/temp" \
+    -v "$(pwd)/data:/app/data" \
+    -v "$(pwd)/logs:/app/logs" \
+    -v "$(pwd)/config:/app/config" \
+    -v "$(pwd)/certs:/app/certs" \
+    -v "$(pwd)/media:/app/media" \
+    --memory="700m" \
+    --memory-reservation="512m" \
+    --cpus="0.8" \
+    "$DOCKER_IMAGE" || {
             log_error "Erro ao iniciar container"
             exit 1
         }

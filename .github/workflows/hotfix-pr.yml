@@ -16,6 +16,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Ensure hotfix label exists
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh label create hotfix \
+            --description "Correção urgente em produção" \
+            --color "b60205" 2>/dev/null || true
       - name: Create PR to main
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
