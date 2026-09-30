@@ -7,7 +7,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +36,17 @@ public class DailyReleasesService {
     private final TelegramFacade telegramFacade;
     private final ReleaseNotifiedRepository releaseRepository;
 
+    /**
+     * Cache de provedores de streaming, injetado via {@link
+     * net.ddns.adambravo79.tmill.config.CaffeineConfig#providerCache()}.
+     *
+     * <p>Antes era um campo {@code final} inicializado inline com {@code Caffeine.newBuilder()}, o
+     * que impedia mocká-lo nos testes. Agora é injetado por construtor (via
+     * {@code @RequiredArgsConstructor}), permitindo {@code @Mock} limpo no {@code
+     * DailyReleasesServiceTest}.
+     */
+    private final Cache<String, String> providerCache;
+
     @Value("${digest.chat-ids:}")
     private String chatIdsStr;
 
@@ -45,10 +54,6 @@ public class DailyReleasesService {
     private static final int MAX_RESULTS_PER_HOUR = 15;
     private static final String MEDIA_TYPE_MOVIE = "movie";
     private static final String MEDIA_TYPE_TV = "tv";
-
-    // Cache local para provedores (evita chamadas repetidas na mesma execução)
-    private final Cache<String, String> providerCache =
-            Caffeine.newBuilder().expireAfterWrite(24, TimeUnit.HOURS).maximumSize(500).build();
 
     // =================== NOTIFICAÇÃO A CADA 6 HORAS ===================
     @Scheduled(cron = "0 0 */6 * * *") // a cada 6 horas no minuto 0
