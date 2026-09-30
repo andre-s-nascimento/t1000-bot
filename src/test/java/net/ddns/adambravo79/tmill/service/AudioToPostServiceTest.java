@@ -12,7 +12,7 @@ import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
 
-class AudioToPostIntegrationTest {
+class AudioToPostServiceTest {
 
     @Test
     void fluxoDeBuscaDeFilme() {

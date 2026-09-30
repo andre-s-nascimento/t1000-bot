@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -62,7 +61,6 @@ class DailyReleasesServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "chatIdsStr", CHAT_IDS);
-        ReflectionTestUtils.setField(service, "providerCache", providerCache);
     }
 
     // ===================== sendHourlyReleases =====================
@@ -234,7 +232,6 @@ class DailyReleasesServiceTest {
     }
 
     @Test
-    @Disabled("Ajustar PRD")
     void sendHourlyReleases_comLancamentoComProvedor_enviaESalva() {
         MovieResult movieResult = new MovieResult(1L, "Filme Teste", TODAY.toString(), 7.5);
         TmdbDiscoverMovieResponse movieResponse = mock(TmdbDiscoverMovieResponse.class);
@@ -245,7 +242,8 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        when(releaseRepository.isNotified(123L, MOVIE_TYPE, TODAY)).thenReturn(false);
+        // ID do stub = 1L (o mesmo do MovieResult)
+        when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Netflix, Prime Video");
 
         MovieRecord details = mock(MovieRecord.class);
@@ -253,20 +251,18 @@ class DailyReleasesServiceTest {
         when(details.voteAverage()).thenReturn(8.5);
         when(details.posterPath()).thenReturn("/poster.jpg");
         when(tmdbClient.buscarDetalhes(1L)).thenReturn(details);
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         service.sendHourlyReleases();
 
-        verify(releaseRepository, times(1)).saveFullRelease(fullRelease);
+        // Captura o que foi salvo para inspecionar
+        ArgumentCaptor<FullRelease> captor = ArgumentCaptor.forClass(FullRelease.class);
+        verify(releaseRepository).saveFullRelease(captor.capture());
+
+        FullRelease salvo = captor.getValue();
+        assertThat(salvo.tmdbId()).isEqualTo(1L);
+        assertThat(salvo.title()).isEqualTo("Filme Teste");
+        assertThat(salvo.providers()).isEqualTo("Netflix, Prime Video");
+        assertThat(salvo.releaseDate()).isEqualTo(TODAY);
 
         verify(telegramFacade, times(1))
                 .enviarFotoHtml(eq(123L), anyString(), argThat(s -> s.contains("Filme Teste")));
@@ -389,7 +385,6 @@ class DailyReleasesServiceTest {
     }
 
     @Test
-    @Disabled("Ajustar PRD")
     void sendHourlyReleases_deveLimitarResultados() {
         List<MovieResult> movies = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
@@ -415,21 +410,11 @@ class DailyReleasesServiceTest {
         when(details.voteAverage()).thenReturn(8.0);
         when(details.posterPath()).thenReturn("/poster.jpg");
         when(tmdbClient.buscarDetalhes(anyLong())).thenReturn(details);
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         service.sendHourlyReleases();
 
-        verify(releaseRepository, times(15)).saveFullRelease(fullRelease);
-
+        // MAX_RESULTS_PER_HOUR = 15
+        verify(releaseRepository, times(15)).saveFullRelease(any(FullRelease.class));
         verify(telegramFacade, times(30)).enviarFotoHtml(anyLong(), anyString(), anyString());
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
@@ -556,7 +541,6 @@ class DailyReleasesServiceTest {
     // ===================== Testes para séries (cobertura adicional) =====================
 
     @Test
-    @Disabled("Ajustar PRD")
     void sendHourlyReleases_comSerieComProvedor_enviaESalva() {
         TmdbDiscoverMovieResponse movieResponse = mock(TmdbDiscoverMovieResponse.class);
         when(movieResponse.results()).thenReturn(List.of());
@@ -569,25 +553,25 @@ class DailyReleasesServiceTest {
 
         when(releaseRepository.isNotified(2L, TV_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("tv_2"), any())).thenReturn("Disney+");
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         service.sendHourlyReleases();
 
-        verify(releaseRepository, times(1)).saveFullRelease(fullRelease);
+        ArgumentCaptor<FullRelease> captor = ArgumentCaptor.forClass(FullRelease.class);
+        verify(releaseRepository).saveFullRelease(captor.capture());
 
+        FullRelease salvo = captor.getValue();
+        assertThat(salvo.tmdbId()).isEqualTo(2L);
+        assertThat(salvo.title()).isEqualTo("Serie Teste");
+        assertThat(salvo.mediaType()).isEqualTo(TV_TYPE);
+        assertThat(salvo.providers()).isEqualTo("Disney+");
+        assertThat(salvo.posterPath()).isNull();
+
+        // Série não tem poster → cai no enviarMensagemHtml
         verify(telegramFacade, times(1))
                 .enviarMensagemHtml(eq(123L), argThat(s -> s.contains("Serie Teste")));
         verify(telegramFacade, times(1))
                 .enviarMensagemHtml(eq(456L), argThat(s -> s.contains("Serie Teste")));
+        verify(telegramFacade, never()).enviarFotoHtml(anyLong(), anyString(), anyString());
     }
 
     @Test
