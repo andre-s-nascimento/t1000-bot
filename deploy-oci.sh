@@ -47,10 +47,48 @@ load_env() {
         exit 1
     fi
 
-    set -a
-    source "$ENV_FILE"
-    set +a
-    log_info "Variáveis carregadas de $ENV_FILE"
+    log_info "Carregando variáveis de $ENV_FILE..."
+
+    # 🔒 Parser explícito: NÃO usa `source`. Lê linha por linha e exporta.
+    # Suporta:
+    #  - Comentários (# ...)
+    #  - Linhas em branco
+    #  - export VAR=valor
+    #  - VAR=valor
+    #  - Valores com $, espaços, aspas simples/duplas
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Ignora comentários e linhas vazias
+        case "$line" in
+            ''|\#*) continue ;;
+        esac
+
+        # Remove "export " do início, se existir
+        line="${line#export }"
+
+        # Precisa ter "="
+        case "$line" in
+            *=*) ;;
+            *) continue ;;
+        esac
+
+        # Separa chave e valor
+        key="${line%%=*}"
+        value="${line#*=}"
+
+        # Remove espaços ao redor da chave
+        key="$(echo "$key" | tr -d '[:space:]')"
+
+        # Remove aspas externas (simples ou duplas)
+        case "$value" in
+            \"*\") value="${value#\"}"; value="${value%\"}" ;;
+            \'*\') value="${value#\'}"; value="${value%\'}" ;;
+        esac
+
+        # Exporta (sem interpretar $ no valor)
+        export "$key=$value"
+    done < "$ENV_FILE"
+
+    log_info "✅ Variáveis carregadas de $ENV_FILE"
 }
 
 # ==============================
