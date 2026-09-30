@@ -43,6 +43,7 @@ import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
 import net.ddns.adambravo79.tmill.service.TranscriptStoreService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.kafka.AudioEventPublisher;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
@@ -58,6 +59,7 @@ class AudioHandlerTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private TelegramUtils utils;
     @Mock private AudioEventPublisher audioEventPublisher;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private AudioHandler audioHandler;
 
@@ -75,7 +77,6 @@ class AudioHandlerTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(audioHandler, "transcriptionEnabled", true);
         ReflectionTestUtils.setField(audioHandler, "maxSizeMb", 20);
         ReflectionTestUtils.setField(audioHandler, "telegramMessageLimit", 4000);
 
@@ -94,6 +95,7 @@ class AudioHandlerTest {
 
         when(utils.buildFullName(any(User.class))).thenReturn("Testador Silva");
         when(utils.escapeHtml(anyString())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(featureFlags.isEnabled("transcription.enabled")).thenReturn(true);
     }
 
     // =========================
@@ -102,7 +104,7 @@ class AudioHandlerTest {
 
     @Test
     void deveIgnorarAudioSeTranscricaoDesativada() {
-        ReflectionTestUtils.setField(audioHandler, "transcriptionEnabled", false);
+        when(featureFlags.isEnabled("transcription.enabled")).thenReturn(false);
         when(chat.id()).thenReturn(CHAT_ID);
         when(message.audio()).thenReturn(audio);
         when(audio.fileId()).thenReturn(FILE_ID);

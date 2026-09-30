@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -22,6 +23,7 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextRepository;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -38,24 +40,19 @@ public class SecurityConfig {
     @Value("${admin.allowed-emails:}")
     private String allowedEmailsStr;
 
-    // 👈 NOVO — flag de dev
     @Value("${admin.security.disabled:false}")
     private boolean securityDisabled;
 
     private final AdminEmailAuthorizationFilter adminEmailAuthorizationFilter;
-    private final Environment environment; // 👈 NOVO
+    private final Environment environment;
 
     public SecurityConfig(
-            AdminEmailAuthorizationFilter adminEmailAuthorizationFilter,
-            Environment environment) { // 👈 NOVO
+            AdminEmailAuthorizationFilter adminEmailAuthorizationFilter, Environment environment) {
         this.adminEmailAuthorizationFilter = adminEmailAuthorizationFilter;
         this.environment = environment;
     }
 
-    /**
-     * 👈 NOVO — Falha o boot se a flag de desabilitar segurança for usada em produção. Isso evita
-     * deploy acidental de um ambiente sem autenticação.
-     */
+    /** Falha o boot se a flag de desabilitar segurança for usada em produção. */
     @PostConstruct
     public void validateSecurityConfig() {
         if (securityDisabled) {
@@ -90,7 +87,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-        // 👈 NOVO — caminho "dev unlock": libera tudo, sem OAuth2, sem CSRF
+        // ===================== MODO DEV (sem autenticação) =====================
         if (securityDisabled) {
             log.warn("🔓 SecurityFilterChain: modo dev ativo — todas as rotas liberadas");
 
@@ -136,8 +133,47 @@ public class SecurityConfig {
                 .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
                 .sessionManagement(sm -> sm.sessionFixation().changeSessionId());
 
-        // 👈 NOVO — ignora CSRF para /admin/** (API interna consumida por scripts)
-        http.csrf(csrf -> csrf.ignoringRequestMatchers("/admin/**", "/admin-web/**"));
+        // CSRF: ignorar rotas admin (API interna consumida por scripts) e actuator
+        http.csrf(
+                csrf ->
+                        csrf.ignoringRequestMatchers("/admin/**", "/admin-web/**")
+                                .ignoringRequestMatchers("/actuator/**"));
+
+        // 🔧 FIX CRÍTICO: para /admin/** (API REST), devolver JSON em 401/403
+        // em vez do redirect HTML padrão do OAuth2.
+        //
+        // No Spring Security 7, usamos requestMatchers() do próprio HttpSecurity
+        // em vez de criar um AntPathRequestMatcher (que foi removido).
+        http.exceptionHandling(
+                ex ->
+                        ex.defaultAuthenticationEntryPointFor(
+                                        (request, response, authException) -> {
+                                            log.warn(
+                                                    "🔒 401 JSON em /admin/** path={}",
+                                                    request.getRequestURI());
+                                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                            response.setContentType(
+                                                    MediaType.APPLICATION_JSON_VALUE);
+                                            response.setCharacterEncoding("UTF-8");
+                                            response.getWriter()
+                                                    .write(
+                                                            "{\"erro\":\"Não autenticado. Faça"
+                                                                    + " login novamente.\"}");
+                                        },
+                                        request -> request.getRequestURI().startsWith("/admin/"))
+                                .defaultAccessDeniedHandlerFor(
+                                        (request, response, accessDeniedException) -> {
+                                            log.warn(
+                                                    "🔒 403 JSON em /admin/** path={}",
+                                                    request.getRequestURI());
+                                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                                            response.setContentType(
+                                                    MediaType.APPLICATION_JSON_VALUE);
+                                            response.setCharacterEncoding("UTF-8");
+                                            response.getWriter()
+                                                    .write("{\"erro\":\"Acesso negado.\"}");
+                                        },
+                                        request -> request.getRequestURI().startsWith("/admin/")));
 
         log.info("🛡️ SecurityConfig carregado. E-mails autorizados: {}", allowedEmails);
 

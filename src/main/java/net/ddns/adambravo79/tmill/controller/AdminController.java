@@ -34,6 +34,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -72,22 +73,6 @@ import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
-/**
- * Controller administrativo para testes, limpeza de dados e monitoramento.
- *
- * <p>Exception handling strategy:
- *
- * <ul>
- *   <li>Erros de validação (input inválido) → HTTP 400 com mensagem clara.
- *   <li>Erros de negócio (serviço indisponível) → HTTP 503 com mensagem apropriada.
- *   <li>Erros de banco (DataAccessException) → HTTP 500 genérico (não expõe detalhes).
- *   <li>Erros de conectividade (ResourceAccessException) → HTTP 502/503.
- *   <li>Erros fatais (Error, InterruptedException) → NUNCA engolidos.
- *   <li>Mensagens de erro interno NUNCA expostas na resposta HTTP.
- * </ul>
- *
- * <p>Utilitários compartilhados com {@link AdminWebController} ficam em {@link AdminUtils}.
- */
 @RestController
 @RequestMapping("/admin")
 @RequiredArgsConstructor
@@ -156,7 +141,6 @@ public class AdminController {
             releaseNotifiedRepository.clearAll();
             log.info("Tabela releases_notified limpa via endpoint.");
             return ResponseEntity.ok("✅ Tabela de lançamentos limpa com sucesso.");
-
         } catch (DataAccessException e) {
             log.error("Erro de banco ao limpar releases_notified", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -171,7 +155,6 @@ public class AdminController {
             log.info("Dados limpos via endpoint admin.");
             return ResponseEntity.ok(
                     String.format("✅ Dados removidos: %d lançamentos deletados.", deletedReleases));
-
         } catch (DataAccessException e) {
             log.error("Erro de banco ao limpar dados", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ERRO_LIMPAR_DADOS);
@@ -229,7 +212,6 @@ public class AdminController {
             @RequestParam("end") String endDate,
             @RequestParam(value = "chatId", required = false) Long chatId) {
 
-        // --- Validação de entrada ---
         if (startDate == null || startDate.isBlank() || endDate == null || endDate.isBlank()) {
             return ResponseEntity.badRequest().body("Parâmetros 'start' e 'end' são obrigatórios.");
         }
@@ -432,20 +414,10 @@ public class AdminController {
         return ResponseEntity.ok(props);
     }
 
-    /**
-     * Carrega os arquivos de configuração (easter-eggs, auto-responses, worldcup) usando o {@code
-     * ResourceLoader} e respeitando as propriedades do {@code application.properties} (ex.: {@code
-     * easter-egg.file}, {@code auto.response.file}, {@code worldcup.data.file}).
-     *
-     * <p>Isso garante que o endpoint leia os mesmos arquivos que os services usam (ex.: {@code
-     * EasterEggService}), tanto em dev ({@code file:./config/...}) quanto em prod ({@code
-     * file:/app/config/...}).
-     */
     @GetMapping("/config-files")
     public ResponseEntity<Map<String, Object>> getConfigFiles() {
         Map<String, Object> result = new LinkedHashMap<>();
 
-        // Definição: nome do arquivo → (chave da propriedade, default)
         record ConfigFile(String name, String propertyKey, String defaultLocation) {}
 
         List<ConfigFile> files =
@@ -578,12 +550,10 @@ public class AdminController {
             @RequestParam(required = false) Long chatId,
             @RequestParam(defaultValue = "HTML") String parseMode) {
 
-        // 1. Validação
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
         }
 
-        // 2. Define o chat alvo
         long targetChatId;
         if (chatId != null) {
             targetChatId = chatId;
@@ -598,13 +568,11 @@ public class AdminController {
                                     + " digest.chat-ids).");
         }
 
-        // 3. Log da ação
         log.info(
                 "📤 Enviando mensagem via admin para chat {}: {}",
                 targetChatId,
                 LogSanitizer.sanitizeMessageText(message));
 
-        // 4. Envia a mensagem
         try {
             if ("HTML".equalsIgnoreCase(parseMode)) {
                 telegramFacade.enviarMensagemHtml(targetChatId, message);
@@ -647,12 +615,10 @@ public class AdminController {
     public ResponseEntity<String> falaT1000Tts(
             @RequestParam String message, @RequestParam(required = false) Long chatId) {
 
-        // 1. Validação
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
         }
 
-        // 2. Define o chat alvo
         long targetChatId;
         if (chatId != null) {
             targetChatId = chatId;
@@ -665,13 +631,11 @@ public class AdminController {
                     .body("❌ Nenhum chatId informado e nenhum chat padrão configurado.");
         }
 
-        // 3. Log da ação
         log.info(
                 "🎤 Sintetizando áudio para chat {}: {}",
                 targetChatId,
                 LogSanitizer.sanitizeMessageText(message));
 
-        // 4. Sintetiza o áudio — 👈 try/catch ADICIONADO
         byte[] audio;
         try {
             audio = azureTtsClient.synthesizeFullText(message);
@@ -686,7 +650,6 @@ public class AdminController {
                     .body("❌ Falha na síntese (áudio vazio).");
         }
 
-        // 5. Salva e envia com nome personalizado
         Path tempFile = null;
         try {
             String fileName =
@@ -764,7 +727,7 @@ public class AdminController {
         return ResponseEntity.ok("✅ " + deleted + " aniversário(s) removido(s).");
     }
 
-    // ========================= MÉTODOS AUXILIARES PRIVADOS =========================
+    // ========================= AUXILIARES =========================
 
     private String buildTestResponseMessage(
             Long userId, String message, LocalTime simulatedTime, AutoResponseOverride response) {
@@ -833,19 +796,6 @@ public class AdminController {
 
     // ========================= PODCAST MANUAL =========================
 
-    /**
-     * Endpoint para gerar podcast manualmente com parâmetros personalizados.
-     *
-     * <p>Exemplos de uso: - GET /admin/test-podcast -> gera da semana passada para o showcase - GET
-     * /admin/test-podcast?chatId=123456&start=2026-08-01&end=2026-08-07 - GET
-     * /admin/test-podcast?chatId=123456&periodo=7 -> últimos 7 dias
-     *
-     * @param chatId ID do chat para envio (opcional, padrão: showcase)
-     * @param start Data de início (opcional, formato: yyyy-MM-dd)
-     * @param end Data de fim (opcional, formato: yyyy-MM-dd)
-     * @param periodo Número de dias para trás (opcional, padrão: 7)
-     * @return Status da operação
-     */
     @GetMapping("/test-podcast")
     public ResponseEntity<String> testPodcast(
             @RequestParam(required = false) Long chatId,
@@ -853,10 +803,8 @@ public class AdminController {
             @RequestParam(required = false) String end,
             @RequestParam(required = false) Integer periodo) {
 
-        // Define o chat alvo
         long targetChatId = (chatId != null) ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
 
-        // Calcula o período
         LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate endDate;
         LocalDate startDate;
@@ -941,20 +889,13 @@ public class AdminController {
         return ResponseEntity.accepted().body(responseMsg);
     }
 
-    /** Endpoint para testar o podcast com período fixo (últimos 7 dias). */
     @GetMapping("/test-podcast-latest")
     public ResponseEntity<String> testPodcastLatest(@RequestParam(required = false) Long chatId) {
-
         LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate startDate = endDate.minusDays(7);
-
         return testPodcast(chatId, startDate.toString(), endDate.toString(), null);
     }
 
-    /**
-     * Endpoint para testar o podcast com período específico em dias Ex:
-     * /admin/test-podcast-days?days=3&chatId=123456
-     */
     @GetMapping("/test-podcast-days")
     public ResponseEntity<String> testPodcastDays(
             @RequestParam(defaultValue = "7") int days,
@@ -967,17 +908,8 @@ public class AdminController {
         return testPodcast(chatId, null, null, days);
     }
 
-    // ========================= MIGRAÇÃO SQLITE → POSTGRES/MONGO =========================
+    // ========================= MIGRAÇÃO =========================
 
-    /**
-     * Executa a migração dos dados legados do SQLite para os novos bancos.
-     *
-     * <p>⚠️ Requer {@code migration.enabled=true} em application.properties.
-     *
-     * <p>⚠️ NÃO é idempotente. Rode uma única vez em ambiente limpo.
-     *
-     * @return resumo com contadores por tabela
-     */
     @PostMapping("/migrate-sqlite")
     public ResponseEntity<?> migrateFromSqlite(
             @RequestParam(required = false, defaultValue = "false") boolean dryRun) {
@@ -1006,7 +938,6 @@ public class AdminController {
         }
     }
 
-    /** Dry-run: conta quantos registros existem em cada tabela do SQLite, sem migrar. */
     @SuppressWarnings("null")
     @GetMapping("/migrate-sqlite/preview")
     public ResponseEntity<?> previewMigration() {
@@ -1053,11 +984,6 @@ public class AdminController {
 
     // ========================= FEATURE FLAGS =========================
 
-    /**
-     * Lista todas as feature flags registradas.
-     *
-     * @return lista ordenada por chave, com estado atual, descrição e flag readOnly
-     */
     @GetMapping("/features")
     public ResponseEntity<List<FeatureFlagState>> listFeatures() {
         return ResponseEntity.ok(featureFlagAdminService.list());
@@ -1066,17 +992,10 @@ public class AdminController {
     /**
      * Altera uma feature flag em runtime.
      *
-     * <p>Erros:
-     *
-     * <ul>
-     *   <li>Flag desconhecida → 400
-     *   <li>Flag read-only → 409 Conflict
-     * </ul>
-     *
-     * @param key chave da flag (ex.: {@code "worldcup.enabled"})
-     * @param enabled novo valor
+     * <p>🔧 FIX: sempre retorna JSON com Content-Type correto, inclusive em erros, para que o
+     * frontend (fetch + resp.json()) não quebre com "Unexpected token '<'".
      */
-    @PostMapping("/features/{key}")
+    @PostMapping(value = "/features/{key}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> toggleFeature(
             @PathVariable String key, @RequestParam boolean enabled) {
         try {
@@ -1090,19 +1009,24 @@ public class AdminController {
             result.put("key", key);
             result.put("enabled", depois);
             result.put("changed", antes != depois);
-            return ResponseEntity.ok(result);
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(result);
 
         } catch (IllegalArgumentException e) {
             log.warn("Flag desconhecida: {}", key);
-            return ResponseEntity.badRequest().body(Map.of("erro", e.getMessage()));
+            return ResponseEntity.badRequest()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("erro", e.getMessage()));
 
         } catch (IllegalStateException e) {
             log.warn("Tentativa de alterar flag read-only: {}", key);
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("erro", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("erro", e.getMessage()));
 
         } catch (Exception e) {
             log.error("Erro ao alterar flag '{}'", key, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("erro", MSG_ERRO_INTERNO));
         }
     }

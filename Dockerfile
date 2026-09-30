@@ -76,7 +76,11 @@ ENV FEATURE_FLAGS_PERSIST_PATH=/app/config/feature-flags.json
 ENV FEATURE_FLAGS_PERSIST_ENABLED=true
 
 # JVM otimizada para containers pequenos
-ENV JAVA_OPTS="-XX:+UseSerialGC \
+# ⚠️ TLSv1.3 + disableALPN são OBRIGATÓRIOS para conectar no Supabase pooler.
+# Sem isso, o handshake SSL falha com "Remote host terminated the handshake".
+ENV JAVA_OPTS="-Djdk.tls.client.protocols=TLSv1.3 \
+    -Djdk.tls.client.enableALPN=false \
+    -XX:+UseSerialGC \
     -XX:MaxRAMPercentage=75 \
     -XX:InitialRAMPercentage=50 \
     -XX:+ExitOnOutOfMemoryError \

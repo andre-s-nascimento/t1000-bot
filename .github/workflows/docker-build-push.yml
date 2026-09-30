@@ -1,12 +1,18 @@
 name: Build and Push Docker Image
 
 on:
+  # Dispara quando um PR é MERGEADO na main
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+  # Também dispara em push de tags v* (release)
   push:
-    branches:
-      - main
     tags:
       - "v*"
-  workflow_dispatch: # permite execução manual
+
+  # Permite execução manual
+  workflow_dispatch:
 
 env:
   REGISTRY: docker.io
@@ -14,6 +20,15 @@ env:
 
 jobs:
   build-and-push:
+    # Só roda se:
+    #  - for PR mergeado na main, OU
+    #  - for push de tag, OU
+    #  - for execução manual
+    if: |
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+      || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,7 +36,22 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Extract app version from build.gradle
+        id: app
+        run: |
+          VERSION=$(grep -E "^version\s*=" build.gradle \
+            | sed -E "s/^version\s*=\s*['\"]([^'\"]+)['\"].*/\1/" \
+            | head -1)
+          if [ -z "$VERSION" ]; then
+            echo "⚠️ Versão não encontrada, usando fallback"
+            VERSION="0.0.0"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "📦 Versão do app: $VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
@@ -38,29 +68,64 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
+            type=raw,value=v${{ steps.app.outputs.version }},enable=${{ steps.app.outputs.version != '0.0.0' }}
             type=ref,event=tag
             type=sha,format=short,prefix=
+          labels: |
+            org.opencontainers.image.title=t1000-bot
+            org.opencontainers.image.description=Bot de transcrição e busca de filmes para Telegram
+            org.opencontainers.image.url=https://github.com/andre-s-nascimento/t1000-bot
+            org.opencontainers.image.source=https://github.com/andre-s-nascimento/t1000-bot
+            org.opencontainers.image.version=v${{ steps.app.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Generate build-info.properties
+        env:
+          BUILD_BRANCH: ${{ github.ref_name }}
+          BUILD_COMMIT: ${{ github.sha }}
         run: |
           mkdir -p src/main/resources
+          SHORT_COMMIT="${BUILD_COMMIT:0:7}"
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           cat > src/main/resources/build-info.properties <<EOF
-          build.branch=${GITHUB_REF_NAME}
-          build.commit=${GITHUB_SHA::7}
-          build.time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          build.branch=${BUILD_BRANCH}
+          build.commit=${SHORT_COMMIT}
+          build.time=${BUILD_DATE}
           EOF
+          echo "📄 build-info.properties:"
           cat src/main/resources/build-info.properties
 
       - name: Build and push Docker image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
+          # Fixa em amd64 — local e OCI são x86_64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Cache GHA (compartilhado entre runs)
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Força push mesmo se o digest não mudar
+          provenance: true
+          sbom: false
 
-      - name: Show build-info
-        run: cat src/main/resources/build-info.properties
+      - name: Show final labels
+        run: |
+          echo "🏷️ Labels aplicadas:"
+          echo "${{ steps.meta.outputs.labels }}"
+
+      - name: Summary
+        run: |
+          echo "✅ Imagem publicada com sucesso!" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Versão:** v${{ steps.app.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Plataforma:** linux/amd64" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tags publicadas:**" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
