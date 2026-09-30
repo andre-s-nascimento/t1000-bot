@@ -11,11 +11,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import net.ddns.adambravo79.tmill.exception.ConfigLoadException;
+import tools.jackson.databind.ObjectMapper;
 
-/** Utilitário para carregamento de arquivos JSON com estratégia de fallback em 4 etapas. */
+/**
+ * Utilitário para carregamento de arquivos JSON com estratégia de fallback em 4 etapas.
+ */
 @Component
 public class JsonConfigLoader {
 

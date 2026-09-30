@@ -16,9 +16,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import net.ddns.adambravo79.tmill.exception.ConfigLoadException;
+import tools.jackson.databind.ObjectMapper;
 
 class JsonConfigLoaderTest {
 
@@ -70,11 +70,7 @@ class JsonConfigLoaderTest {
         @DisplayName(
                 "Deve carregar do classpath quando o arquivo não existir nos diretórios externos")
         void shouldFallbackToClasspathWhenExternalFilesDoNotExist() {
-            // Act — assume que existe um arquivo de teste no classpath ou testa via mock/resource
-            // real
-            // Caso vá rodar sem arquivos estáticos em src/test/resources, você pode criar um mock
-            // ou
-            // testar o Optional.empty()
+            // Act
             Optional<TestConfigRecord> result =
                     jsonConfigLoader.loadConfig(
                             "non-existent-config-file.json", TestConfigRecord.class, null);
@@ -172,9 +168,9 @@ class JsonConfigLoaderTest {
 
             // Assert
             assertThat(result).isPresent();
-            assertThat(result.get())
-                    .extracting(TestConfigRecord::name, TestConfigRecord::version)
-                    .containsExactly("mapped-record", 42);
+            TestConfigRecord config = result.get();
+            assertThat(config.name()).isEqualTo("mapped-record");
+            assertThat(config.version()).isEqualTo(42);
         }
     }
 }
