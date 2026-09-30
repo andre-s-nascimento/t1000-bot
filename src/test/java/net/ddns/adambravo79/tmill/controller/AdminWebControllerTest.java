@@ -52,6 +52,7 @@ import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
 
@@ -82,6 +83,7 @@ class AdminWebControllerTest {
     @Mock private BirthdayRepository birthdayRepository;
     @Mock private MigrationService migrationService;
     @Mock private FeatureFlagAdminService featureFlagAdminService;
+    @Mock private PromptRegistryService promptRegistryService;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
@@ -113,7 +115,8 @@ class AdminWebControllerTest {
                         birthdayService,
                         birthdayRepository,
                         migrationService,
-                        featureFlagAdminService);
+                        featureFlagAdminService,
+                        promptRegistryService);
 
         // @Value fields — não injetados por ReflectionTestUtils
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
@@ -1239,6 +1242,23 @@ class AdminWebControllerTest {
         controller.testWeeklyReminderShowcase(null, attrs);
 
         verify(weeklyReminderService).sendReminderToChat(123L);
+    }
+
+    @Test
+    @DisplayName(
+            "POST /admin-web/reload-prompts - Deve recarregar os prompts e redirecionar para"
+                    + " /admin-web")
+    void shouldReloadPromptsAndRedirectToAdminWeb() throws Exception {
+        doNothing().when(promptRegistryService).reload();
+
+        mockMvc.perform(post("/admin-web/reload-prompts"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin-web"))
+                .andExpect(
+                        flash().attribute(
+                                        "success", "Prompts e personas recarregados com sucesso."));
+
+        verify(promptRegistryService).reload();
     }
 
     // =========================================================================

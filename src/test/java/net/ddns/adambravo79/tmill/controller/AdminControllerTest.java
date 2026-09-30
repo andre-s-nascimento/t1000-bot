@@ -47,6 +47,7 @@ import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
 
@@ -78,6 +79,7 @@ class AdminControllerTest {
     @Mock private BirthdayRepository birthdayRepository;
     @Mock private MigrationService migrationService;
     @Mock private FeatureFlagAdminService featureFlagAdminService;
+    @Mock private PromptRegistryService promptRegistryService;
 
     @BeforeEach
     @SneakyThrows
@@ -110,7 +112,8 @@ class AdminControllerTest {
                         birthdayService,
                         birthdayRepository,
                         migrationService,
-                        featureFlagAdminService);
+                        featureFlagAdminService,
+                        promptRegistryService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
@@ -155,6 +158,18 @@ class AdminControllerTest {
                 .andExpect(content().string(containsString("Tabela de lançamentos limpa")));
 
         verify(releaseNotifiedRepository).clearAll();
+    }
+
+    @Test
+    @DisplayName("POST /admin/reload-prompts - Deve recarregar os prompts e retornar HTTP 200 OK")
+    void shouldReloadPromptsAndReturn200() throws Exception {
+        doNothing().when(promptRegistryService).reload();
+
+        mockMvc.perform(post("/admin/reload-prompts"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("Prompts e personas recarregados com sucesso"));
+
+        verify(promptRegistryService).reload();
     }
 
     @Test
