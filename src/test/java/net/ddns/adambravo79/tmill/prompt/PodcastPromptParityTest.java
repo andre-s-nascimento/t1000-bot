@@ -1,5 +1,5 @@
 /* (c) 2026 | 30/09/2026 */
-package net.ddns.adambravo79.tmill.service.prompt;
+package net.ddns.adambravo79.tmill.prompt;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import tools.jackson.databind.ObjectMapper;
 
 class PodcastPromptParityTest {

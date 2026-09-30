@@ -1,4 +1,4 @@
-/* (c) 2026 | 26/09/2026 */
+/* (c) 2026 | 30/09/2026 */
 package net.ddns.adambravo79.tmill.service.feature;
 
 import java.util.List;
@@ -30,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>{@code auto.response.enabled} — respostas automáticas (editável)
  *   <li>{@code digest.enabled} — digest diário (editável)
  *   <li>{@code worldcup.update.enabled} — atualização automática do JSON da Copa (editável)
+ *   <li>{@code prompts.external.enabled} — uso de prompts e personas externos via JSON (editável)
  *   <li>{@code migration.enabled} — migração SQLite (read-only)
  * </ul>
  */
@@ -41,9 +42,6 @@ public class FeatureFlagAdminService {
     private final FeatureFlagService flagService;
     private final Environment environment;
 
-    // Lê o valor inicial de cada flag do application.properties
-    // (não usa @Value diretamente para permitir registro dinâmico)
-
     @PostConstruct
     public void registerKnownFlags() {
         registerBool("worldcup.enabled", false, "Envio de jogos da Copa do Mundo");
@@ -51,6 +49,10 @@ public class FeatureFlagAdminService {
         registerBool("auto.response.enabled", true, "Respostas automáticas no chat");
         registerBool("digest.enabled", true, "Digest diário (morning/evening)");
         registerBool("worldcup.update.enabled", false, "Atualização automática do JSON da Copa");
+        registerBool(
+                "prompts.external.enabled",
+                false,
+                "Uso de prompts e personas externalizados em JSON");
 
         // Read-only — requer restart
         registerBoolReadOnly(

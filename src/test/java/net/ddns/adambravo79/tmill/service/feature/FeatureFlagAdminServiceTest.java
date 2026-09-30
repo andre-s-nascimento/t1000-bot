@@ -25,7 +25,7 @@ import tools.jackson.databind.ObjectMapper;
  * <p>Verifica:
  *
  * <ul>
- *   <li>Registro das 6 flags conhecidas no {@code @PostConstruct}
+ *   <li>Registro das 7 flags conhecidas no {@code @PostConstruct}
  *   <li>Leitura correta dos defaults do {@code Environment}
  *   <li>Delegação para o {@link FeatureFlagService}
  *   <li>Flags read-only são registradas como tal
@@ -58,11 +58,11 @@ class FeatureFlagAdminServiceTest {
     class Registro {
 
         @Test
-        @DisplayName("registra exatamente 6 flags no boot")
+        @DisplayName("registra exatamente 7 flags no boot")
         void registersSixFlags() {
             adminService.registerKnownFlags();
 
-            assertThat(flagService.list()).hasSize(6);
+            assertThat(flagService.list()).hasSize(7);
         }
 
         @Test
@@ -79,7 +79,8 @@ class FeatureFlagAdminServiceTest {
                             "auto.response.enabled",
                             "digest.enabled",
                             "worldcup.update.enabled",
-                            "migration.enabled");
+                            "migration.enabled",
+                            "prompts.external.enabled");
         }
 
         @Test
@@ -101,6 +102,7 @@ class FeatureFlagAdminServiceTest {
             assertThat(flagService.get("auto.response.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("digest.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("worldcup.update.enabled").get().readOnly()).isFalse();
+            assertThat(flagService.get("prompts.external.enabled").get().readOnly()).isFalse();
         }
 
         @Test
@@ -123,7 +125,7 @@ class FeatureFlagAdminServiceTest {
             adminService.registerKnownFlags();
             adminService.registerKnownFlags();
 
-            assertThat(flagService.list()).hasSize(6);
+            assertThat(flagService.list()).hasSize(7);
         }
     }
 
@@ -215,13 +217,13 @@ class FeatureFlagAdminServiceTest {
     class Delegacao {
 
         @Test
-        @DisplayName("list delega e retorna as 6 flags")
+        @DisplayName("list delega e retorna as 7 flags")
         void listDelegates() {
             adminService.registerKnownFlags();
 
             List<FeatureFlagState> list = adminService.list();
 
-            assertThat(list).hasSize(6);
+            assertThat(list).hasSize(7);
         }
 
         @Test
@@ -232,14 +234,15 @@ class FeatureFlagAdminServiceTest {
             Map<String, Map<String, Object>> map = adminService.listAsMap();
 
             assertThat(map)
-                    .hasSize(6)
+                    .hasSize(7)
                     .containsKeys(
                             "worldcup.enabled",
                             "transcription.enabled",
                             "auto.response.enabled",
                             "digest.enabled",
                             "worldcup.update.enabled",
-                            "migration.enabled");
+                            "migration.enabled",
+                            "prompts.external.enabled");
         }
 
         @Test
