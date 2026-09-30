@@ -38,6 +38,7 @@ import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.kafka.AudioEventPublisher;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
@@ -72,12 +73,10 @@ public class AudioHandler {
     private final TelegramFacade telegramFacade;
     private final TelegramUtils utils;
     private final AudioEventPublisher audioEventPublisher;
+    private final FeatureFlagAdminService featureFlags;
 
     @Value("${t1000.audio.max-size-mb:20}")
     private int maxSizeMb;
-
-    @Value("${t1000.features.transcription-enabled:false}")
-    private boolean transcriptionEnabled;
 
     @Value("${telegram.message.limit:4000}")
     private int telegramMessageLimit;
@@ -95,7 +94,7 @@ public class AudioHandler {
     // ========================= HANDLER PRINCIPAL =========================
 
     public void handleAudioUpdate(Update update) {
-        if (!transcriptionEnabled) {
+        if (!featureFlags.isEnabled("transcription.enabled")) {
             safeSendMessage(update.message().chat().id(), TRANSCRIPTION_DISABLED);
             return;
         }

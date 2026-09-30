@@ -998,11 +998,38 @@
             return h;
         }
 
-        // Gera os <input type="hidden"> prontos para injetar em forms dinâmicos
         function csrfHiddenInputs() {
             var param = csrfMeta('_csrf_parameter', '_csrf');
             var token = csrfMeta('_csrf', '');
             return '<input type="hidden" name="' + param + '" value="' + token + '">';
+        }
+
+        // ================================================================
+        // FETCH SEGURO — sempre lê como texto e tenta parsear JSON
+        // 🔧 FIX: evita o erro "Unexpected token '<'" quando o servidor
+        // devolve HTML (login, erro do Spring) em vez de JSON.
+        // ================================================================
+        async function fetchJson(url, options) {
+            var resp = await fetch(url, options);
+            var text = await resp.text();
+
+            var data;
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (e) {
+                // Servidor devolveu algo que não é JSON (provavelmente HTML de login/erro)
+                var preview = text.substring(0, 200).replace(/\s+/g, ' ');
+                var msg =
+                    'Servidor retornou HTTP ' + resp.status +
+                    ' sem JSON. Provavelmente sessão expirada ou CSRF. ' +
+                    'Faça login novamente. Trecho: ' + preview;
+                throw new Error(msg);
+            }
+
+            if (!resp.ok) {
+                throw new Error(data.erro || data.message || ('HTTP ' + resp.status));
+            }
+            return data;
         }
 
         // ================================================================
@@ -1018,7 +1045,7 @@
         });
 
         // ================================================================
-        // AJAX GENÉRICO
+        // AJAX GENÉRICO (fala-t1000, tts, etc.)
         // ================================================================
         window.submitAction = async function (event, url, form) {
             event.preventDefault();
@@ -1070,8 +1097,7 @@
             resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
 
             try {
-                var response = await fetch('/admin-web/debug-auto-response?' + params.toString());
-                var data = await response.json();
+                var data = await fetchJson('/admin-web/debug-auto-response?' + params.toString());
                 resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
             } catch (error) {
                 resultDiv.innerHTML = '<div class="alert alert-danger mb-0">Erro: ' + error.message + '</div>';
@@ -1085,8 +1111,7 @@
             var container = document.getElementById('birthdaysList');
             if (!container) return;
             try {
-                var resp = await fetch('/admin-web/birthdays-json');
-                var data = await resp.json();
+                var data = await fetchJson('/admin-web/birthdays-json');
 
                 if (!data.birthdays || data.birthdays.length === 0) {
                     container.innerHTML = '<p class="text-muted mb-0">Nenhum aniversário cadastrado.</p>';
@@ -1132,9 +1157,7 @@
                 '<div class="spinner-border text-primary" role="status"></div></div>';
 
             try {
-                var resp = await fetch('/admin-web/features');
-                if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                var data = await resp.json();
+                var data = await fetchJson('/admin-web/features');
                 renderFeatureFlags(container, data);
             } catch (e) {
                 container.innerHTML = '<div class="alert alert-warning m-3 mb-0">' +
@@ -1174,8 +1197,8 @@
         window.toggleFeatureFlag = async function (key, enabled, checkbox) {
             checkbox.disabled = true;
             try {
-                // Usa o endpoint REST (retorna JSON estruturado, não redirect)
-                var resp = await fetch('/admin/features/' + encodeURIComponent(key), {
+                // 🔧 FIX: usa fetchJson (que trata resposta não-JSON com mensagem clara)
+                var data = await fetchJson('/admin/features/' + encodeURIComponent(key), {
                     method: 'POST',
                     headers: Object.assign(
                         { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1183,9 +1206,10 @@
                     ),
                     body: 'enabled=' + enabled
                 });
-                var data = await resp.json();
-                if (!resp.ok) throw new Error(data.erro || ('HTTP ' + resp.status));
-                showToast('Flag "' + key + '" ' + (data.enabled ? 'ativada' : 'desativada'), 'success');
+                showToast(
+                    'Flag "' + key + '" ' + (data.enabled ? 'ativada' : 'desativada'),
+                    'success'
+                );
             } catch (e) {
                 showToast('Erro ao alterar flag: ' + e.message, 'danger');
                 checkbox.checked = !enabled;
@@ -1202,8 +1226,7 @@
             div.style.display = 'block';
             div.innerHTML = '<div class="spinner-border text-info" role="status"></div>';
             try {
-                var resp = await fetch('/admin-web/migrate-sqlite/preview');
-                var data = await resp.json();
+                var data = await fetchJson('/admin-web/migrate-sqlite/preview');
                 div.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
             } catch (e) {
                 div.innerHTML = '<div class="alert alert-danger mb-0">Erro: ' + e.message + '</div>';
@@ -1220,8 +1243,7 @@
             div.style.display = 'block';
             div.innerHTML = '<div class="spinner-border text-info" role="status"></div>';
             try {
-                var resp = await fetch('/admin-web/debug/cache/' + encodeURIComponent(fileId));
-                var data = await resp.json();
+                var data = await fetchJson('/admin-web/debug/cache/' + encodeURIComponent(fileId));
                 div.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
             } catch (e) {
                 div.innerHTML = '<div class="alert alert-danger mb-0">Erro: ' + e.message + '</div>';
@@ -1239,7 +1261,7 @@
             document.body.appendChild(toast);
             setTimeout(function () {
                 toast.remove();
-            }, 3000);
+            }, 5000);
         };
 
         // ================================================================
@@ -1248,16 +1270,13 @@
         document.addEventListener('DOMContentLoaded', function () {
             updateThemeUI();
 
-            // Carrega aniversários ao abrir a aba
             var tabAniv = document.getElementById('tab-aniversarios');
             if (tabAniv) tabAniv.addEventListener('shown.bs.tab', loadBirthdays);
 
-            // Carrega feature flags ao abrir a aba
             var tabFeat = document.getElementById('tab-features');
             if (tabFeat) tabFeat.addEventListener('shown.bs.tab', loadFeatureFlags);
         });
     })();
 </script>
 </body>
-
 </html>
