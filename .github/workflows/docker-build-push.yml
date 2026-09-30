@@ -106,8 +106,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Cache GHA (compartilhado entre runs)
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=andresnascimento/t1000-bot:buildcache
+          cache-to: type=registry,ref=andresnascimento/t1000-bot:buildcache,mode=max
           # Força push mesmo se o digest não mudar
           provenance: true
           sbom: false

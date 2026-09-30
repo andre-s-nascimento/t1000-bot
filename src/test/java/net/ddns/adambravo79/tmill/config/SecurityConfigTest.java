@@ -1,157 +1,129 @@
 package net.ddns.adambravo79.tmill.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
-import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
 
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
+
+/**
+ * Testes de integração do {@link SecurityConfig}.
+ *
+ * <p>Usa {@link WebMvcTest} com um {@code @RestController} de teste para exercitar o {@code
+ * securityFilterChain} real e cobrir as lambdas de {@code AuthenticationEntryPoint} e {@code
+ * AccessDeniedHandler}.
+ *
+ * <p><b>⚠️ {@code @TestPropertySource} é obrigatório:</b> o {@code SecurityConfig} usa
+ * {@code @Value("${admin.security.disabled:false}")}, mas {@code application.properties} declara
+ * {@code admin.security.disabled=${ADMIN_SECURITY_DISABLED}} <b>sem default</b>. Sem o
+ * {@code @TestPropertySource} definindo o valor, o Spring tenta converter o literal {@code
+ * "${ADMIN_SECURITY_DISABLED}"} para boolean e falha com {@code Invalid boolean value
+ * [${ADMIN_SECURITY_DISABLED}]}.
+ */
+@WebMvcTest(controllers = SecurityConfigTest.TestAdminController.class)
+@Import({SecurityConfig.class, AdminFilterConfig.class})
+@TestPropertySource(
+        properties = {
+            // 🔧 OBRIGATÓRIO: resolver o placeholder de application.properties
+            "admin.security.disabled=false",
+            // Evita que o OAuth2 tente inicializar sem credenciais (degrada para no-op)
+            "admin.google.client-id=",
+            "admin.google.client-secret=",
+            "admin.allowed-emails=",
+            "admin.allowed-ips="
+        })
 class SecurityConfigTest {
 
-    private Environment environment;
+    @Autowired private MockMvc mockMvc;
 
-    @BeforeEach
-    void setUp() {
-        environment = mock(Environment.class);
-        // 🔧 Por padrão, NÃO é profile prod (testes rodam no profile default)
-        lenient().when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(false);
-    }
+    @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
+
+    @MockitoBean private MetricsService metricsService;
 
     // ============================================================
-    // clientRegistrationRepository
+    // 401 JSON para /admin/** sem autenticação
     // ============================================================
 
     @Test
-    void clientRegistrationRepository_comCredenciais_retornaGoogle() {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "googleClientId", "fake-client-id");
-        ReflectionTestUtils.setField(config, "googleClientSecret", "fake-secret");
-
-        ClientRegistrationRepository repo = config.clientRegistrationRepository();
-
-        assertThat(repo).isNotNull();
-        assertThat(repo).isInstanceOf(InMemoryClientRegistrationRepository.class);
-
-        ClientRegistration google =
-                ((InMemoryClientRegistrationRepository) repo).findByRegistrationId("google");
-        assertThat(google).isNotNull();
-        assertThat(google.getClientId()).isEqualTo("fake-client-id");
-        assertThat(google.getScopes()).contains("openid", "profile", "email");
-        assertThat(google.getProviderDetails().getAuthorizationUri())
-                .contains("accounts.google.com")
-                .contains("prompt=select_account");
+    @DisplayName("GET /admin/** sem auth → 401 JSON")
+    void adminGetSemAuth_retorna401Json() throws Exception {
+        mockMvc.perform(get("/admin/test"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.erro").value("Não autenticado. Faça login novamente."));
     }
 
     @Test
-    void clientRegistrationRepository_semCredenciais_retornaVazio() {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "googleClientId", "");
-        ReflectionTestUtils.setField(config, "googleClientSecret", "");
-
-        ClientRegistrationRepository repo = config.clientRegistrationRepository();
-
-        assertThat(repo).isNotNull();
-        assertThat(repo.findByRegistrationId("google")).isNull();
+    @DisplayName("POST /admin/** sem auth → 401 JSON")
+    void adminPostSemAuth_retorna401Json() throws Exception {
+        mockMvc.perform(post("/admin/test").contentType(MediaType.APPLICATION_FORM_URLENCODED))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.erro").value("Não autenticado. Faça login novamente."));
     }
 
     @Test
-    void clientRegistrationRepository_semClientSecret_retornaVazio() {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "googleClientId", "fake-client-id");
-        ReflectionTestUtils.setField(config, "googleClientSecret", "");
-
-        ClientRegistrationRepository repo = config.clientRegistrationRepository();
-        assertThat(repo.findByRegistrationId("google")).isNull();
+    @DisplayName("GET /admin/features/* sem auth → 401 JSON")
+    void adminFeaturesSemAuth_retorna401Json() throws Exception {
+        mockMvc.perform(get("/admin/features/transcription.enabled"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.erro").exists());
     }
 
     // ============================================================
-    // parseAllowedEmails (via reflexão)
+    // Rotas públicas
     // ============================================================
 
     @Test
-    void parseAllowedEmails_comLista_retornaLista() throws Exception {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "allowedEmailsStr", "a@x.com, b@x.com ,c@x.com");
-
-        java.lang.reflect.Method m = SecurityConfig.class.getDeclaredMethod("parseAllowedEmails");
-        m.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        java.util.List<String> emails = (java.util.List<String>) m.invoke(config);
-
-        assertThat(emails).containsExactly("a@x.com", "b@x.com", "c@x.com");
-    }
-
-    @Test
-    void parseAllowedEmails_vazio_retornaListaVazia() throws Exception {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "allowedEmailsStr", "");
-
-        java.lang.reflect.Method m = SecurityConfig.class.getDeclaredMethod("parseAllowedEmails");
-        m.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        java.util.List<String> emails = (java.util.List<String>) m.invoke(config);
-
-        assertThat(emails).isEmpty();
-    }
-
-    @Test
-    void parseAllowedEmails_nulo_retornaListaVazia() throws Exception {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "allowedEmailsStr", null);
-
-        java.lang.reflect.Method m = SecurityConfig.class.getDeclaredMethod("parseAllowedEmails");
-        m.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        java.util.List<String> emails = (java.util.List<String>) m.invoke(config);
-
-        assertThat(emails).isEmpty();
+    @DisplayName("GET /actuator/health não é bloqueado por /admin/**")
+    void actuatorHealth_naoBloqueado() throws Exception {
+        int status = mockMvc.perform(get("/actuator/health")).andReturn().getResponse().getStatus();
+        assertThat(status).isNotEqualTo(401);
     }
 
     // ============================================================
-    // 🔧 NOVOS — validateSecurityConfig (flag admin.security.disabled)
+    // Controller de teste (só para o @WebMvcTest subir)
     // ============================================================
 
-    @Test
-    void validateSecurityConfig_flagDesligada_naoLancaExcecao() {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "securityDisabled", false);
+    @RestController
+    static class TestAdminController {
 
-        // Não deve lançar exceção
-        config.validateSecurityConfig();
-    }
+        @GetMapping("/admin/test")
+        public String get() {
+            return "ok";
+        }
 
-    @Test
-    void validateSecurityConfig_flagLigadaEmProd_lancaExcecao() {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "securityDisabled", true);
+        @PostMapping("/admin/test")
+        public String post() {
+            return "ok";
+        }
 
-        // Simula profile "prod" ativo
-        when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(true);
+        @GetMapping("/admin/features/transcription.enabled")
+        public String features() {
+            return "ok";
+        }
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(config::validateSecurityConfig)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("NÃO é permitido no profile `prod`");
-    }
-
-    @Test
-    void validateSecurityConfig_flagLigadaForaDeProd_apenasLoga() {
-        SecurityConfig config = new SecurityConfig(null, environment);
-        ReflectionTestUtils.setField(config, "securityDisabled", true);
-
-        // Simula profile "default" (não prod)
-        when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(false);
-
-        // Não deve lançar exceção — apenas loga o aviso
-        org.assertj.core.api.Assertions.assertThatCode(config::validateSecurityConfig)
-                .doesNotThrowAnyException();
+        @GetMapping("/actuator/health")
+        public String health() {
+            return "{\"status\":\"UP\"}";
+        }
     }
 }

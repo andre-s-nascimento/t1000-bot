@@ -1,5 +1,5 @@
 /* (c) 2026 | 15/05/2026 */
-package net.ddns.adambravo79.tmill.integration;
+package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
