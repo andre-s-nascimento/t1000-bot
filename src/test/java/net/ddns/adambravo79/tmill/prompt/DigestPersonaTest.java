@@ -48,6 +48,6 @@ class DigestPersonaTest {
         DigestPersona p2 = DigestPersona.fromString("t1000");
 
         assertThat(p1).isEqualTo(p2);
-        assertThat(p1.hashCode()).isEqualTo(p2.hashCode());
+        assertThat(p1.hashCode()).hasSameHashCodeAs(p2.hashCode());
     }
 }

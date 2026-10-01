@@ -2,6 +2,7 @@
 package net.ddns.adambravo79.tmill.service.digest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,8 +29,8 @@ class DigestPromptFactoryTest {
     }
 
     @Test
-    @DisplayName("Deve delegar a construção do System Prompt para a persona informada")
-    void shouldBuildSystemPromptForGivenPersona() {
+    @DisplayName("Deve delegar a construção do System Prompt para a persona informada por String")
+    void shouldBuildSystemPromptForGivenPersonaString() {
         when(promptRegistryService.getDigestSystemPrompt("EDGARD_EDGARDINO", "MANHÃ"))
                 .thenReturn("Prompt do Edgardino");
 
@@ -39,17 +41,29 @@ class DigestPromptFactoryTest {
     }
 
     @Test
+    @DisplayName("Deve delegar a construção do System Prompt para o objeto DigestPersona")
+    void shouldBuildSystemPromptForGivenDigestPersona() {
+        when(promptRegistryService.getDigestSystemPrompt("T1000", "MANHÃ"))
+                .thenReturn("Prompt do T1000");
+
+        String result = digestPromptFactory.buildSystemPrompt(DigestPersona.T1000, "MANHÃ");
+
+        assertThat(result).isEqualTo("Prompt do T1000");
+        verify(promptRegistryService).getDigestSystemPrompt("T1000", "MANHÃ");
+    }
+
+    @Test
     @DisplayName("Deve usar ANALISTA como fallback de persona se personaName for nula ou vazia")
     void shouldFallbackToAnalistaWhenPersonaNameIsBlank() {
         when(promptRegistryService.getDigestSystemPrompt("ANALISTA", "DEFAULT"))
                 .thenReturn("Prompt Padrão Analista");
 
-        String resultNull = digestPromptFactory.buildSystemPrompt(null, "DEFAULT");
+        String resultNull = digestPromptFactory.buildSystemPrompt((String) null, "DEFAULT");
         String resultBlank = digestPromptFactory.buildSystemPrompt("  ", "DEFAULT");
 
         assertThat(resultNull).isEqualTo("Prompt Padrão Analista");
         assertThat(resultBlank).isEqualTo("Prompt Padrão Analista");
-        verify(promptRegistryService).getDigestSystemPrompt("ANALISTA", "DEFAULT");
+        verify(promptRegistryService, times(2)).getDigestSystemPrompt("ANALISTA", "DEFAULT");
     }
 
     @Test
