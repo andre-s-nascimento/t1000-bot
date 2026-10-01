@@ -105,12 +105,19 @@ class JsonConfigLoaderTest {
 
         try {
             Files.createDirectories(configDir);
-            appConfigFile = configDir.resolve(fileName);
+        } catch (IOException | SecurityException ex) {
+            // Aborta o teste de forma limpa (Disabled/Skipped) se não houver permissão no SO
+            org.junit.jupiter.api.Assumptions.assumeTrue(
+                    false, "Sem permissão para criar /app/config no ambiente local");
+        }
+
+        appConfigFile = configDir.resolve(fileName);
+
+        try {
             Files.writeString(appConfigFile, "{\"name\":\"app-source\",\"version\":3}");
         } catch (IOException | SecurityException ex) {
-            // Em ambientes sem permissão de escrita em /app (como dev local),
-            // o teste deve ser ignorado graciosamente.
-            return;
+            org.junit.jupiter.api.Assumptions.assumeTrue(
+                    false, "Sem permissão de escrita em /app/config");
         }
 
         Optional<TestConfigRecord> result =
