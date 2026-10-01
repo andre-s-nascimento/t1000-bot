@@ -22,7 +22,7 @@ import net.ddns.adambravo79.tmill.model.ChatCompletionResponse;
 import net.ddns.adambravo79.tmill.model.Choice;
 import net.ddns.adambravo79.tmill.model.TranscriptionResponse;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
-import net.ddns.adambravo79.tmill.prompt.DigestPromptFactory;
+import net.ddns.adambravo79.tmill.service.digest.DigestPromptFactory;
 
 @Slf4j
 @Component
