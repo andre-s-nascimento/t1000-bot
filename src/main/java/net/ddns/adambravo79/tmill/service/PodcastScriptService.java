@@ -1,3 +1,4 @@
+/* (c) 2026 | 01/10/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.LocalDate;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.GroqClient;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 
 @Service
 @Slf4j
@@ -18,6 +20,7 @@ public class PodcastScriptService {
 
     private final JdbcTemplate jdbcTemplate;
     private final GroqClient groqClient;
+    private final PromptRegistryService promptRegistryService;
 
     @Value("${podcast.target.user-id}")
     private long targetUserId;
@@ -25,10 +28,9 @@ public class PodcastScriptService {
     @Value("${podcast.script.max-tokens:3000}")
     private int maxTokens;
 
-    @Value("${groq.model.digest}") // ← usa o modelo configurado
+    @Value("${groq.model.digest}")
     private String digestModel;
 
-    // 🔥 Limite de caracteres para o prompt
     private static final int MAX_PROMPT_CHARS = 12000;
     private static final int MAX_MESSAGES = 20;
 
@@ -48,7 +50,6 @@ public class PodcastScriptService {
             return null;
         }
 
-        // 🔥 Limita para as últimas 20 mensagens (mais recentes)
         if (messages.size() > MAX_MESSAGES) {
             messages = messages.subList(messages.size() - MAX_MESSAGES, messages.size());
             log.info(
@@ -57,34 +58,15 @@ public class PodcastScriptService {
                     messages.size());
         }
 
-        // Junta tudo
         String combined = String.join("\n---\n", messages);
 
-        // 🔥 Trunca para 12.000 caracteres
         if (combined.length() > MAX_PROMPT_CHARS) {
             combined =
                     combined.substring(0, MAX_PROMPT_CHARS) + "... [corte por limite de contexto]";
             log.info("✂️ Prompt truncado para {} caracteres.", MAX_PROMPT_CHARS);
         }
 
-        // 🔥 Prompt mais conciso para reduzir saída
-        String systemPrompt =
-"""
-Você é T-1000 e apresenta o "Silas Cast", resumo semanal dos áudios do Silas Bezerra.
-Crie um roteiro NARRADO e FLUIDO para ser lido em voz alta (TTS).
-
-REGRAS IMPORTANTES:
-- O áudio final deve ter NO MÁXIMO 8-10 MINUTOS (cerca de 600-800 palavras).
-- Use linguagem natural, coloquial e envolvente.
-- NÃO use asteriscos (*), markdown ou formatação especial.
-- NÃO use tópicos numerados ou bullet points.
-- Escreva como se estivesse contando uma história.
-- Inclua introdução breve e encerramento.
-- Encerre com: "E caso eu não veja vocês, bom dia, boa tarde e boa noite!"
-- Resuma os temas principais, não repita mensagem por mensagem.
-- SEJA CONCISO. Prefira qualidade à quantidade.
-""";
-
+        String systemPrompt = promptRegistryService.getPodcastSystemPrompt();
         String userPrompt = "Aqui estão as mensagens da semana passada:\n\n" + combined;
 
         log.info(
