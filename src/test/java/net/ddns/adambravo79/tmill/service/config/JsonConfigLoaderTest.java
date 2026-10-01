@@ -42,6 +42,7 @@ class JsonConfigLoaderTest {
             try {
                 Files.deleteIfExists(localConfigFile);
             } catch (IOException ignored) {
+                // Silencia falha de exclusao de arquivo temporario de teste local
             }
         }
 
@@ -171,19 +172,17 @@ class JsonConfigLoaderTest {
             throws IOException {
 
         Path invalidJsonFile = tempDir.resolve("invalid-config.json");
-
         Files.writeString(invalidJsonFile, "{ name: 'broken-json', version: }");
+
+        String overridePath = invalidJsonFile.toAbsolutePath().toString();
 
         assertThatThrownBy(
                         () ->
                                 jsonConfigLoader.loadConfig(
-                                        "any-file.json",
-                                        TestConfigRecord.class,
-                                        invalidJsonFile.toAbsolutePath().toString()))
+                                        "any-file.json", TestConfigRecord.class, overridePath))
                 .isInstanceOf(ConfigLoadException.class)
                 .hasMessageContaining("JSON malformado ou incompatível com o modelo")
-                .hasFieldOrPropertyWithValue(
-                        "resourcePath", invalidJsonFile.toAbsolutePath().toString());
+                .hasFieldOrPropertyWithValue("resourcePath", overridePath);
     }
 
     @Test
