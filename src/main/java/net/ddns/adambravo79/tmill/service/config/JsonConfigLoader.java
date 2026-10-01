@@ -62,7 +62,9 @@ public class JsonConfigLoader {
         }
 
         // 4. Classpath (resources)
-        String resourcePath = fileName.startsWith("/") ? fileName : "/" + fileName;
+        Path path = Path.of("/", fileName).normalize();
+        String resourcePath = path.toString().replace('\\', '/');
+
         try (InputStream is = getClass().getResourceAsStream(resourcePath)) {
             if (is != null) {
                 log.info("Carregando config do classpath: {}", resourcePath);

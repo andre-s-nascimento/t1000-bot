@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -107,8 +108,7 @@ class JsonConfigLoaderTest {
             Files.createDirectories(configDir);
         } catch (IOException | SecurityException ex) {
             // Aborta o teste de forma limpa (Disabled/Skipped) se não houver permissão no SO
-            org.junit.jupiter.api.Assumptions.assumeTrue(
-                    false, "Sem permissão para criar /app/config no ambiente local");
+            Assumptions.assumeTrue(false, "Sem permissão para criar /app/config no ambiente local");
         }
 
         appConfigFile = configDir.resolve(fileName);

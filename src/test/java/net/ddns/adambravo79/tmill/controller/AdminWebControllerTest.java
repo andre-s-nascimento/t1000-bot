@@ -194,7 +194,7 @@ class AdminWebControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Mensagem enviada para o chat 123")));
 
-        verify(telegramFacade).enviarMensagemHtml(eq(123L), eq("Olá"));
+        verify(telegramFacade).enviarMensagemHtml(123L, "Olá");
     }
 
     @Test
@@ -224,7 +224,7 @@ class AdminWebControllerTest {
                                 .param("parseMode", "MarkdownV2"))
                 .andExpect(status().isOk());
 
-        verify(telegramFacade).enviarMensagem(eq(123L), eq("Olá"));
+        verify(telegramFacade).enviarMensagem(123L, "Olá");
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -362,10 +362,12 @@ class AdminWebControllerTest {
         RedirectAttributes attrs = newRedirectAttributes();
 
         String view = controller.testAzureTts(attrs);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
 
         assertThat(view).isEqualTo("redirect:/admin-web");
-        assertThat(attrs.getFlashAttributes().get("error"))
-                .isEqualTo("publishChatId não configurado.");
+        assertThat(flashAttributes).containsEntry("error", "publishChatId não configurado.");
     }
 
     @Test
@@ -429,9 +431,13 @@ class AdminWebControllerTest {
         RedirectAttributes attrs = newRedirectAttributes();
 
         String view = controller.testWorldCup(attrs);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
 
         assertThat(view).isEqualTo("redirect:/admin-web");
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Copa desabilitada.");
+        assertThat(flashAttributes).containsEntry("error", "Copa desabilitada.");
+
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -456,7 +462,12 @@ class AdminWebControllerTest {
 
         controller.testWorldCupShowcase(123L, attrs);
 
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Copa desabilitada.");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
+
+        assertThat(flashAttributes).containsEntry("error", "Copa desabilitada.");
+
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -500,7 +511,11 @@ class AdminWebControllerTest {
 
         controller.testWorldCupNoon(attrs);
 
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Copa desabilitada.");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
+
+        assertThat(flashAttributes).containsEntry("error", "Copa desabilitada.");
     }
 
     @Test
@@ -575,10 +590,13 @@ class AdminWebControllerTest {
     @DisplayName("testWorldCupResults: data inválida → flash error")
     void testWorldCupResults_dataInvalida() {
         RedirectAttributes attrs = newRedirectAttributes();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
 
         controller.testWorldCupResults("data-muito-invalida-xyz", 123L, attrs);
 
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Data inválida.");
+        assertThat(flashAttributes).containsEntry("error", "Data inválida.");
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -816,10 +834,14 @@ class AdminWebControllerTest {
 
         String view = controller.reloadPrompts(attrs);
 
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
+
         assertThat(view).isEqualTo("redirect:/admin-web");
         verify(promptRegistryService).reload();
-        assertThat(attrs.getFlashAttributes().get("success"))
-                .isEqualTo("Prompts e personas recarregados com sucesso.");
+        assertThat(flashAttributes)
+                .containsEntry("success", "Prompts e personas recarregados com sucesso.");
     }
 
     @Test
@@ -832,11 +854,14 @@ class AdminWebControllerTest {
         RedirectAttributes attrs = newRedirectAttributes();
 
         String view = controller.reloadPrompts(attrs);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
 
         assertThat(view).isEqualTo("redirect:/admin-web");
         verify(promptRegistryService).reload();
-        assertThat(attrs.getFlashAttributes().get("error"))
-                .isEqualTo("Erro interno. Verifique os logs do servidor.");
+        assertThat(flashAttributes)
+                .containsEntry("error", "Erro interno. Verifique os logs do servidor.");
     }
 
     // =========================================================================
@@ -1295,15 +1320,4 @@ class AdminWebControllerTest {
 
         verify(promptRegistryService).reload();
     }
-
-    // =========================================================================
-    // HELPERS DE ASSERT — imports faltantes
-    // =========================================================================
-
-    // Este bloco existe apenas para lembrar que `assertThat` é do AssertJ
-    // Se não estiver no classpath, adicione:
-    // import static org.assertj.core.api.Assertions.assertThat;
-    // import static org.mockito.Mockito.mockStatic;
-    // import static org.mockito.ArgumentMatchers.contains;
-    // import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 }

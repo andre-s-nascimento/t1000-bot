@@ -16,6 +16,7 @@ import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 @Service
 public class PromptRegistryService {
 
+    private static final String SYSTEM_PROMPT = "systemPrompt";
     private final JsonConfigLoader jsonConfigLoader;
     private static final String DEFAULT_PROMPTS_RESOURCE = "prompts/digest-personas.json";
     private static final String PODCAST_SYSTEM_RESOURCE = "prompts/podcast-system.json";
@@ -57,8 +58,9 @@ public class PromptRegistryService {
                                 : "config/prompts/digest-personas.json");
 
         promptCache.clear();
+        promptCache.clear();
         if (loadedMap.isPresent()) {
-            promptCache.putAll((Map<String, Object>) loadedMap.get());
+            promptCache.putAll(loadedMap.get());
             log.info(
                     "✅ Prompts carregados com sucesso. Total de chaves topo: {}",
                     promptCache.size());
@@ -110,7 +112,7 @@ public class PromptRegistryService {
 
         if (personas != null && personas.containsKey(personaName)) {
             Map<String, Object> personaMap = (Map<String, Object>) personas.get(personaName);
-            basePrompt = (String) personaMap.get("systemPrompt");
+            basePrompt = (String) personaMap.get(SYSTEM_PROMPT);
         }
 
         String context = getPeriodContext(periodLabel);
@@ -144,8 +146,8 @@ public class PromptRegistryService {
                         PODCAST_CONFIG_RESOURCE, Map.class, podcastConfigOverridePath);
 
         String baseSystemPrompt = "";
-        if (systemMap.isPresent() && systemMap.get().containsKey("systemPrompt")) {
-            baseSystemPrompt = (String) systemMap.get().get("systemPrompt");
+        if (systemMap.isPresent() && systemMap.get().containsKey(SYSTEM_PROMPT)) {
+            baseSystemPrompt = (String) systemMap.get().get(SYSTEM_PROMPT);
         }
 
         String closingLine = "E caso eu não veja vocês, bom dia, boa tarde e boa noite!";

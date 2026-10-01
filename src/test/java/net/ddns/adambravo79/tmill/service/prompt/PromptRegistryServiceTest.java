@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.util.HashMap;
@@ -59,11 +60,11 @@ class PromptRegistryServiceTest {
 
         service.reload();
 
-        verify(loader, org.mockito.Mockito.times(2))
+        verify(loader, times(2))
                 .loadConfig(
-                        eq("prompts/digest-personas.json"),
-                        eq(Map.class),
-                        eq("config/prompts/digest-personas.json"));
+                        "prompts/digest-personas.json",
+                        Map.class,
+                        "config/prompts/digest-personas.json");
     }
 
     @Test
@@ -81,7 +82,9 @@ class PromptRegistryServiceTest {
     @Test
     @DisplayName("getAllPrompts deve retornar mapa somente para leitura")
     void shouldReturnUnmodifiablePromptMap() {
-        assertThatThrownBy(() -> service.getAllPrompts().put("x", "y"))
+        Map<String, Object> prompts = service.getAllPrompts();
+
+        assertThatThrownBy(() -> prompts.put("x", "y"))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
