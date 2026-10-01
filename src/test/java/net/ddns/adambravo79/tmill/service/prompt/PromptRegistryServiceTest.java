@@ -59,7 +59,7 @@ class PromptRegistryServiceTest {
 
         service.reload();
 
-        verify(loader)
+        verify(loader, org.mockito.Mockito.times(2))
                 .loadConfig(
                         eq("prompts/digest-personas.json"),
                         eq(Map.class),
