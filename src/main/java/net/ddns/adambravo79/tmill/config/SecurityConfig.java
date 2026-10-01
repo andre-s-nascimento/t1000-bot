@@ -1,3 +1,4 @@
+/* (c) 2026 | 01/10/2026 */
 package net.ddns.adambravo79.tmill.config;
 
 import java.util.Arrays;
@@ -30,6 +31,9 @@ import lombok.extern.slf4j.Slf4j;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private static final String DEV_MODE_BORDER_PADDING =
+            "║                                                                ║";
 
     @Value("${admin.google.client-id:}")
     private String googleClientId;
@@ -67,12 +71,12 @@ public class SecurityConfig {
             log.warn("");
             log.warn("╔════════════════════════════════════════════════════════════════╗");
             log.warn("║  ⚠️  MODO DEV ATIVADO — SPRING SECURITY DESABILITADO          ║");
-            log.warn("║                                                                ║");
+            log.warn(DEV_MODE_BORDER_PADDING);
             log.warn("║  Endpoints /admin/** e /admin-web/** estão SEM AUTENTICAÇÃO.   ║");
-            log.warn("║                                                                ║");
+            log.warn(DEV_MODE_BORDER_PADDING);
             log.warn("║  ❌ NUNCA use isso em produção!                                ║");
-            log.warn("║  ❌ NUNCA exponha essa porta publicamente!                     ║");
-            log.warn("║                                                                ║");
+            log.warn("║  ❌ NUNCA exponha essa porta publicamente!                      ║");
+            log.warn(DEV_MODE_BORDER_PADDING);
             log.warn("║  Para desligar: ADMIN_SECURITY_DISABLED=false (ou remova).     ║");
             log.warn("╚════════════════════════════════════════════════════════════════╝");
             log.warn("");
@@ -85,6 +89,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @SuppressWarnings("java:S4502")
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         // ===================== MODO DEV (sem autenticação) =====================
@@ -140,10 +145,6 @@ public class SecurityConfig {
                                 .ignoringRequestMatchers("/actuator/**"));
 
         // 🔧 FIX CRÍTICO: para /admin/** (API REST), devolver JSON em 401/403
-        // em vez do redirect HTML padrão do OAuth2.
-        //
-        // No Spring Security 7, usamos requestMatchers() do próprio HttpSecurity
-        // em vez de criar um AntPathRequestMatcher (que foi removido).
         http.exceptionHandling(
                 ex ->
                         ex.defaultAuthenticationEntryPointFor(
@@ -214,9 +215,10 @@ public class SecurityConfig {
                         .clientName("Google")
                         .build();
 
+        String safeClientId = googleClientId.substring(0, Math.min(12, googleClientId.length()));
         log.info(
                 "✅ ClientRegistrationRepository configurado para Google (clientId={}...)",
-                googleClientId.substring(0, Math.min(12, googleClientId.length())));
+                safeClientId);
 
         return new InMemoryClientRegistrationRepository(google);
     }
@@ -232,13 +234,16 @@ public class SecurityConfig {
         };
     }
 
+    // SuppressWarnings("null"): Falso positivo de Null Type Safety no analisador JDT/Eclipse ao
+    // usar method reference String::trim em Stream.
+    @SuppressWarnings("null")
     private List<String> parseAllowedEmails() {
         if (allowedEmailsStr == null || allowedEmailsStr.isBlank()) {
             return List.of();
         }
         return Arrays.stream(allowedEmailsStr.split(","))
+                .filter(s -> s != null && !s.isBlank())
                 .map(String::trim)
-                .filter(s -> !s.isEmpty())
                 .toList();
     }
 

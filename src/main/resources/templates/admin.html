@@ -786,7 +786,7 @@
         <!-- ==================== ABA ADMIN ==================== -->
         <div class="tab-pane fade" id="admin" role="tabpanel" aria-labelledby="tab-admin">
 
-            <!-- Limpeza -->
+            <!-- Limpeza e Recarregamentos -->
             <div class="btn-group-vertical-mobile mb-2 mt-2" role="group" aria-label="Ações administrativas">
                 <form th:action="@{/admin-web/clear-releases}" method="post"
                       onsubmit="return confirm('Tem certeza que deseja limpar a tabela de releases?')"
@@ -800,6 +800,11 @@
                       class="d-inline-block">
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-database-x" aria-hidden="true"></i> Limpar Todos os Dados
+                    </button>
+                </form>
+                <form th:action="@{/admin-web/reload-prompts}" method="post" class="d-inline-block">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Recarregar Prompts
                     </button>
                 </form>
                 <form th:action="@{/admin-web/reload-auto-responses}" method="post" class="d-inline-block">

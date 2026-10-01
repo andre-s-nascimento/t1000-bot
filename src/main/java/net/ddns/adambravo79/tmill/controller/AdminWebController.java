@@ -61,6 +61,7 @@ import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.databind.ObjectMapper;
@@ -123,6 +124,7 @@ public class AdminWebController {
     private final BirthdayRepository birthdayRepository;
     private final MigrationService migrationService;
     private final FeatureFlagAdminService featureFlagAdminService;
+    private final PromptRegistryService promptRegistryService;
 
     // =========================================================================
     // @Value
@@ -177,6 +179,24 @@ public class AdminWebController {
         model.addAttribute("availableChatIds", allChats);
 
         return "admin";
+    }
+
+    // =========================================================================
+    // ADMINISTRAÇÃO (LIMPEZA E RECARREGAMENTO)
+    // =========================================================================
+
+    @PostMapping("/reload-prompts")
+    public String reloadPrompts(RedirectAttributes redirectAttrs) {
+        try {
+            promptRegistryService.reload();
+            log.info("🌐 Prompts e personas recarregados via painel web admin.");
+            redirectAttrs.addFlashAttribute(
+                    SUCCESS, "Prompts e personas recarregados com sucesso.");
+        } catch (Exception e) {
+            log.error("Erro ao recarregar prompts e personas", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
+        }
+        return REDIRECT_ADMIN_WEB;
     }
 
     // =========================================================================

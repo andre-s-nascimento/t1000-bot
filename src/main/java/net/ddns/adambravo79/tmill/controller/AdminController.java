@@ -68,6 +68,7 @@ import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.core.JacksonException;
@@ -102,6 +103,7 @@ public class AdminController {
     private final BirthdayRepository birthdayRepository;
     private final MigrationService migrationService;
     private final FeatureFlagAdminService featureFlagAdminService;
+    private final PromptRegistryService promptRegistryService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -1029,5 +1031,14 @@ public class AdminController {
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("erro", MSG_ERRO_INTERNO));
         }
+    }
+
+    // ========================= MÉTODOS DE RELOAD =========================
+
+    @PostMapping("/reload-prompts")
+    public ResponseEntity<String> reloadPrompts() {
+        promptRegistryService.reload();
+        log.info("⚙️ Prompts e personas recarregados via endpoint REST admin.");
+        return ResponseEntity.ok("Prompts e personas recarregados com sucesso");
     }
 }

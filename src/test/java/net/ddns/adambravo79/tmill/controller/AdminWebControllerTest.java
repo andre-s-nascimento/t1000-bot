@@ -1,3 +1,4 @@
+/* (c) 2026 | 30/09/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,6 +53,7 @@ import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import tools.jackson.databind.ObjectMapper;
 
@@ -82,6 +84,7 @@ class AdminWebControllerTest {
     @Mock private BirthdayRepository birthdayRepository;
     @Mock private MigrationService migrationService;
     @Mock private FeatureFlagAdminService featureFlagAdminService;
+    @Mock private PromptRegistryService promptRegistryService;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
@@ -113,7 +116,8 @@ class AdminWebControllerTest {
                         birthdayService,
                         birthdayRepository,
                         migrationService,
-                        featureFlagAdminService);
+                        featureFlagAdminService,
+                        promptRegistryService);
 
         // @Value fields — não injetados por ReflectionTestUtils
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
@@ -190,7 +194,7 @@ class AdminWebControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("Mensagem enviada para o chat 123")));
 
-        verify(telegramFacade).enviarMensagemHtml(eq(123L), eq("Olá"));
+        verify(telegramFacade).enviarMensagemHtml(123L, "Olá");
     }
 
     @Test
@@ -220,7 +224,7 @@ class AdminWebControllerTest {
                                 .param("parseMode", "MarkdownV2"))
                 .andExpect(status().isOk());
 
-        verify(telegramFacade).enviarMensagem(eq(123L), eq("Olá"));
+        verify(telegramFacade).enviarMensagem(123L, "Olá");
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -358,10 +362,12 @@ class AdminWebControllerTest {
         RedirectAttributes attrs = newRedirectAttributes();
 
         String view = controller.testAzureTts(attrs);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
 
         assertThat(view).isEqualTo("redirect:/admin-web");
-        assertThat(attrs.getFlashAttributes().get("error"))
-                .isEqualTo("publishChatId não configurado.");
+        assertThat(flashAttributes).containsEntry("error", "publishChatId não configurado.");
     }
 
     @Test
@@ -425,9 +431,13 @@ class AdminWebControllerTest {
         RedirectAttributes attrs = newRedirectAttributes();
 
         String view = controller.testWorldCup(attrs);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
 
         assertThat(view).isEqualTo("redirect:/admin-web");
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Copa desabilitada.");
+        assertThat(flashAttributes).containsEntry("error", "Copa desabilitada.");
+
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -452,7 +462,12 @@ class AdminWebControllerTest {
 
         controller.testWorldCupShowcase(123L, attrs);
 
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Copa desabilitada.");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
+
+        assertThat(flashAttributes).containsEntry("error", "Copa desabilitada.");
+
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -496,7 +511,11 @@ class AdminWebControllerTest {
 
         controller.testWorldCupNoon(attrs);
 
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Copa desabilitada.");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
+
+        assertThat(flashAttributes).containsEntry("error", "Copa desabilitada.");
     }
 
     @Test
@@ -571,10 +590,13 @@ class AdminWebControllerTest {
     @DisplayName("testWorldCupResults: data inválida → flash error")
     void testWorldCupResults_dataInvalida() {
         RedirectAttributes attrs = newRedirectAttributes();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
 
         controller.testWorldCupResults("data-muito-invalida-xyz", 123L, attrs);
 
-        assertThat(attrs.getFlashAttributes().get("error")).isEqualTo("Data inválida.");
+        assertThat(flashAttributes).containsEntry("error", "Data inválida.");
         verifyNoInteractions(worldCupSchedulerService);
     }
 
@@ -799,6 +821,47 @@ class AdminWebControllerTest {
         mockMvc.perform(get("/admin-web/auto-response-rules"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalRules").value(5));
+    }
+
+    // =========================================================================
+    // RELOAD DE PROMPTS
+    // =========================================================================
+
+    @Test
+    @DisplayName("reloadPrompts: sucesso → recarrega e flash success")
+    void reloadPrompts_sucesso() {
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        String view = controller.reloadPrompts(attrs);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
+
+        assertThat(view).isEqualTo("redirect:/admin-web");
+        verify(promptRegistryService).reload();
+        assertThat(flashAttributes)
+                .containsEntry("success", "Prompts e personas recarregados com sucesso.");
+    }
+
+    @Test
+    @DisplayName("reloadPrompts: exceção → flash error")
+    void reloadPrompts_excecao() {
+        doThrow(new RuntimeException("Falha ao recarregar prompts"))
+                .when(promptRegistryService)
+                .reload();
+
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        String view = controller.reloadPrompts(attrs);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> flashAttributes =
+                (Map<String, Object>) (Map<?, ?>) attrs.getFlashAttributes();
+
+        assertThat(view).isEqualTo("redirect:/admin-web");
+        verify(promptRegistryService).reload();
+        assertThat(flashAttributes)
+                .containsEntry("error", "Erro interno. Verifique os logs do servidor.");
     }
 
     // =========================================================================
@@ -1241,14 +1304,20 @@ class AdminWebControllerTest {
         verify(weeklyReminderService).sendReminderToChat(123L);
     }
 
-    // =========================================================================
-    // HELPERS DE ASSERT — imports faltantes
-    // =========================================================================
+    @Test
+    @DisplayName(
+            "POST /admin-web/reload-prompts - Deve recarregar os prompts e redirecionar para"
+                    + " /admin-web")
+    void shouldReloadPromptsAndRedirectToAdminWeb() throws Exception {
+        doNothing().when(promptRegistryService).reload();
 
-    // Este bloco existe apenas para lembrar que `assertThat` é do AssertJ
-    // Se não estiver no classpath, adicione:
-    // import static org.assertj.core.api.Assertions.assertThat;
-    // import static org.mockito.Mockito.mockStatic;
-    // import static org.mockito.ArgumentMatchers.contains;
-    // import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+        mockMvc.perform(post("/admin-web/reload-prompts"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin-web"))
+                .andExpect(
+                        flash().attribute(
+                                        "success", "Prompts e personas recarregados com sucesso."));
+
+        verify(promptRegistryService).reload();
+    }
 }
