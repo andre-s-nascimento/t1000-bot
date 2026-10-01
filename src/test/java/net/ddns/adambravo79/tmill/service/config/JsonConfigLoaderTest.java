@@ -8,10 +8,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,154 +24,186 @@ import tools.jackson.databind.ObjectMapper;
 class JsonConfigLoaderTest {
 
     private JsonConfigLoader jsonConfigLoader;
-    private ObjectMapper objectMapper;
+    private Path localConfigFile;
+    private Path appConfigFile;
 
-    // DTO fictício para validação do mapeamento
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TestConfigRecord(String name, int version) {}
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
-        jsonConfigLoader = new JsonConfigLoader(objectMapper);
+        jsonConfigLoader = new JsonConfigLoader(new ObjectMapper());
     }
 
-    @Nested
-    @DisplayName("Cenários de Fallback e Prioridade")
-    class FallbackAndPriorityTests {
-
-        @Test
-        @DisplayName("Deve carregar da propriedade de override quando informada e existente")
-        void shouldLoadFromOverridePathWhenProvided(@TempDir Path tempDir) throws IOException {
-            // Arrange
-            Path overrideFile = tempDir.resolve("override-config.json");
-            String jsonContent =
-                    """
-                    {
-                        "name": "override-source",
-                        "version": 1
-                    }
-                    """;
-            Files.writeString(overrideFile, jsonContent);
-
-            // Act
-            Optional<TestConfigRecord> result =
-                    jsonConfigLoader.loadConfig(
-                            "unused-file.json",
-                            TestConfigRecord.class,
-                            overrideFile.toAbsolutePath().toString());
-
-            // Assert
-            assertThat(result).isPresent();
-            assertThat(result.get().name()).isEqualTo("override-source");
-            assertThat(result.get().version()).isEqualTo(1);
+    @AfterEach
+    void cleanupConfigFiles() throws IOException {
+        if (localConfigFile != null) {
+            Files.deleteIfExists(localConfigFile);
         }
 
-        @Test
-        @DisplayName(
-                "Deve carregar do classpath quando o arquivo não existir nos diretórios externos")
-        void shouldFallbackToClasspathWhenExternalFilesDoNotExist() {
-            // Act
-            Optional<TestConfigRecord> result =
-                    jsonConfigLoader.loadConfig(
-                            "non-existent-config-file.json", TestConfigRecord.class, null);
+        if (appConfigFile != null) {
+            Files.deleteIfExists(appConfigFile);
 
-            // Assert
-            assertThat(result).isEmpty();
-        }
+            Path appConfigDir = appConfigFile.getParent();
 
-        @Test
-        @DisplayName(
-                "Deve ignorar o overridePath se for nulo, em branco ou se o arquivo não existir")
-        void shouldIgnoreInvalidOverridePath(@TempDir Path tempDir) {
-            // Arrange
-            String nonExistentOverride =
-                    tempDir.resolve("ghost-file.json").toAbsolutePath().toString();
-
-            // Act
-            Optional<TestConfigRecord> result =
-                    jsonConfigLoader.loadConfig(
-                            "non-existent-file.json", TestConfigRecord.class, nonExistentOverride);
-
-            // Assert
-            assertThat(result).isEmpty();
+            if (appConfigDir != null) {
+                Files.deleteIfExists(appConfigDir);
+                Files.deleteIfExists(appConfigDir.getParent());
+            }
         }
     }
 
-    @Nested
-    @DisplayName("Cenários de Tratamento de Erro e Mapeamento")
-    class ErrorAndMappingTests {
+    @Test
+    @DisplayName("Override existente deve ter prioridade sobre as demais fontes")
+    void shouldLoadFromOverridePathWhenProvided(@TempDir Path tempDir) throws IOException {
 
-        @Test
-        @DisplayName(
-                "Deve lançar ConfigLoadException quando o arquivo contiver JSON sintaticamente"
-                        + " inválido")
-        void shouldThrowConfigLoadExceptionWhenJsonIsMalformed(@TempDir Path tempDir)
-                throws IOException {
-            // Arrange
-            Path invalidJsonFile = tempDir.resolve("invalid-config.json");
-            String malformedJson = "{ name: 'broken-json', version: }"; // JSON quebrado
-            Files.writeString(invalidJsonFile, malformedJson);
+        Path overrideFile = tempDir.resolve("override-config.json");
 
-            String overridePath = invalidJsonFile.toAbsolutePath().toString();
+        Files.writeString(overrideFile, "{\"name\":\"override-source\",\"version\":1}");
 
-            // Act & Assert
-            assertThatThrownBy(
-                            () ->
-                                    jsonConfigLoader.loadConfig(
-                                            "any-file.json", TestConfigRecord.class, overridePath))
-                    .isInstanceOf(ConfigLoadException.class)
-                    .hasMessageContaining("JSON malformado ou incompatível com o modelo")
-                    .hasFieldOrPropertyWithValue("resourcePath", overridePath);
+        Optional<TestConfigRecord> result =
+                jsonConfigLoader.loadConfig(
+                        uniqueFileName("unused"),
+                        TestConfigRecord.class,
+                        overrideFile.toAbsolutePath().toString());
+
+        assertThat(result).contains(new TestConfigRecord("override-source", 1));
+    }
+
+    @Test
+    @DisplayName("Deve carregar a configuração do diretório local ./config")
+    void shouldLoadFromLocalConfigDirectory() throws IOException {
+
+        String fileName = uniqueFileName("local");
+
+        Path configDir = Path.of("config");
+        Files.createDirectories(configDir);
+
+        localConfigFile = configDir.resolve(fileName);
+
+        Files.writeString(localConfigFile, "{\"name\":\"local-source\",\"version\":2}");
+
+        Optional<TestConfigRecord> result =
+                jsonConfigLoader.loadConfig(fileName, TestConfigRecord.class, null);
+
+        assertThat(result).contains(new TestConfigRecord("local-source", 2));
+    }
+
+    @Test
+    @DisplayName("Deve carregar a configuração do diretório /app/config quando existir")
+    void shouldLoadFromAppConfigDirectory() throws IOException {
+
+        String fileName = uniqueFileName("app");
+
+        Path configDir = Path.of("/app/config");
+
+        try {
+            Files.createDirectories(configDir);
+        } catch (IOException | SecurityException ex) {
+            /*
+             * Ambientes sandboxed podem não permitir criação de /app.
+             * Nesse caso o teste é simplesmente ignorado.
+             */
+            return;
         }
 
-        @Test
-        @DisplayName(
-                "Deve retornar Optional.empty() quando o arquivo não for encontrado em nenhuma das"
-                        + " 4 fontes")
-        void shouldReturnEmptyOptionalWhenConfigNotFoundAnywhere() {
-            // Act
-            Optional<TestConfigRecord> result =
-                    jsonConfigLoader.loadConfig(
-                            "file-that-does-not-exist-anywhere-12345.json",
-                            TestConfigRecord.class,
-                            null);
+        appConfigFile = configDir.resolve(fileName);
 
-            // Assert
-            assertThat(result).isEmpty();
-        }
+        Files.writeString(appConfigFile, "{\"name\":\"app-source\",\"version\":3}");
 
-        @Test
-        @DisplayName(
-                "Deve mapear corretamente para um Record/DTO anotado com propriedades"
-                        + " desconhecidas")
-        void shouldCorrectlyMapToAnnotatedRecordIgnoringUnknownProperties(@TempDir Path tempDir)
-                throws IOException {
-            // Arrange
-            Path configFile = tempDir.resolve("extra-fields-config.json");
-            String jsonWithExtraFields =
-                    """
-                    {
-                        "name": "mapped-record",
-                        "version": 42,
-                        "extraField": "should be ignored",
-                        "anotherUnmappedKey": 999
-                    }
-                    """;
-            Files.writeString(configFile, jsonWithExtraFields);
+        Optional<TestConfigRecord> result =
+                jsonConfigLoader.loadConfig(fileName, TestConfigRecord.class, null);
 
-            // Act
-            Optional<TestConfigRecord> result =
-                    jsonConfigLoader.loadConfig(
-                            "dummy.json",
-                            TestConfigRecord.class,
-                            configFile.toAbsolutePath().toString());
+        assertThat(result).contains(new TestConfigRecord("app-source", 3));
+    }
 
-            // Assert
-            assertThat(result).isPresent();
-            TestConfigRecord config = result.get();
-            assertThat(config.name()).isEqualTo("mapped-record");
-            assertThat(config.version()).isEqualTo(42);
-        }
+    @Test
+    @DisplayName("Deve carregar um JSON válido do classpath")
+    void shouldLoadFromClasspath() {
+
+        Optional<TestConfigRecord> result =
+                jsonConfigLoader.loadConfig(
+                        "config/test-config.json", TestConfigRecord.class, null);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().name()).isEqualTo("classpath-source");
+        assertThat(result.get().version()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("Deve encapsular erro de parse do classpath em ConfigLoadException")
+    void shouldThrowConfigLoadExceptionForInvalidClasspathMapping() {
+
+        assertThatThrownBy(
+                        () ->
+                                jsonConfigLoader.loadConfig(
+                                        "prompts/digest-personas.json", Integer.class, null))
+                .isInstanceOf(ConfigLoadException.class)
+                .hasMessageContaining("Erro ao ler JSON do classpath")
+                .hasFieldOrPropertyWithValue("resourcePath", "/prompts/digest-personas.json");
+    }
+
+    @Test
+    @DisplayName("Override inválido deve ser ignorado e permitir fallback")
+    void shouldIgnoreInvalidOverridePath(@TempDir Path tempDir) {
+
+        String nonExistentOverride = tempDir.resolve("ghost-file.json").toAbsolutePath().toString();
+
+        Optional<TestConfigRecord> result =
+                jsonConfigLoader.loadConfig(
+                        uniqueFileName("missing"), TestConfigRecord.class, nonExistentOverride);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("JSON inválido no override deve lançar ConfigLoadException")
+    void shouldThrowConfigLoadExceptionForMalformedOverride(@TempDir Path tempDir)
+            throws IOException {
+
+        Path invalidJsonFile = tempDir.resolve("invalid-config.json");
+
+        Files.writeString(invalidJsonFile, "{ name: 'broken-json', version: }");
+
+        assertThatThrownBy(
+                        () ->
+                                jsonConfigLoader.loadConfig(
+                                        "any-file.json",
+                                        TestConfigRecord.class,
+                                        invalidJsonFile.toAbsolutePath().toString()))
+                .isInstanceOf(ConfigLoadException.class)
+                .hasMessageContaining("JSON malformado ou incompatível com o modelo")
+                .hasFieldOrPropertyWithValue(
+                        "resourcePath", invalidJsonFile.toAbsolutePath().toString());
+    }
+
+    @Test
+    @DisplayName("Deve mapear propriedades conhecidas e ignorar propriedades extras")
+    void shouldCorrectlyMapToAnnotatedRecord(@TempDir Path tempDir) throws IOException {
+
+        Path configFile = tempDir.resolve("extra-fields-config.json");
+
+        Files.writeString(
+                configFile,
+                """
+                {
+                    "name": "mapped-record",
+                    "version": 42,
+                    "extraField": "ignored",
+                    "anotherUnmappedKey": 999
+                }
+                """);
+
+        Optional<TestConfigRecord> result =
+                jsonConfigLoader.loadConfig(
+                        "dummy.json",
+                        TestConfigRecord.class,
+                        configFile.toAbsolutePath().toString());
+
+        assertThat(result).contains(new TestConfigRecord("mapped-record", 42));
+    }
+
+    private static String uniqueFileName(String prefix) {
+        return "t1000-" + prefix + "-" + UUID.randomUUID() + ".json";
     }
 }

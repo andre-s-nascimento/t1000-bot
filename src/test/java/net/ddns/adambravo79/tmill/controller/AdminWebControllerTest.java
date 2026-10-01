@@ -1,3 +1,4 @@
+/* (c) 2026 | 30/09/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -802,6 +803,40 @@ class AdminWebControllerTest {
         mockMvc.perform(get("/admin-web/auto-response-rules"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalRules").value(5));
+    }
+
+    // =========================================================================
+    // RELOAD DE PROMPTS
+    // =========================================================================
+
+    @Test
+    @DisplayName("reloadPrompts: sucesso → recarrega e flash success")
+    void reloadPrompts_sucesso() {
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        String view = controller.reloadPrompts(attrs);
+
+        assertThat(view).isEqualTo("redirect:/admin-web");
+        verify(promptRegistryService).reload();
+        assertThat(attrs.getFlashAttributes().get("success"))
+                .isEqualTo("Prompts e personas recarregados com sucesso.");
+    }
+
+    @Test
+    @DisplayName("reloadPrompts: exceção → flash error")
+    void reloadPrompts_excecao() {
+        doThrow(new RuntimeException("Falha ao recarregar prompts"))
+                .when(promptRegistryService)
+                .reload();
+
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        String view = controller.reloadPrompts(attrs);
+
+        assertThat(view).isEqualTo("redirect:/admin-web");
+        verify(promptRegistryService).reload();
+        assertThat(attrs.getFlashAttributes().get("error"))
+                .isEqualTo("Erro interno. Verifique os logs do servidor.");
     }
 
     // =========================================================================
