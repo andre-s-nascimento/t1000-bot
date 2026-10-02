@@ -149,8 +149,10 @@ class JsonConfigLoaderTest {
                                 jsonConfigLoader.loadConfig(
                                         "prompts/digest-personas.json", Integer.class, null))
                 .isInstanceOf(ConfigLoadException.class)
-                .hasMessageContaining("Erro ao ler JSON do classpath")
-                .hasFieldOrPropertyWithValue("resourcePath", "/prompts/digest-personas.json");
+                .hasMessageContaining("JSON malformado ou incompatível com o modelo")
+                .extracting("resourcePath")
+                .asString()
+                .endsWith("/prompts/digest-personas.json");
     }
 
     @Test

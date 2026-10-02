@@ -246,6 +246,51 @@ class PromptRegistryServiceTest {
         service.reload();
     }
 
+    // =========================================================================
+    // getActivePersonaName
+    // =========================================================================
+
+    @Test
+    @DisplayName("getActivePersonaName deve retornar a persona configurada no JSON quando válida")
+    void shouldReturnActivePersonaWhenConfiguredAndValid() {
+        Map<String, Object> prompts = basePrompts();
+        prompts.put("activePersona", "T1000");
+        stubPrompts(prompts);
+
+        assertThat(service.getActivePersonaName()).isEqualTo("T1000");
+    }
+
+    @Test
+    @DisplayName(
+            "getActivePersonaName deve retornar o fallback 'ANALISTA' quando a chave estiver"
+                    + " ausente")
+    void shouldReturnFallbackAnalistaWhenActivePersonaIsMissing() {
+        Map<String, Object> prompts = basePrompts();
+        prompts.remove("activePersona");
+        stubPrompts(prompts);
+
+        assertThat(service.getActivePersonaName()).isEqualTo("ANALISTA");
+    }
+
+    @Test
+    @DisplayName(
+            "getActivePersonaName deve retornar o fallback 'ANALISTA' quando a persona estiver em"
+                    + " branco ou não for String")
+    void shouldReturnFallbackAnalistaWhenActivePersonaIsInvalidOrBlank() {
+        // Cenário 1: String em branco
+        Map<String, Object> prompts = basePrompts();
+        prompts.put("activePersona", "   ");
+        stubPrompts(prompts);
+
+        assertThat(service.getActivePersonaName()).isEqualTo("ANALISTA");
+
+        // Cenário 2: Tipo incompatível (ex: Integer)
+        prompts.put("activePersona", 12345);
+        stubPrompts(prompts);
+
+        assertThat(service.getActivePersonaName()).isEqualTo("ANALISTA");
+    }
+
     private static Map<String, Object> basePrompts() {
         Map<String, Object> persona = new HashMap<>();
         persona.put("systemPrompt", "Persona T1000");

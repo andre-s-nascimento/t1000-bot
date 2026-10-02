@@ -1,0 +1,9 @@
+{
+  "maxCharacters": 4000,
+  "minCharacters": 1500,
+  "rules": {
+    "introLine": "Bem-vindos a mais um episódio do Silas Cast.",
+    "closingLine": "E caso eu não veja vocês, bom dia, boa tarde e boa noite!",
+    "includeMediaRecommendations": false
+  }
+}
