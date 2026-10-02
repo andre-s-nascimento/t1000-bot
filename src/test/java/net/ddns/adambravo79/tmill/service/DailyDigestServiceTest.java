@@ -43,6 +43,7 @@ import net.ddns.adambravo79.tmill.exception.DigestGenerationException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
@@ -54,6 +55,7 @@ class DailyDigestServiceTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private MetricsService metricsService;
     @Mock private FeatureFlagAdminService featureFlags;
+    @Mock private PromptRegistryService promptRegistryService;
 
     @InjectMocks private DailyDigestService service;
 
@@ -67,7 +69,8 @@ class DailyDigestServiceTest {
         // Flag de digest habilitada por padrão em todos os testes.
         // lenient() evita UnnecessaryStubbingException nos testes que não consultam a flag.
         lenient().when(featureFlags.isEnabled("digest.enabled")).thenReturn(true);
-
+        // Persona padrão de fallback para os testes unitários
+        lenient().when(promptRegistryService.getActivePersonaName()).thenReturn("T1000");
         service.init();
     }
 

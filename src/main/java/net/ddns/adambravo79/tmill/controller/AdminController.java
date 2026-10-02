@@ -179,7 +179,7 @@ public class AdminController {
 
     @PostMapping("/test-weekly-reminder-showcase")
     public ResponseEntity<String> testWeeklyReminderShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         weeklyReminderService.sendReminderToChat(targetChatId);
         return ResponseEntity.ok("Lembrete semanal enviado para o chat " + targetChatId);
@@ -281,7 +281,7 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-showcase")
     public ResponseEntity<String> testWorldCupShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
@@ -292,7 +292,7 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-noon-showcase")
     public ResponseEntity<String> testWorldCupNoonShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
@@ -303,7 +303,7 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-evening-showcase")
     public ResponseEntity<String> testWorldCupEveningShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
@@ -314,7 +314,7 @@ public class AdminController {
 
     @PostMapping("/reload-worldcup-showcase")
     public ResponseEntity<String> reloadWorldCupShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         staticWorldCupService.reload();
@@ -342,8 +342,8 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-results-showcase")
     public ResponseEntity<String> testWorldCupResultsShowcase(
-            @RequestParam(defaultValue = "ontem") String dateParam,
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "dateParam", defaultValue = "ontem") String dateParam,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
@@ -480,10 +480,10 @@ public class AdminController {
 
     @PostMapping("/test-auto-response")
     public ResponseEntity<String> testAutoResponse(
-            @RequestParam(required = false) Long userId,
-            @RequestParam String message,
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(required = false) String time) {
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "time", required = false) String time) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("Parâmetro 'message' é obrigatório.");
@@ -510,9 +510,9 @@ public class AdminController {
 
     @GetMapping("/debug-auto-response")
     public ResponseEntity<Map<String, Object>> debugAutoResponse(
-            @RequestParam(required = false) Long userId,
-            @RequestParam String message,
-            @RequestParam(required = false) String time) {
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "time", required = false) String time) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest()
@@ -548,9 +548,9 @@ public class AdminController {
 
     @PostMapping("/fala-t1000")
     public ResponseEntity<String> falaT1000(
-            @RequestParam String message,
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(defaultValue = "HTML") String parseMode) {
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "parseMode", defaultValue = "HTML") String parseMode) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
@@ -615,7 +615,8 @@ public class AdminController {
 
     @PostMapping("/fala-t1000-tts")
     public ResponseEntity<String> falaT1000Tts(
-            @RequestParam String message, @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
@@ -698,7 +699,8 @@ public class AdminController {
     }
 
     @PostMapping("/birthdays/test/{day}/{month}")
-    public ResponseEntity<String> testBirthday(@PathVariable int day, @PathVariable int month) {
+    public ResponseEntity<String> testBirthday(
+            @PathVariable("day") int day, @PathVariable("month") int month) {
         if (day < 1 || day > 31 || month < 1 || month > 12) {
             return ResponseEntity.badRequest().body("❌ Dia/mês inválidos.");
         }
@@ -714,7 +716,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/birthdays/{userId}")
-    public ResponseEntity<String> deleteBirthday(@PathVariable long userId) {
+    public ResponseEntity<String> deleteBirthday(@PathVariable("userId") long userId) {
         int deleted = birthdayRepository.deleteByUserId(userId);
         if (deleted == 0) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -800,10 +802,10 @@ public class AdminController {
 
     @GetMapping("/test-podcast")
     public ResponseEntity<String> testPodcast(
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(required = false) String start,
-            @RequestParam(required = false) String end,
-            @RequestParam(required = false) Integer periodo) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "start", required = false) String start,
+            @RequestParam(value = "end", required = false) String end,
+            @RequestParam(value = "periodo", required = false) Integer periodo) {
 
         long targetChatId = (chatId != null) ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
 
@@ -892,7 +894,8 @@ public class AdminController {
     }
 
     @GetMapping("/test-podcast-latest")
-    public ResponseEntity<String> testPodcastLatest(@RequestParam(required = false) Long chatId) {
+    public ResponseEntity<String> testPodcastLatest(
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate startDate = endDate.minusDays(7);
         return testPodcast(chatId, startDate.toString(), endDate.toString(), null);
@@ -900,8 +903,8 @@ public class AdminController {
 
     @GetMapping("/test-podcast-days")
     public ResponseEntity<String> testPodcastDays(
-            @RequestParam(defaultValue = "7") int days,
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "days", defaultValue = "7") int days,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         if (days <= 0 || days > 30) {
             return ResponseEntity.badRequest().body("❌ O número de dias deve ser entre 1 e 30.");
@@ -914,7 +917,8 @@ public class AdminController {
 
     @PostMapping("/migrate-sqlite")
     public ResponseEntity<?> migrateFromSqlite(
-            @RequestParam(required = false, defaultValue = "false") boolean dryRun) {
+            @RequestParam(value = "dryRun", required = false, defaultValue = "false")
+                    boolean dryRun) {
         try {
             MigrationResult result = migrationService.migrateAll(dryRun);
             log.info(
@@ -957,7 +961,7 @@ public class AdminController {
     }
 
     @GetMapping("/debug/cache/{fileId}")
-    public ResponseEntity<?> debugCache(@PathVariable String fileId) {
+    public ResponseEntity<?> debugCache(@PathVariable("fileId") String fileId) {
         var entry = fileTranscriptionCacheService.get(fileId);
         if (entry == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -999,7 +1003,7 @@ public class AdminController {
      */
     @PostMapping(value = "/features/{key}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> toggleFeature(
-            @PathVariable String key, @RequestParam boolean enabled) {
+            @PathVariable("key") String key, @RequestParam(value = "enabled") boolean enabled) {
         try {
             boolean antes = featureFlagAdminService.isEnabled(key);
             featureFlagAdminService.toggle(key, enabled);

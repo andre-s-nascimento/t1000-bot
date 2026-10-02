@@ -58,7 +58,7 @@ class AdminControllerTest {
     private Resource emptyResource;
     private MockMvc mockMvc;
 
-    private static final long SHOWCASE_CHAT_ID = -5283244164L;
+    private static final long SHOWCASE_CHAT_ID = -1003703557250L;
 
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
@@ -261,7 +261,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Lembrete semanal enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
     }
@@ -464,7 +464,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Teste manual da Copa enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(worldCupSchedulerService).sendManualTestToChat(SHOWCASE_CHAT_ID);
     }
@@ -568,7 +568,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Envio do meio-dia da Copa enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(worldCupSchedulerService).sendNoonMatchesToChat(SHOWCASE_CHAT_ID);
     }
@@ -584,7 +584,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Envio da noite da Copa enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(worldCupSchedulerService).sendEveningMatchesToChat(SHOWCASE_CHAT_ID);
     }
@@ -1792,9 +1792,10 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/admin/test-worldcup-noon-showcase"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("-5283244164")));
+                .andExpect(
+                        content().string(org.hamcrest.Matchers.containsString("-1003703557250")));
 
-        verify(worldCupSchedulerService).sendNoonMatchesToChat(-5283244164L);
+        verify(worldCupSchedulerService).sendNoonMatchesToChat(-1003703557250L);
     }
 
     @Test
@@ -1804,9 +1805,10 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/admin/test-worldcup-evening-showcase"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("-5283244164")));
+                .andExpect(
+                        content().string(org.hamcrest.Matchers.containsString("-1003703557250")));
 
-        verify(worldCupSchedulerService).sendEveningMatchesToChat(-5283244164L);
+        verify(worldCupSchedulerService).sendEveningMatchesToChat(-1003703557250L);
     }
 
     @Test
@@ -1814,12 +1816,13 @@ class AdminControllerTest {
     void testWorldCupResultsShowcase_semChatId() throws Exception {
         doNothing()
                 .when(worldCupSchedulerService)
-                .sendResultsToChat(eq(-5283244164L), any(LocalDate.class));
+                .sendResultsToChat(eq(-1003703557250L), any(LocalDate.class));
 
         mockMvc.perform(post("/admin/test-worldcup-results-showcase").param("dateParam", "hoje"))
                 .andExpect(status().isOk());
 
-        verify(worldCupSchedulerService).sendResultsToChat(eq(-5283244164L), any(LocalDate.class));
+        verify(worldCupSchedulerService)
+                .sendResultsToChat(eq(-1003703557250L), any(LocalDate.class));
     }
 
     // -------------------------------------------------------------------------
