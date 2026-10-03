@@ -86,11 +86,11 @@ class PodcastScriptServiceTest {
 
         Mockito.when(
                         groqClient.chatCompletion(
-                                eq("System Prompt do Podcast Carregado"),
-                                eq("User Prompt Completo com: Áudio 1\n---\nÁudio 2"),
-                                eq("llama-model"),
-                                eq(0.7),
-                                eq(3000)))
+                                "System Prompt do Podcast Carregado",
+                                "User Prompt Completo com: Áudio 1\n---\nÁudio 2",
+                                "llama-model",
+                                0.7,
+                                3000))
                 .thenReturn("Roteiro Final do Podcast");
 
         String result = podcastScriptService.generateScript(start, end);
