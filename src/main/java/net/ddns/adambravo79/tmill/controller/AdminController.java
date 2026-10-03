@@ -80,6 +80,14 @@ import tools.jackson.databind.ObjectMapper;
 @Slf4j
 public class AdminController {
 
+    private static final String EASTER_EGG_FILE = "easter-egg.file";
+
+    private static final String DD_MM_YYYY = "dd/MM/yyyy";
+
+    private static final String AUTO_RESPONSE_FILE = "auto.response.file";
+
+    private static final String WORLDCUP_DATA_FILE = "worldcup.data.file";
+
     private static final String MSG_ERRO_INTERNO =
             "Erro interno do servidor. Contate o administrador.";
 
@@ -402,11 +410,11 @@ public class AdminController {
         props.put("digest.enabled", environment.getProperty("digest.enabled"));
         props.put("digest.chat-ids", environment.getProperty("digest.chat-ids"));
         props.put("worldcup.enabled", environment.getProperty("worldcup.enabled"));
-        props.put("worldcup.data.file", environment.getProperty("worldcup.data.file"));
+        props.put(WORLDCUP_DATA_FILE, environment.getProperty(WORLDCUP_DATA_FILE));
         props.put("worldcup.update.enabled", environment.getProperty("worldcup.update.enabled"));
         props.put("auto.response.enabled", environment.getProperty("auto.response.enabled"));
-        props.put("auto.response.file", environment.getProperty("auto.response.file"));
-        props.put("easter-egg.file", environment.getProperty("easter-egg.file"));
+        props.put(AUTO_RESPONSE_FILE, environment.getProperty(AUTO_RESPONSE_FILE));
+        props.put(EASTER_EGG_FILE, environment.getProperty(EASTER_EGG_FILE));
         props.put(
                 "weekly.reminder.media-file",
                 environment.getProperty("weekly.reminder.media-file"));
@@ -425,16 +433,14 @@ public class AdminController {
         List<ConfigFile> files =
                 List.of(
                         new ConfigFile(
-                                "easter-eggs.json",
-                                "easter-egg.file",
-                                "classpath:easter-eggs.json"),
+                                "easter-eggs.json", EASTER_EGG_FILE, "classpath:easter-eggs.json"),
                         new ConfigFile(
                                 "auto-responses.json",
-                                "auto.response.file",
+                                AUTO_RESPONSE_FILE,
                                 "classpath:auto-responses.json"),
                         new ConfigFile(
                                 "worldcup2026.json",
-                                "worldcup.data.file",
+                                WORLDCUP_DATA_FILE,
                                 "classpath:worldcup2026.json"));
 
         for (ConfigFile file : files) {
@@ -839,10 +845,37 @@ public class AdminController {
                     .body("❌ chatId inválido. Configure um chatId ou use o padrão.");
         }
 
-        final long finalChatId = targetChatId;
-        final LocalDate finalStart = startDate;
-        final LocalDate finalEnd = endDate;
+        triggerAsyncPodcast(targetChatId, startDate, endDate);
 
+        String responseMsg =
+                String.format(
+                        """
+                        🔄 Podcast agendado para o período de %s a %s.
+                        📤 Será enviado para o chat %d.
+                        ⏳ O processamento pode levar alguns minutos.
+                        """,
+                        startDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY)),
+                        endDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY)),
+                        targetChatId);
+
+        try {
+            telegramFacade.enviarMensagemHtml(
+                    targetChatId,
+                    "<b>🎙️ Podcast solicitado manualmente</b>\n\n"
+                            + "📅 Período: "
+                            + startDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY))
+                            + " a "
+                            + endDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY))
+                            + "\n"
+                            + "⏳ Aguarde, estou gerando o áudio...");
+        } catch (Exception e) {
+            log.warn("Não foi possível enviar confirmação para o chat {}", targetChatId);
+        }
+
+        return ResponseEntity.accepted().body(responseMsg);
+    }
+
+    private void triggerAsyncPodcast(long finalChatId, LocalDate finalStart, LocalDate finalEnd) {
         CompletableFuture.runAsync(
                 () -> {
                     try {
@@ -866,31 +899,6 @@ public class AdminController {
                         }
                     }
                 });
-
-        String responseMsg =
-                String.format(
-                        "🔄 Podcast agendado para o período de %s a %s.\n"
-                                + "📤 Será enviado para o chat %d.\n"
-                                + "⏳ O processamento pode levar alguns minutos.",
-                        finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                        finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                        finalChatId);
-
-        try {
-            telegramFacade.enviarMensagemHtml(
-                    finalChatId,
-                    "<b>🎙️ Podcast solicitado manualmente</b>\n\n"
-                            + "📅 Período: "
-                            + finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                            + " a "
-                            + finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                            + "\n"
-                            + "⏳ Aguarde, estou gerando o áudio...");
-        } catch (Exception e) {
-            log.warn("Não foi possível enviar confirmação para o chat {}", finalChatId);
-        }
-
-        return ResponseEntity.accepted().body(responseMsg);
     }
 
     @GetMapping("/test-podcast-latest")
@@ -916,7 +924,7 @@ public class AdminController {
     // ========================= MIGRAÇÃO =========================
 
     @PostMapping("/migrate-sqlite")
-    public ResponseEntity<?> migrateFromSqlite(
+    public ResponseEntity<Object> migrateFromSqlite(
             @RequestParam(value = "dryRun", required = false, defaultValue = "false")
                     boolean dryRun) {
         try {
@@ -946,7 +954,7 @@ public class AdminController {
 
     @SuppressWarnings("null")
     @GetMapping("/migrate-sqlite/preview")
-    public ResponseEntity<?> previewMigration() {
+    public ResponseEntity<Map<String, Object>> previewMigration() {
         try {
             Map<String, Integer> counts = migrationService.previewCounts();
             Map<String, Object> result = new LinkedHashMap<>();
@@ -961,7 +969,7 @@ public class AdminController {
     }
 
     @GetMapping("/debug/cache/{fileId}")
-    public ResponseEntity<?> debugCache(@PathVariable("fileId") String fileId) {
+    public ResponseEntity<Map<String, Object>> debugCache(@PathVariable("fileId") String fileId) {
         var entry = fileTranscriptionCacheService.get(fileId);
         if (entry == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

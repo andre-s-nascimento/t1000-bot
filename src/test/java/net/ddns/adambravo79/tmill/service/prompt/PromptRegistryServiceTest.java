@@ -262,33 +262,33 @@ class PromptRegistryServiceTest {
 
     @Test
     @DisplayName(
-            "getActivePersonaName deve retornar o fallback 'ANALISTA' quando a chave estiver"
+            "getActivePersonaName deve retornar o fallback 'T1000' quando a chave estiver"
                     + " ausente")
-    void shouldReturnFallbackAnalistaWhenActivePersonaIsMissing() {
+    void shouldReturnFallbackT1000WhenActivePersonaIsMissing() {
         Map<String, Object> prompts = basePrompts();
         prompts.remove("activePersona");
         stubPrompts(prompts);
 
-        assertThat(service.getActivePersonaName()).isEqualTo("ANALISTA");
+        assertThat(service.getActivePersonaName()).isEqualTo("T1000");
     }
 
     @Test
     @DisplayName(
-            "getActivePersonaName deve retornar o fallback 'ANALISTA' quando a persona estiver em"
+            "getActivePersonaName deve retornar o fallback 'T1000' quando a persona estiver em"
                     + " branco ou não for String")
-    void shouldReturnFallbackAnalistaWhenActivePersonaIsInvalidOrBlank() {
+    void shouldReturnFallbackT1000WhenActivePersonaIsInvalidOrBlank() {
         // Cenário 1: String em branco
         Map<String, Object> prompts = basePrompts();
         prompts.put("activePersona", "   ");
         stubPrompts(prompts);
 
-        assertThat(service.getActivePersonaName()).isEqualTo("ANALISTA");
+        assertThat(service.getActivePersonaName()).isEqualTo("T1000");
 
         // Cenário 2: Tipo incompatível (ex: Integer)
         prompts.put("activePersona", 12345);
         stubPrompts(prompts);
 
-        assertThat(service.getActivePersonaName()).isEqualTo("ANALISTA");
+        assertThat(service.getActivePersonaName()).isEqualTo("T1000");
     }
 
     private static Map<String, Object> basePrompts() {

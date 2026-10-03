@@ -15,7 +15,6 @@ class DigestPersonaTest {
         assertThat(DigestPersona.T1000.getId()).isEqualTo("T1000");
         assertThat(DigestPersona.BICENTENNIAL.getId()).isEqualTo("BICENTENNIAL");
         assertThat(DigestPersona.MATRIX_ARCHITECT.getId()).isEqualTo("MATRIX_ARCHITECT");
-        assertThat(DigestPersona.ANALISTA.getId()).isEqualTo("ANALISTA");
     }
 
     @Test
@@ -27,10 +26,10 @@ class DigestPersonaTest {
     }
 
     @Test
-    @DisplayName("Deve retornar ANALISTA como fallback quando name for nulo ou em branco")
-    void shouldFallbackToAnalistaWhenNameIsBlank() {
-        assertThat(DigestPersona.fromString(null)).isEqualTo(DigestPersona.ANALISTA);
-        assertThat(DigestPersona.fromString("   ")).isEqualTo(DigestPersona.ANALISTA);
+    @DisplayName("Deve retornar T1000 como fallback quando name for nulo ou em branco")
+    void shouldFallbackToT1000WhenNameIsBlank() {
+        assertThat(DigestPersona.fromString(null)).isEqualTo(DigestPersona.T1000);
+        assertThat(DigestPersona.fromString("   ")).isEqualTo(DigestPersona.T1000);
     }
 
     @Test

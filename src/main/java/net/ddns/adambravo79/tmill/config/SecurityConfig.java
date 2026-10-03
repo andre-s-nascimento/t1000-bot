@@ -89,7 +89,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @SuppressWarnings("java:S4502")
+    @SuppressWarnings({"java:S4502", "null"})
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         // ===================== MODO DEV (sem autenticação) =====================

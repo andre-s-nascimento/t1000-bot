@@ -19,7 +19,7 @@ public class DigestPromptFactory {
      * Obtém o System Prompt configurado para uma instância de DigestPersona e o período indicados.
      */
     public String buildSystemPrompt(DigestPersona persona, String periodLabel) {
-        String personaName = (persona != null) ? persona.getId() : "ANALISTA";
+        String personaName = (persona != null) ? persona.getId() : "T1000";
         return buildSystemPrompt(personaName, periodLabel);
     }
 
@@ -28,7 +28,7 @@ public class DigestPromptFactory {
      */
     public String buildSystemPrompt(String personaName, String periodLabel) {
         if (personaName == null || personaName.isBlank()) {
-            return promptRegistryService.getDigestSystemPrompt("ANALISTA", periodLabel);
+            return promptRegistryService.getDigestSystemPrompt("T1000", periodLabel);
         }
         return promptRegistryService.getDigestSystemPrompt(personaName, periodLabel);
     }

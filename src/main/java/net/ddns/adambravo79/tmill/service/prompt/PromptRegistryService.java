@@ -135,14 +135,14 @@ public class PromptRegistryService {
 
     /**
      * Obtém a persona ativa definida no arquivo JSON.
-     * Caso não definida, retorna o fallback "ANALISTA".
+     * Caso não definida, retorna o fallback "T1000".
      */
     public String getActivePersonaName() {
         Object active = promptCache.get("activePersona");
         if (active instanceof String personaName && !personaName.isBlank()) {
             return personaName;
         }
-        return "ANALISTA";
+        return "T1000";
     }
 
     /**

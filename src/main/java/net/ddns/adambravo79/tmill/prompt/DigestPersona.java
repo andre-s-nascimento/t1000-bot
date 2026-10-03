@@ -12,7 +12,6 @@ public record DigestPersona(String id) {
     public static final DigestPersona T1000 = new DigestPersona("T1000");
     public static final DigestPersona BICENTENNIAL = new DigestPersona("BICENTENNIAL");
     public static final DigestPersona MATRIX_ARCHITECT = new DigestPersona("MATRIX_ARCHITECT");
-    public static final DigestPersona ANALISTA = new DigestPersona("ANALISTA");
 
     /**
      * Compact Constructor: valida e sanitiza o ID.
@@ -33,11 +32,11 @@ public record DigestPersona(String id) {
 
     /**
      * Resolve ou cria uma instância de DigestPersona a partir de uma String.
-     * Caso a string seja nula ou em branco, retorna a persona fallback (ANALISTA).
+     * Caso a string seja nula ou em branco, retorna a persona fallback (T1000).
      */
     public static DigestPersona fromString(String name) {
         if (name == null || name.isBlank()) {
-            return ANALISTA;
+            return T1000;
         }
         return new DigestPersona(name);
     }
