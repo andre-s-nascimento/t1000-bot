@@ -30,7 +30,7 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>{@code auto.response.enabled} — respostas automáticas (editável)
  *   <li>{@code digest.enabled} — digest diário (editável)
  *   <li>{@code worldcup.update.enabled} — atualização automática do JSON da Copa (editável)
- *   <li>{@code prompts.external.enabled} — uso de prompts e personas externos via JSON (editável)
+ *   <li>{@code prompts.external.enabled} — uso de prompts e personas externos via JSON (read-only)
  *   <li>{@code migration.enabled} — migração SQLite (read-only)
  * </ul>
  */
@@ -53,8 +53,6 @@ public class FeatureFlagAdminService {
                 "prompts.external.enabled",
                 false,
                 "Uso de prompts e personas externalizados em JSON");
-
-        // Read-only — requer restart
         registerBoolReadOnly(
                 "migration.enabled", false, "Migração SQLite → Postgres/Mongo (requer restart)");
 
