@@ -166,6 +166,7 @@ sonar {
 tasks.withType(JavaCompile).configureEach {
     options.fork = true
     options.forkOptions.memoryMaximumSize = '256m'
+    options.compilerArgs << '-parameters'
 }
 
 // ============================================================================

@@ -47,7 +47,7 @@ public final class AdminUtils {
     // =========================================================================
 
     /** Canal de showcase — usado como destino padrão em ações manuais. */
-    public static final long SHOWCASE_CHAT_ID = -5283244164L;
+    public static final long SHOWCASE_CHAT_ID = -1003703557250L;
 
     /** Timezone de negócio (Brasília). */
     public static final String BRAZIL_ZONE = "America/Sao_Paulo";

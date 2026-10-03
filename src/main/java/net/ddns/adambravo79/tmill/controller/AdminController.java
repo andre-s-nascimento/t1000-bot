@@ -80,6 +80,14 @@ import tools.jackson.databind.ObjectMapper;
 @Slf4j
 public class AdminController {
 
+    private static final String EASTER_EGG_FILE = "easter-egg.file";
+
+    private static final String DD_MM_YYYY = "dd/MM/yyyy";
+
+    private static final String AUTO_RESPONSE_FILE = "auto.response.file";
+
+    private static final String WORLDCUP_DATA_FILE = "worldcup.data.file";
+
     private static final String MSG_ERRO_INTERNO =
             "Erro interno do servidor. Contate o administrador.";
 
@@ -179,7 +187,7 @@ public class AdminController {
 
     @PostMapping("/test-weekly-reminder-showcase")
     public ResponseEntity<String> testWeeklyReminderShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         weeklyReminderService.sendReminderToChat(targetChatId);
         return ResponseEntity.ok("Lembrete semanal enviado para o chat " + targetChatId);
@@ -281,7 +289,7 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-showcase")
     public ResponseEntity<String> testWorldCupShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
@@ -292,7 +300,7 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-noon-showcase")
     public ResponseEntity<String> testWorldCupNoonShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
@@ -303,7 +311,7 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-evening-showcase")
     public ResponseEntity<String> testWorldCupEveningShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
@@ -314,7 +322,7 @@ public class AdminController {
 
     @PostMapping("/reload-worldcup-showcase")
     public ResponseEntity<String> reloadWorldCupShowcase(
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         staticWorldCupService.reload();
@@ -342,8 +350,8 @@ public class AdminController {
 
     @PostMapping("/test-worldcup-results-showcase")
     public ResponseEntity<String> testWorldCupResultsShowcase(
-            @RequestParam(defaultValue = "ontem") String dateParam,
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "dateParam", defaultValue = "ontem") String dateParam,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
         if (!worldcupEnabled) {
@@ -402,11 +410,11 @@ public class AdminController {
         props.put("digest.enabled", environment.getProperty("digest.enabled"));
         props.put("digest.chat-ids", environment.getProperty("digest.chat-ids"));
         props.put("worldcup.enabled", environment.getProperty("worldcup.enabled"));
-        props.put("worldcup.data.file", environment.getProperty("worldcup.data.file"));
+        props.put(WORLDCUP_DATA_FILE, environment.getProperty(WORLDCUP_DATA_FILE));
         props.put("worldcup.update.enabled", environment.getProperty("worldcup.update.enabled"));
         props.put("auto.response.enabled", environment.getProperty("auto.response.enabled"));
-        props.put("auto.response.file", environment.getProperty("auto.response.file"));
-        props.put("easter-egg.file", environment.getProperty("easter-egg.file"));
+        props.put(AUTO_RESPONSE_FILE, environment.getProperty(AUTO_RESPONSE_FILE));
+        props.put(EASTER_EGG_FILE, environment.getProperty(EASTER_EGG_FILE));
         props.put(
                 "weekly.reminder.media-file",
                 environment.getProperty("weekly.reminder.media-file"));
@@ -425,16 +433,14 @@ public class AdminController {
         List<ConfigFile> files =
                 List.of(
                         new ConfigFile(
-                                "easter-eggs.json",
-                                "easter-egg.file",
-                                "classpath:easter-eggs.json"),
+                                "easter-eggs.json", EASTER_EGG_FILE, "classpath:easter-eggs.json"),
                         new ConfigFile(
                                 "auto-responses.json",
-                                "auto.response.file",
+                                AUTO_RESPONSE_FILE,
                                 "classpath:auto-responses.json"),
                         new ConfigFile(
                                 "worldcup2026.json",
-                                "worldcup.data.file",
+                                WORLDCUP_DATA_FILE,
                                 "classpath:worldcup2026.json"));
 
         for (ConfigFile file : files) {
@@ -480,10 +486,10 @@ public class AdminController {
 
     @PostMapping("/test-auto-response")
     public ResponseEntity<String> testAutoResponse(
-            @RequestParam(required = false) Long userId,
-            @RequestParam String message,
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(required = false) String time) {
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "time", required = false) String time) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("Parâmetro 'message' é obrigatório.");
@@ -510,9 +516,9 @@ public class AdminController {
 
     @GetMapping("/debug-auto-response")
     public ResponseEntity<Map<String, Object>> debugAutoResponse(
-            @RequestParam(required = false) Long userId,
-            @RequestParam String message,
-            @RequestParam(required = false) String time) {
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "time", required = false) String time) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest()
@@ -548,9 +554,9 @@ public class AdminController {
 
     @PostMapping("/fala-t1000")
     public ResponseEntity<String> falaT1000(
-            @RequestParam String message,
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(defaultValue = "HTML") String parseMode) {
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "parseMode", defaultValue = "HTML") String parseMode) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
@@ -615,7 +621,8 @@ public class AdminController {
 
     @PostMapping("/fala-t1000-tts")
     public ResponseEntity<String> falaT1000Tts(
-            @RequestParam String message, @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
@@ -698,7 +705,8 @@ public class AdminController {
     }
 
     @PostMapping("/birthdays/test/{day}/{month}")
-    public ResponseEntity<String> testBirthday(@PathVariable int day, @PathVariable int month) {
+    public ResponseEntity<String> testBirthday(
+            @PathVariable("day") int day, @PathVariable("month") int month) {
         if (day < 1 || day > 31 || month < 1 || month > 12) {
             return ResponseEntity.badRequest().body("❌ Dia/mês inválidos.");
         }
@@ -714,7 +722,7 @@ public class AdminController {
     }
 
     @DeleteMapping("/birthdays/{userId}")
-    public ResponseEntity<String> deleteBirthday(@PathVariable long userId) {
+    public ResponseEntity<String> deleteBirthday(@PathVariable("userId") long userId) {
         int deleted = birthdayRepository.deleteByUserId(userId);
         if (deleted == 0) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -800,10 +808,10 @@ public class AdminController {
 
     @GetMapping("/test-podcast")
     public ResponseEntity<String> testPodcast(
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(required = false) String start,
-            @RequestParam(required = false) String end,
-            @RequestParam(required = false) Integer periodo) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "start", required = false) String start,
+            @RequestParam(value = "end", required = false) String end,
+            @RequestParam(value = "periodo", required = false) Integer periodo) {
 
         long targetChatId = (chatId != null) ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
 
@@ -837,10 +845,37 @@ public class AdminController {
                     .body("❌ chatId inválido. Configure um chatId ou use o padrão.");
         }
 
-        final long finalChatId = targetChatId;
-        final LocalDate finalStart = startDate;
-        final LocalDate finalEnd = endDate;
+        triggerAsyncPodcast(targetChatId, startDate, endDate);
 
+        String responseMsg =
+                String.format(
+                        """
+                        🔄 Podcast agendado para o período de %s a %s.
+                        📤 Será enviado para o chat %d.
+                        ⏳ O processamento pode levar alguns minutos.
+                        """,
+                        startDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY)),
+                        endDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY)),
+                        targetChatId);
+
+        try {
+            telegramFacade.enviarMensagemHtml(
+                    targetChatId,
+                    "<b>🎙️ Podcast solicitado manualmente</b>\n\n"
+                            + "📅 Período: "
+                            + startDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY))
+                            + " a "
+                            + endDate.format(DateTimeFormatter.ofPattern(DD_MM_YYYY))
+                            + "\n"
+                            + "⏳ Aguarde, estou gerando o áudio...");
+        } catch (Exception e) {
+            log.warn("Não foi possível enviar confirmação para o chat {}", targetChatId);
+        }
+
+        return ResponseEntity.accepted().body(responseMsg);
+    }
+
+    private void triggerAsyncPodcast(long finalChatId, LocalDate finalStart, LocalDate finalEnd) {
         CompletableFuture.runAsync(
                 () -> {
                     try {
@@ -864,35 +899,11 @@ public class AdminController {
                         }
                     }
                 });
-
-        String responseMsg =
-                String.format(
-                        "🔄 Podcast agendado para o período de %s a %s.\n"
-                                + "📤 Será enviado para o chat %d.\n"
-                                + "⏳ O processamento pode levar alguns minutos.",
-                        finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                        finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                        finalChatId);
-
-        try {
-            telegramFacade.enviarMensagemHtml(
-                    finalChatId,
-                    "<b>🎙️ Podcast solicitado manualmente</b>\n\n"
-                            + "📅 Período: "
-                            + finalStart.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                            + " a "
-                            + finalEnd.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                            + "\n"
-                            + "⏳ Aguarde, estou gerando o áudio...");
-        } catch (Exception e) {
-            log.warn("Não foi possível enviar confirmação para o chat {}", finalChatId);
-        }
-
-        return ResponseEntity.accepted().body(responseMsg);
     }
 
     @GetMapping("/test-podcast-latest")
-    public ResponseEntity<String> testPodcastLatest(@RequestParam(required = false) Long chatId) {
+    public ResponseEntity<String> testPodcastLatest(
+            @RequestParam(value = "chatId", required = false) Long chatId) {
         LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate startDate = endDate.minusDays(7);
         return testPodcast(chatId, startDate.toString(), endDate.toString(), null);
@@ -900,8 +911,8 @@ public class AdminController {
 
     @GetMapping("/test-podcast-days")
     public ResponseEntity<String> testPodcastDays(
-            @RequestParam(defaultValue = "7") int days,
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "days", defaultValue = "7") int days,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         if (days <= 0 || days > 30) {
             return ResponseEntity.badRequest().body("❌ O número de dias deve ser entre 1 e 30.");
@@ -913,8 +924,9 @@ public class AdminController {
     // ========================= MIGRAÇÃO =========================
 
     @PostMapping("/migrate-sqlite")
-    public ResponseEntity<?> migrateFromSqlite(
-            @RequestParam(required = false, defaultValue = "false") boolean dryRun) {
+    public ResponseEntity<Object> migrateFromSqlite(
+            @RequestParam(value = "dryRun", required = false, defaultValue = "false")
+                    boolean dryRun) {
         try {
             MigrationResult result = migrationService.migrateAll(dryRun);
             log.info(
@@ -942,7 +954,7 @@ public class AdminController {
 
     @SuppressWarnings("null")
     @GetMapping("/migrate-sqlite/preview")
-    public ResponseEntity<?> previewMigration() {
+    public ResponseEntity<Map<String, Object>> previewMigration() {
         try {
             Map<String, Integer> counts = migrationService.previewCounts();
             Map<String, Object> result = new LinkedHashMap<>();
@@ -957,7 +969,7 @@ public class AdminController {
     }
 
     @GetMapping("/debug/cache/{fileId}")
-    public ResponseEntity<?> debugCache(@PathVariable String fileId) {
+    public ResponseEntity<Map<String, Object>> debugCache(@PathVariable("fileId") String fileId) {
         var entry = fileTranscriptionCacheService.get(fileId);
         if (entry == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -999,7 +1011,7 @@ public class AdminController {
      */
     @PostMapping(value = "/features/{key}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> toggleFeature(
-            @PathVariable String key, @RequestParam boolean enabled) {
+            @PathVariable("key") String key, @RequestParam(value = "enabled") boolean enabled) {
         try {
             boolean antes = featureFlagAdminService.isEnabled(key);
             featureFlagAdminService.toggle(key, enabled);

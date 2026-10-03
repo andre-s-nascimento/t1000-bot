@@ -28,7 +28,8 @@ import net.ddns.adambravo79.tmill.model.Choice;
 import net.ddns.adambravo79.tmill.model.Message;
 import net.ddns.adambravo79.tmill.model.TranscriptionResponse;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
-import net.ddns.adambravo79.tmill.prompt.DigestPromptFactory;
+import net.ddns.adambravo79.tmill.service.digest.DigestPromptFactory;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 
 @ExtendWith(MockitoExtension.class)
 class GroqClientTest {
@@ -37,13 +38,14 @@ class GroqClientTest {
     @Mock private RestClient.RequestBodyUriSpec uriSpec;
     @Mock private RestClient.RequestBodySpec bodySpec;
     @Mock private RestClient.ResponseSpec responseSpec;
+    @Mock private PromptRegistryService promptRegistryService;
 
     private DigestPromptFactory promptFactory;
     private GroqClient groqClient;
 
     @BeforeEach
     void setUp() {
-        promptFactory = new DigestPromptFactory();
+        promptFactory = new DigestPromptFactory(promptRegistryService);
         groqClient = new GroqClient(restClient, 5000, promptFactory);
 
         ReflectionTestUtils.setField(groqClient, "transcriptionModel", "whisper-large-v3");
@@ -348,7 +350,7 @@ class GroqClientTest {
                         10000,
                         Duration.ofSeconds(5),
                         Duration.ofSeconds(30),
-                        new DigestPromptFactory());
+                        new DigestPromptFactory(promptRegistryService));
         assertThat(client).isNotNull();
     }
 }

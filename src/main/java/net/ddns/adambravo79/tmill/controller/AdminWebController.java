@@ -93,6 +93,9 @@ public class AdminWebController {
     // CONSTANTES
     // =========================================================================
 
+    private static final String PARAMETRO_MESSAGE_OBRIGATORIO =
+            "❌ Parâmetro 'message' é obrigatório.";
+
     private static final String MSG_ERRO_INTERNO = "Erro interno. Verifique os logs do servidor.";
 
     private static final String COPA_DESABILITADA = "Copa desabilitada.";
@@ -206,12 +209,12 @@ public class AdminWebController {
     @PostMapping("/fala-t1000")
     @ResponseBody
     public ResponseEntity<String> falaT1000(
-            @RequestParam String message,
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(defaultValue = "HTML") String parseMode) {
+            @RequestParam("message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "parseMode", defaultValue = "HTML") String parseMode) {
 
         if (message == null || message.isBlank()) {
-            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+            return ResponseEntity.badRequest().body(PARAMETRO_MESSAGE_OBRIGATORIO);
         }
 
         long targetChatId = resolveTargetChatId(chatId);
@@ -242,11 +245,11 @@ public class AdminWebController {
     @PostMapping("/fala-t1000-tts")
     @ResponseBody
     public ResponseEntity<String> falaT1000Tts(
-            @RequestParam(required = false) String message,
-            @RequestParam(required = false) Long chatId) {
+            @RequestParam(value = "message", required = false) String message,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
 
         if (message == null || message.isBlank()) {
-            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+            return ResponseEntity.badRequest().body(PARAMETRO_MESSAGE_OBRIGATORIO);
         }
 
         long targetChatId = resolveTargetChatId(chatId);
@@ -356,7 +359,8 @@ public class AdminWebController {
 
     @PostMapping("/test-worldcup-showcase")
     public String testWorldCupShowcase(
-            @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
         if (!worldcupEnabled) {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
             return REDIRECT_ADMIN_WEB;
@@ -381,7 +385,8 @@ public class AdminWebController {
 
     @PostMapping("/test-worldcup-noon-showcase")
     public String testWorldCupNoonShowcase(
-            @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
         if (!worldcupEnabled) {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
             return REDIRECT_ADMIN_WEB;
@@ -406,7 +411,8 @@ public class AdminWebController {
 
     @PostMapping("/test-worldcup-evening-showcase")
     public String testWorldCupEveningShowcase(
-            @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
         if (!worldcupEnabled) {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
             return REDIRECT_ADMIN_WEB;
@@ -427,7 +433,8 @@ public class AdminWebController {
 
     @PostMapping("/reload-worldcup-showcase")
     public String reloadWorldCupShowcase(
-            @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
         long targetChatId = resolveTargetChatId(chatId);
         staticWorldCupService.reload();
 
@@ -448,8 +455,8 @@ public class AdminWebController {
 
     @PostMapping("/test-worldcup-results")
     public String testWorldCupResults(
-            @RequestParam(defaultValue = "ontem") String dateParam,
-            @RequestParam(required = false) Long chatId,
+            @RequestParam(value = "dateParam", defaultValue = "ontem") String dateParam,
+            @RequestParam(value = "chatId", required = false) Long chatId,
             RedirectAttributes redirectAttrs) {
         if (!worldcupEnabled) {
             redirectAttrs.addFlashAttribute(ERROR, COPA_DESABILITADA);
@@ -486,9 +493,9 @@ public class AdminWebController {
 
     @PostMapping("/custom-digest")
     public String customDigest(
-            @RequestParam String start,
-            @RequestParam String end,
-            @RequestParam(required = false) Long chatId,
+            @RequestParam(value = "start") String start,
+            @RequestParam(value = "end") String end,
+            @RequestParam(value = "chatId", required = false) Long chatId,
             RedirectAttributes redirectAttrs) {
         try {
             LocalDate startDate = LocalDate.parse(start);
@@ -535,7 +542,8 @@ public class AdminWebController {
 
     @PostMapping("/test-weekly-reminder-showcase")
     public String testWeeklyReminderShowcase(
-            @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
         long targetChatId = resolveTargetChatId(chatId);
         weeklyReminderService.sendReminderToChat(targetChatId);
         redirectAttrs.addFlashAttribute(
@@ -550,13 +558,13 @@ public class AdminWebController {
     @PostMapping("/test-auto-response")
     @ResponseBody
     public ResponseEntity<String> testAutoResponse(
-            @RequestParam(required = false) Long userId,
-            @RequestParam String message,
-            @RequestParam(required = false) Long chatId,
-            @RequestParam(required = false) String time) {
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            @RequestParam(value = "time", required = false) String time) {
 
         if (message == null || message.isBlank()) {
-            return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
+            return ResponseEntity.badRequest().body(PARAMETRO_MESSAGE_OBRIGATORIO);
         }
 
         long targetChatId = resolveTargetChatId(chatId);
@@ -605,9 +613,9 @@ public class AdminWebController {
     @GetMapping("/debug-auto-response")
     @ResponseBody
     public Map<String, Object> debugAutoResponse(
-            @RequestParam(required = false) Long userId,
-            @RequestParam String message,
-            @RequestParam(required = false) String time) {
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "message") String message,
+            @RequestParam(value = "time", required = false) String time) {
 
         LocalTime simulatedTime = AdminUtils.parseTime(time);
         Optional<AutoResponseOverride> responseOpt =
@@ -684,9 +692,9 @@ public class AdminWebController {
 
     @PostMapping("/test-podcast")
     public String testPodcast(
-            @RequestParam(required = false) String start,
-            @RequestParam(required = false) String end,
-            @RequestParam(required = false) Long chatId,
+            @RequestParam(value = "start", required = false) String start,
+            @RequestParam(value = "end", required = false) String end,
+            @RequestParam(value = "chatId", required = false) Long chatId,
             RedirectAttributes redirectAttrs) {
 
         LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
@@ -750,7 +758,8 @@ public class AdminWebController {
 
     @PostMapping("/test-podcast-latest")
     public String testPodcastLatest(
-            @RequestParam(required = false) Long chatId, RedirectAttributes redirectAttrs) {
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
         LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate startDate = endDate.minusDays(7);
         return testPodcast(startDate.toString(), endDate.toString(), chatId, redirectAttrs);
@@ -758,8 +767,8 @@ public class AdminWebController {
 
     @PostMapping("/test-podcast-days")
     public String testPodcastDays(
-            @RequestParam(defaultValue = "7") int days,
-            @RequestParam(required = false) Long chatId,
+            @RequestParam(value = "days", defaultValue = "7") int days,
+            @RequestParam(value = "chatId", required = false) Long chatId,
             RedirectAttributes redirectAttrs) {
 
         if (days <= 0 || days > 30) {
@@ -778,7 +787,9 @@ public class AdminWebController {
 
     @PostMapping("/test-birthday")
     public String testBirthday(
-            @RequestParam int day, @RequestParam int month, RedirectAttributes redirectAttrs) {
+            @RequestParam(value = "day") int day,
+            @RequestParam(value = "month") int month,
+            RedirectAttributes redirectAttrs) {
         if (day < 1 || day > 31 || month < 1 || month > 12) {
             redirectAttrs.addFlashAttribute(ERROR, "Dia/mês inválidos.");
             return REDIRECT_ADMIN_WEB;
@@ -812,7 +823,8 @@ public class AdminWebController {
     }
 
     @PostMapping("/delete-birthday")
-    public String deleteBirthday(@RequestParam long userId, RedirectAttributes redirectAttrs) {
+    public String deleteBirthday(
+            @RequestParam(value = "userId") long userId, RedirectAttributes redirectAttrs) {
         try {
             int deleted = birthdayRepository.deleteByUserId(userId);
             if (deleted == 0) {
@@ -854,7 +866,7 @@ public class AdminWebController {
 
     @PostMapping("/migrate-sqlite")
     public String migrateFromSqlite(
-            @RequestParam(defaultValue = "false") boolean dryRun,
+            @RequestParam(value = "dryRun", defaultValue = "false") boolean dryRun,
             RedirectAttributes redirectAttrs) {
         try {
             MigrationResult result = migrationService.migrateAll(dryRun);
@@ -933,8 +945,8 @@ public class AdminWebController {
      */
     @PostMapping("/features/{key}")
     public String toggleFeature(
-            @PathVariable String key,
-            @RequestParam boolean enabled,
+            @PathVariable(value = "key") String key,
+            @RequestParam(value = "enabled") boolean enabled,
             RedirectAttributes redirectAttrs) {
         try {
             boolean antes = featureFlagAdminService.isEnabled(key);
@@ -979,7 +991,7 @@ public class AdminWebController {
 
     @GetMapping("/debug/cache/{fileId}")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> debugCache(@PathVariable String fileId) {
+    public ResponseEntity<Map<String, Object>> debugCache(@PathVariable("fileId") String fileId) {
         var entry = cacheService.get(fileId);
         if (entry == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

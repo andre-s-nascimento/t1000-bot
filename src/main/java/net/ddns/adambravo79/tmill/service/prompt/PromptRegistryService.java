@@ -134,6 +134,18 @@ public class PromptRegistryService {
     }
 
     /**
+     * Obtém a persona ativa definida no arquivo JSON.
+     * Caso não definida, retorna o fallback "T1000".
+     */
+    public String getActivePersonaName() {
+        Object active = promptCache.get("activePersona");
+        if (active instanceof String personaName && !personaName.isBlank()) {
+            return personaName;
+        }
+        return "T1000";
+    }
+
+    /**
      * Carrega e combina o System Prompt do Podcast com a linha de encerramento configurada.
      */
     @SuppressWarnings("unchecked")

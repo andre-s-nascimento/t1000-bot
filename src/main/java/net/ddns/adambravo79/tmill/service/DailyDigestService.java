@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -36,6 +37,7 @@ import net.ddns.adambravo79.tmill.exception.DigestSendException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramMessageSplitter;
@@ -61,9 +63,13 @@ public class DailyDigestService {
     private final TelegramFacade telegramFacade;
     private final MetricsService metricsService;
     private final FeatureFlagAdminService featureFlags;
+    private final PromptRegistryService promptRegistryService;
 
-    @org.springframework.beans.factory.annotation.Value("${digest.chat-ids:}")
+    @Value("${digest.chat-ids:}")
     private String digestChatIdsStr;
+
+    @Value("${digest.persona.default:T1000}")
+    private String defaultPersonaName;
 
     private final Set<Long> digestChatIds = new HashSet<>();
 
@@ -354,14 +360,14 @@ public class DailyDigestService {
     // ======================== SUMMARY ========================
     private String generateSummary(String finalMessages, String periodLabel) {
         try {
-            DigestPersona persona = DigestPersona.T1000;
+            // Obtém dinamicamente o nome da persona definida no JSON recarregado
+            String activePersonaName = promptRegistryService.getActivePersonaName();
+            DigestPersona persona = DigestPersona.fromString(activePersonaName);
+
             return groqClient.gerarResumoDigest(finalMessages, persona, periodLabel);
         } catch (HttpClientErrorException.TooManyRequests e) {
             throw new GroqRateLimitException("Rate limit do Groq ao gerar resumo", e);
         } catch (HttpClientErrorException e) {
-            // 👇 REMOVIDO o wrap em DigestGenerationException.
-            // Agora propaga o HttpClientErrorException para o catch externo,
-            // que vai registrar 'digest_groq_http_error'.
             throw e;
         } catch (ResourceAccessException e) {
             throw new DigestGenerationException("Falha de conectividade com Groq", e);
