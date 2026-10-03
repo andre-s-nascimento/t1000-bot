@@ -62,7 +62,8 @@ class PodcastScriptServiceTest {
 
     @Test
     @DisplayName(
-            "Deve gerar o roteiro do podcast consumindo o System Prompt do PromptRegistryService")
+            "Deve gerar o roteiro do podcast consumindo o System e User Prompts do"
+                    + " PromptRegistryService")
     void shouldGeneratePodcastScriptSuccessfully() {
         LocalDate start = LocalDate.now().minusDays(7);
         LocalDate end = LocalDate.now();
@@ -79,18 +80,23 @@ class PodcastScriptServiceTest {
         Mockito.when(promptRegistryService.getPodcastSystemPrompt())
                 .thenReturn("System Prompt do Podcast Carregado");
 
+        // 🔧 FIX: Mockar a chamada do novo userPrompt passando a string combinada
+        Mockito.when(promptRegistryService.getPodcastUserPrompt("Áudio 1\n---\nÁudio 2"))
+                .thenReturn("User Prompt Completo com: Áudio 1\n---\nÁudio 2");
+
         Mockito.when(
                         groqClient.chatCompletion(
-                                eq("System Prompt do Podcast Carregado"),
-                                Mockito.contains("Áudio 1\n---\nÁudio 2"),
-                                eq("llama-model"),
-                                eq(0.7),
-                                eq(3000)))
+                                "System Prompt do Podcast Carregado",
+                                "User Prompt Completo com: Áudio 1\n---\nÁudio 2",
+                                "llama-model",
+                                0.7,
+                                3000))
                 .thenReturn("Roteiro Final do Podcast");
 
         String result = podcastScriptService.generateScript(start, end);
 
         assertThat(result).isEqualTo("Roteiro Final do Podcast");
         Mockito.verify(promptRegistryService).getPodcastSystemPrompt();
+        Mockito.verify(promptRegistryService).getPodcastUserPrompt(Mockito.anyString());
     }
 }

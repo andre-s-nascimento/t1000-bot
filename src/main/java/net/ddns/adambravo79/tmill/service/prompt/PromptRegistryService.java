@@ -173,6 +173,24 @@ public class PromptRegistryService {
         return baseSystemPrompt + "\n- Encerre com: \"" + closingLine + "\"";
     }
 
+    /**
+     * Obtém o User Prompt do Podcast combinando o texto base configurado com as mensagens.
+     */
+    @SuppressWarnings("unchecked")
+    public String getPodcastUserPrompt(String combinedMessages) {
+        Optional<Map> systemMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_SYSTEM_RESOURCE, Map.class, podcastSystemOverridePath);
+
+        String baseUserPrompt = "Aqui estão as mensagens da semana passada:\n\n";
+
+        if (systemMap.isPresent() && systemMap.get().containsKey("userPrompt")) {
+            baseUserPrompt = (String) systemMap.get().get("userPrompt");
+        }
+
+        return baseUserPrompt + combinedMessages;
+    }
+
     @SuppressWarnings("unchecked")
     private String getPeriodContext(String periodLabel) {
         Map<String, Object> contexts = (Map<String, Object>) promptCache.get("periodContexts");

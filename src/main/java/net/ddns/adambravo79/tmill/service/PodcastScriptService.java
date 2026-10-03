@@ -60,6 +60,7 @@ public class PodcastScriptService {
 
         String combined = String.join("\n---\n", messages);
 
+        // ... (código anterior mantido) ...
         if (combined.length() > MAX_PROMPT_CHARS) {
             combined =
                     combined.substring(0, MAX_PROMPT_CHARS) + "... [corte por limite de contexto]";
@@ -67,7 +68,7 @@ public class PodcastScriptService {
         }
 
         String systemPrompt = promptRegistryService.getPodcastSystemPrompt();
-        String userPrompt = "Aqui estão as mensagens da semana passada:\n\n" + combined;
+        String userPrompt = promptRegistryService.getPodcastUserPrompt(combined);
 
         log.info(
                 "🎙️ Gerando roteiro do podcast para semana de {} a {} ({} caracteres)",
