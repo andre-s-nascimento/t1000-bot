@@ -1,6 +1,5 @@
 package net.ddns.adambravo79.tmill.service;
 
-import static net.ddns.adambravo79.tmill.constant.BotMessages.BRAZIL_ZONE;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.CHAT_ID_INVALIDO;
 
 import java.time.LocalDate;

@@ -46,7 +46,7 @@ public class PromptRegistryService {
     /**
      * Carrega os prompts usando o JsonConfigLoader (suporta overridePath e fallback no classpath).
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public synchronized void loadPrompts() {
         log.info("🔄 Carregando configurações de prompts e personas...");
 
@@ -59,7 +59,7 @@ public class PromptRegistryService {
                                 : "config/prompts/digest-personas.json");
 
         promptCache.clear();
-        promptCache.clear();
+
         if (loadedMap.isPresent()) {
             promptCache.putAll(loadedMap.get());
             log.info(
@@ -149,7 +149,7 @@ public class PromptRegistryService {
     /**
      * Carrega e combina o System Prompt do Podcast com a linha de encerramento configurada.
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public String getPodcastSystemPrompt() {
         Optional<Map> systemMap =
                 jsonConfigLoader.loadConfig(
@@ -177,7 +177,7 @@ public class PromptRegistryService {
     /**
      * Obtém o User Prompt do Podcast combinando o texto base configurado com as mensagens.
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("rawtypes")
     public String getPodcastUserPrompt(String combinedMessages) {
         Optional<Map> systemMap =
                 jsonConfigLoader.loadConfig(
@@ -206,7 +206,7 @@ public class PromptRegistryService {
     }
 
     /** Obtém o CRON dinâmico do Podcast. Se ausente, usa o padrão (Sexta, 12h). */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("rawtypes")
     public String getPodcastCron() {
         Optional<Map> configMap =
                 jsonConfigLoader.loadConfig(
@@ -215,7 +215,7 @@ public class PromptRegistryService {
     }
 
     /** Obtém a temperatura dinâmica do Groq para o Podcast. Padrão: 0.7. */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public double getPodcastTemperature() {
         Optional<Map> configMap =
                 jsonConfigLoader.loadConfig(

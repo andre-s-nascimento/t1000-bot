@@ -1,3 +1,4 @@
+/* (c) 2026 */
 package net.ddns.adambravo79.tmill.integration;
 
 import org.springframework.boot.test.context.SpringBootTest;
@@ -11,15 +12,19 @@ import org.testcontainers.utility.DockerImageName;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public abstract class BaseIntegrationTest {
 
+    @SuppressWarnings(
+            "resource") // 🔧 FIX: Evita o aviso de resource leak do JDT para containers estáticos
     static final PostgreSQLContainer POSTGRES =
             new PostgreSQLContainer("postgres:15-alpine")
                     .withDatabaseName("test")
                     .withUsername("test")
                     .withPassword("test");
 
+    @SuppressWarnings("resource")
     static final KafkaContainer KAFKA =
             new KafkaContainer(DockerImageName.parse("apache/kafka:4.2.1"));
 
+    @SuppressWarnings("resource")
     static final MongoDBContainer MONGO = new MongoDBContainer("mongo:6.0");
 
     static {
@@ -36,7 +41,8 @@ public abstract class BaseIntegrationTest {
     }
 
     @DynamicPropertySource
-    static void registerProps(DynamicPropertyRegistry registry) { // --- PostgreSQL ---
+    static void registerProps(DynamicPropertyRegistry registry) {
+        // --- PostgreSQL ---
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);

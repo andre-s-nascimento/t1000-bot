@@ -1,3 +1,4 @@
+/* (c) 2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.LocalDate;
@@ -27,6 +28,8 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 @Slf4j
 public class AutoResponseService {
+
+    private static final String FEATURE_FLAG_AUTO_RESPONSE = "auto.response.enabled";
 
     private final Map<String, AutoResponseRule> triggerToRule = new HashMap<>();
     private final ObjectMapper objectMapper;
@@ -62,11 +65,14 @@ public class AutoResponseService {
     @PostConstruct
     public void init() {
         parseOncePerDayTriggers();
-        if (featureFlags.isEnabled("auto.response.enabled")) {
+        if (featureFlags.isEnabled(FEATURE_FLAG_AUTO_RESPONSE)) {
             loadResponses();
         }
     }
 
+    @SuppressWarnings(
+            "null") // 🔧 FIX: Silencia o JDT Null Type Safety para priorizar o Method Reference do
+    // Sonar
     private void parseOncePerDayTriggers() {
         oncePerDayTriggers =
                 Arrays.stream(oncePerDayTriggersRaw.split(","))
@@ -218,7 +224,7 @@ public class AutoResponseService {
 
     public Optional<AutoResponseOverride> getResponseRule(
             Long userId, String message, LocalTime time) {
-        if (!featureFlags.isEnabled("auto.response.enabled")
+        if (!featureFlags.isEnabled(FEATURE_FLAG_AUTO_RESPONSE)
                 || message == null
                 || message.isBlank()) {
             return Optional.empty();
@@ -327,6 +333,6 @@ public class AutoResponseService {
 
     /** Exposto para health checks e para o controller consultar o estado da flag. */
     public boolean isEnabled() {
-        return featureFlags.isEnabled("auto.response.enabled");
+        return featureFlags.isEnabled(FEATURE_FLAG_AUTO_RESPONSE);
     }
 }

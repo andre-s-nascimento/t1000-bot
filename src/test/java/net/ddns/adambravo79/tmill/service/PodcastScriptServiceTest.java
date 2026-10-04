@@ -4,6 +4,7 @@ package net.ddns.adambravo79.tmill.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -45,13 +46,8 @@ class PodcastScriptServiceTest {
         LocalDate start = LocalDate.now().minusDays(7);
         LocalDate end = LocalDate.now();
 
-        Mockito.when(
-                        jdbcTemplate.queryForList(
-                                Mockito.anyString(),
-                                eq(String.class),
-                                eq(123456L),
-                                eq(start),
-                                eq(end)))
+        when(jdbcTemplate.queryForList(
+                        Mockito.anyString(), eq(String.class), eq(123456L), eq(start), eq(end)))
                 .thenReturn(List.of());
 
         String result = service.generateScript(start, end);
@@ -67,31 +63,25 @@ class PodcastScriptServiceTest {
     void shouldGeneratePodcastScriptSuccessfully() {
         LocalDate start = LocalDate.now().minusDays(7);
         LocalDate end = LocalDate.now();
-        Mockito.when(promptRegistryService.getPodcastTemperature()).thenReturn(0.7);
+        when(promptRegistryService.getPodcastTemperature()).thenReturn(0.7);
 
-        Mockito.when(
-                        jdbcTemplate.queryForList(
-                                Mockito.anyString(),
-                                eq(String.class),
-                                eq(123456L),
-                                eq(start),
-                                eq(end)))
+        when(jdbcTemplate.queryForList(
+                        Mockito.anyString(), eq(String.class), eq(123456L), eq(start), eq(end)))
                 .thenReturn(List.of("Áudio 1", "Áudio 2"));
 
-        Mockito.when(promptRegistryService.getPodcastSystemPrompt())
+        when(promptRegistryService.getPodcastSystemPrompt())
                 .thenReturn("System Prompt do Podcast Carregado");
 
         // 🔧 FIX: Mockar a chamada do novo userPrompt passando a string combinada
-        Mockito.when(promptRegistryService.getPodcastUserPrompt("Áudio 1\n---\nÁudio 2"))
+        when(promptRegistryService.getPodcastUserPrompt("Áudio 1\n---\nÁudio 2"))
                 .thenReturn("User Prompt Completo com: Áudio 1\n---\nÁudio 2");
 
-        Mockito.when(
-                        groqClient.chatCompletion(
-                                "System Prompt do Podcast Carregado",
-                                "User Prompt Completo com: Áudio 1\n---\nÁudio 2",
-                                "llama-model",
-                                0.7,
-                                3000))
+        when(groqClient.chatCompletion(
+                        "System Prompt do Podcast Carregado",
+                        "User Prompt Completo com: Áudio 1\n---\nÁudio 2",
+                        "llama-model",
+                        0.7,
+                        3000))
                 .thenReturn("Roteiro Final do Podcast");
 
         String result = service.generateScript(start, end);

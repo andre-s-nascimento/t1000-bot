@@ -19,7 +19,6 @@ import net.ddns.adambravo79.tmill.client.GroqClient;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.service.cache.ChatTranscriptionCache;
-import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 
 /**
  * Serviço responsável pelo pipeline completo de processamento de áudio: conversão OGA → WAV,
@@ -50,7 +49,6 @@ public class AudioPipelineService {
     private final GroqClient groqClient;
     private final ChatTranscriptionCache chatTranscriptionCache;
     private final TranscriptStoreService transcriptStoreService;
-    private final FeatureFlagAdminService featureFlags;
 
     /**
      * Processa o fluxo completo de áudio com callback para envio de mensagens.

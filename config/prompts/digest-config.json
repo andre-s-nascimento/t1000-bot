@@ -1,0 +1,4 @@
+{
+  "morningCron": "0 30 8 * * *",
+  "eveningCron": "0 30 20 * * *"
+}

@@ -1,4 +1,4 @@
-/* (c) 2026 | 22/07/2026 */
+/* (c) 2026 | 04/10/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import static net.ddns.adambravo79.tmill.constant.BotMessages.BRAZIL_ZONE;
@@ -10,12 +10,12 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
@@ -166,7 +166,7 @@ public class DailyDigestService implements SchedulingConfigurer {
 
             if (allMessages.isEmpty()) {
                 log.info("Nenhuma interação encontrada no período.");
-                metricsService.error("digest_sem_mensagens"); // 👈 NOVO
+                metricsService.error("digest_sem_mensagens");
                 return;
             }
 
@@ -178,7 +178,7 @@ public class DailyDigestService implements SchedulingConfigurer {
             String summary = generateSummary(finalMessages, periodLabel);
             if (summary == null || summary.isBlank()) {
                 log.warn("Resumo vazio do Groq para período {}.", periodLabel);
-                metricsService.error("digest_groq_vazio"); // 👈 NOVO
+                metricsService.error("digest_groq_vazio");
                 return;
             }
 
@@ -189,11 +189,11 @@ public class DailyDigestService implements SchedulingConfigurer {
                 sendDigestToChat(chatId, finalMessage);
             }
 
-            metricsService.success("digest_gerado_sucesso"); // 👈 NOVO
+            metricsService.success("digest_gerado_sucesso");
 
         } catch (DataAccessException e) {
             log.error("❌ Erro de acesso ao banco de dados ao gerar digest {}", periodLabel, e);
-            metricsService.error("digest_db_error"); // 👈 NOVO
+            metricsService.error("digest_db_error");
 
         } catch (HttpClientErrorException e) {
             log.error(
@@ -201,26 +201,26 @@ public class DailyDigestService implements SchedulingConfigurer {
                     periodLabel,
                     e.getStatusCode(),
                     e);
-            metricsService.error("digest_groq_http_error"); // 👈 NOVO
+            metricsService.error("digest_groq_http_error");
 
         } catch (GroqRateLimitException e) {
             log.error(
                     "❌ Rate limit do Groq ao gerar digest {}. Considerar retry agendado.",
                     periodLabel,
                     e);
-            metricsService.error("digest_groq_rate_limit"); // 👈 NOVO
+            metricsService.error("digest_groq_rate_limit");
 
         } catch (DigestGenerationException e) {
             log.error("❌ Falha na geração do digest {}", periodLabel, e);
-            metricsService.error("digest_groq_indisponivel"); // 👈 NOVO
+            metricsService.error("digest_groq_indisponivel");
 
         } catch (DigestSendException e) {
             log.error("❌ Falha no envio do digest {}", periodLabel, e);
-            metricsService.error("digest_envio_erro"); // 👈 NOVO
+            metricsService.error("digest_envio_erro");
 
         } catch (RuntimeException e) {
             log.error("❌ Erro inesperado de runtime ao gerar digest {}", periodLabel, e);
-            metricsService.error("digest_erro_inesperado"); // 👈 NOVO
+            metricsService.error("digest_erro_inesperado");
             throw new DigestGenerationException(
                     "Erro inesperado ao gerar digest: " + periodLabel, e);
         }
@@ -228,7 +228,6 @@ public class DailyDigestService implements SchedulingConfigurer {
 
     // ======================== FETCH & BUILD ========================
 
-    @SuppressWarnings("null")
     private List<ChatMessage> fetchMessages(LocalDateTime from, LocalDateTime to) {
         // 🔧 FIX: passar LocalDateTime direto — o driver do Postgres converte para TIMESTAMP.
         // Formatar como String quebra no Postgres (timestamp >= varchar não existe).
@@ -256,17 +255,11 @@ public class DailyDigestService implements SchedulingConfigurer {
                         from,
                         to);
 
-        List<ChatMessage> allMessages = new ArrayList<>(messages.size() + transcripts.size());
-
-        for (Map<String, Object> row : messages) {
-            allMessages.add(buildChatMessage(row, false));
-        }
-        for (Map<String, Object> row : transcripts) {
-            allMessages.add(buildChatMessage(row, true));
-        }
-
-        allMessages.sort(Comparator.comparing(ChatMessage::getTimestamp));
-        return allMessages;
+        return Stream.concat(
+                        messages.stream().map(row -> buildChatMessage(row, false)),
+                        transcripts.stream().map(row -> buildChatMessage(row, true)))
+                .sorted(Comparator.comparing(msg -> msg.getTimestamp()))
+                .toList();
     }
 
     private ChatMessage buildChatMessage(Map<String, Object> row, boolean isAudio) {
@@ -294,7 +287,7 @@ public class DailyDigestService implements SchedulingConfigurer {
                 .build();
     }
 
-    @SuppressWarnings({"null", "TimeZone"})
+    @SuppressWarnings("TimeZone")
     private String buildMessagesBlock(List<ChatMessage> messages) {
         StringBuilder sb = new StringBuilder();
         LocalDateTime previous = null;

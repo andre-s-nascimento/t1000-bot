@@ -1,0 +1,4 @@
+{
+  "hourlyCron": "0 0 */6 * * *",
+  "weeklyCron": "0 30 18 * * 4"
+}

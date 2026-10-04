@@ -132,7 +132,8 @@ class FeatureFlagServiceTest {
             svc.register("a", true, "");
             svc.register("m", true, "");
 
-            List<String> keys = svc.list().stream().map(FeatureFlagState::key).toList();
+            // 🔧 FIX: Expressão lambda explícita evita o aviso de Null Type Safety do JDT
+            List<String> keys = svc.list().stream().map(state -> state.key()).toList();
             assertThat(keys).containsExactly("a", "m", "z");
         }
 
@@ -238,7 +239,8 @@ class FeatureFlagServiceTest {
 
         @Test
         @DisplayName("com persistência desligada, toggle NÃO grava arquivo")
-        void persistDisabled_toggle_doesNotWriteFile() {
+        void persistDisabled_toggle_doesNotWriteFile() { // 🔧 FIX: Removido throws IOException
+            // desnecessário
             FeatureFlagService svc = newService(false);
             svc.register("a", false, "");
 
@@ -249,7 +251,7 @@ class FeatureFlagServiceTest {
 
         @Test
         @DisplayName("escrita atômica não deixa arquivo .tmp para trás")
-        void persistEnabled_atomicWrite_noTmpLeftBehind() throws IOException {
+        void persistEnabled_atomicWrite_noTmpLeftBehind() {
             FeatureFlagService svc = newService(true);
             svc.register("a", false, "");
             svc.toggle("a", true);

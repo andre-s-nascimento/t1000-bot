@@ -2,7 +2,6 @@
 package net.ddns.adambravo79.tmill.controller;
 
 import static net.ddns.adambravo79.tmill.constant.BotMessages.AUDIO_TOO_LARGE;
-import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_PROCESSAR_AUDIO;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.ERRO_PROCESSAR_AUDIO_CALLBACK;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.TOKEN_EXPIRADO;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.TRANSCRIPTION_DISABLED;
@@ -205,18 +204,6 @@ public class AudioHandler {
         safeSendButtons(event.chatId(), event.senderName(), event.duration(), token);
     }
 
-    private void handleGroupAudioFailure(long chatId, Throwable ex) {
-        Throwable causa = unwrapCause(ex);
-        rethrowIfFatal(causa);
-
-        if (causa instanceof AudioProcessingException) {
-            log.error("Falha no pipeline de áudio para chatId={}", chatId, causa);
-        } else {
-            log.error("Erro inesperado no pré-processamento do áudio chatId={}", chatId, causa);
-        }
-        safeSendMessage(chatId, ERRO_PROCESSAR_AUDIO);
-    }
-
     // ========================= CALLBACK =========================
 
     public void handleTranscriptionCallback(CallbackQuery callback, String data) {
@@ -287,8 +274,10 @@ public class AudioHandler {
                 if (brutoFallback != null && !brutoFallback.isBlank()) {
                     log.info("🔄 Fallback: usando transcrição BRUTA no lugar da refinada.");
                     String aviso =
-                            "⚠️ _Não consegui refinar esta transcrição. Enviando a versão"
-                                    + " bruta:_\n\n";
+                            """
+                            ⚠️ _Não consegui refinar esta transcrição. Enviando a versão bruta:_
+
+                            """;
                     safeSendTranscription(userId, aviso + "🎙️ " + brutoFallback, groupId);
                     return;
                 }
@@ -506,24 +495,6 @@ public class AudioHandler {
                     "🧹 Cache de tokens limpo: {} entradas removidas, {} restantes",
                     before - after,
                     after);
-        }
-    }
-
-    /** Desempacota CompletionException para obter a causa raiz. */
-    private Throwable unwrapCause(Throwable ex) {
-        return (ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null)
-                ? ex.getCause()
-                : ex;
-    }
-
-    /** Repropaga erros fatais (Error, InterruptedException) sem engoli-los. */
-    private void rethrowIfFatal(Throwable t) {
-        if (t instanceof Error error) {
-            throw error;
-        }
-        if (t instanceof InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Thread interrompida", ie);
         }
     }
 }
