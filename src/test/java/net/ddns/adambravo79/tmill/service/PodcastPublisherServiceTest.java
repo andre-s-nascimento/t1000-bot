@@ -1,13 +1,16 @@
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -24,12 +27,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.Trigger;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
@@ -41,6 +50,8 @@ class PodcastPublisherServiceTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private TempDirService tempDirService;
     @Mock private MetricsService metricsService;
+    @Mock private PromptRegistryService promptRegistryService;
+    @Mock private JsonConfigLoader jsonConfigLoader;
 
     @InjectMocks private PodcastPublisherService service;
 
@@ -319,5 +330,29 @@ class PodcastPublisherServiceTest {
 
         verify(metricsService, never()).error(anyString());
         verify(metricsService).success("podcast_publicado");
+    }
+
+    @Test
+    @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
+    void configureTasks_deveRegistrarAsTasksECobrirLambda() {
+        // 🔧 FIX: Para o Podcast, precisamos mockar o PromptRegistryService,
+        // que é quem fornece o Cron!
+        lenient().when(promptRegistryService.getPodcastCron()).thenReturn("0 0 12 * * *");
+
+        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
+
+        // Aciona o método que registra as tarefas
+        service.configureTasks(taskRegistrar);
+
+        // Captura as triggers que foram adicionadas
+        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
+        verify(taskRegistrar, atLeastOnce())
+                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
+
+        // Aciona a lambda de cada trigger para cobrir o código do getCron()
+        SimpleTriggerContext ctx = new SimpleTriggerContext();
+        for (Trigger trigger : triggerCaptor.getAllValues()) {
+            trigger.nextExecution(ctx);
+        }
     }
 }

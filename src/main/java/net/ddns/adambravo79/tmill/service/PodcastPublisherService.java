@@ -10,25 +10,29 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class PodcastPublisherService {
+public class PodcastPublisherService implements SchedulingConfigurer {
 
     private final PodcastScriptService scriptService;
     private final AzureTtsClient ttsClient;
     private final TelegramFacade telegramFacade;
     private final TempDirService tempDirService;
     private final MetricsService metricsService;
+    private final PromptRegistryService promptRegistryService;
 
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
@@ -43,9 +47,19 @@ public class PodcastPublisherService {
     private long compressTimeoutSeconds;
 
     // Tamanho máximo do áudio antes de comprimir (5MB)
-    private static final long MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
+    private static final long MAX_AUDIO_SIZE_BYTES = (long) 5 * 1024 * 1024;
 
-    @Scheduled(cron = "0 0 12 * * 5", zone = "America/Sao_Paulo")
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        taskRegistrar.addTriggerTask(
+                this::publishWeeklyPodcast,
+                ctx ->
+                        new CronTrigger(
+                                        promptRegistryService.getPodcastCron(),
+                                        ZoneId.of("America/Sao_Paulo"))
+                                .nextExecution(ctx));
+    }
+
     public void publishWeeklyPodcast() {
         log.info("🎧 Iniciando geração do podcast semanal (Sexta-feira)...");
 

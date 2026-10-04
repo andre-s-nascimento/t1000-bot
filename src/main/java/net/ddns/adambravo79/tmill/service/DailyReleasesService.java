@@ -1,5 +1,6 @@
 package net.ddns.adambravo79.tmill.service;
 
+import static net.ddns.adambravo79.tmill.constant.BotMessages.BRAZIL_ZONE;
 import static net.ddns.adambravo79.tmill.constant.BotMessages.CHAT_ID_INVALIDO;
 
 import java.time.LocalDate;
@@ -7,9 +8,12 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -24,17 +28,19 @@ import net.ddns.adambravo79.tmill.dto.TvResult;
 import net.ddns.adambravo79.tmill.model.FullRelease;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DailyReleasesService {
+public class DailyReleasesService implements SchedulingConfigurer {
 
     private final TmdbClient tmdbClient;
     private final WatchmodeClient watchmodeClient;
     private final TelegramFacade telegramFacade;
     private final ReleaseNotifiedRepository releaseRepository;
+    private final JsonConfigLoader jsonConfigLoader;
 
     /**
      * Cache de provedores de streaming, injetado via {@link
@@ -55,8 +61,29 @@ public class DailyReleasesService {
     private static final String MEDIA_TYPE_MOVIE = "movie";
     private static final String MEDIA_TYPE_TV = "tv";
 
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        taskRegistrar.addTriggerTask(
+                this::sendHourlyReleases,
+                ctx ->
+                        new CronTrigger(getCron("hourlyCron", "0 0 */6 * * *"), BRAZIL_ZONE)
+                                .nextExecution(ctx));
+        taskRegistrar.addTriggerTask(
+                this::sendWeeklyDigest,
+                ctx ->
+                        new CronTrigger(getCron("weeklyCron", "0 30 18 * * 4"), BRAZIL_ZONE)
+                                .nextExecution(ctx));
+    }
+
+    private String getCron(String key, String defaultCron) {
+        return jsonConfigLoader
+                .loadConfig("config/releases-config.json", Map.class, "config/releases-config.json")
+                .map(m -> (String) m.get(key))
+                .orElse(defaultCron);
+    }
+
     // =================== NOTIFICAÇÃO A CADA 6 HORAS ===================
-    @Scheduled(cron = "0 0 */6 * * *") // a cada 6 horas no minuto 0
+
     public void sendHourlyReleases() {
         log.info("⏰ Executando verificação de lançamentos (6 em 6 horas)...");
         if (chatIdsStr == null || chatIdsStr.isBlank()) {
@@ -97,7 +124,7 @@ public class DailyReleasesService {
     }
 
     // =================== GIRO SEMANAL ===================
-    @Scheduled(cron = "0 30 18 * * 4")
+
     public void sendWeeklyDigest() {
         log.info("📅 Gerando giro semanal dos streamings...");
         if (chatIdsStr == null || chatIdsStr.isBlank()) return;

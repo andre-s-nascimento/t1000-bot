@@ -3,6 +3,7 @@ package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -27,16 +28,15 @@ class PodcastScriptServiceTest {
     @Mock private GroqClient groqClient;
     @Mock private PromptRegistryService promptRegistryService;
 
-    private PodcastScriptService podcastScriptService;
+    private PodcastScriptService service;
 
     @BeforeEach
     void setUp() {
-        podcastScriptService =
-                new PodcastScriptService(jdbcTemplate, groqClient, promptRegistryService);
+        service = new PodcastScriptService(jdbcTemplate, groqClient, promptRegistryService);
 
-        ReflectionTestUtils.setField(podcastScriptService, "targetUserId", 123456L);
-        ReflectionTestUtils.setField(podcastScriptService, "maxTokens", 3000);
-        ReflectionTestUtils.setField(podcastScriptService, "digestModel", "llama-model");
+        ReflectionTestUtils.setField(service, "targetUserId", 123456L);
+        ReflectionTestUtils.setField(service, "maxTokens", 3000);
+        ReflectionTestUtils.setField(service, "digestModel", "llama-model");
     }
 
     @Test
@@ -54,7 +54,7 @@ class PodcastScriptServiceTest {
                                 eq(end)))
                 .thenReturn(List.of());
 
-        String result = podcastScriptService.generateScript(start, end);
+        String result = service.generateScript(start, end);
 
         assertThat(result).isNull();
         Mockito.verifyNoInteractions(promptRegistryService, groqClient);
@@ -67,6 +67,7 @@ class PodcastScriptServiceTest {
     void shouldGeneratePodcastScriptSuccessfully() {
         LocalDate start = LocalDate.now().minusDays(7);
         LocalDate end = LocalDate.now();
+        Mockito.when(promptRegistryService.getPodcastTemperature()).thenReturn(0.7);
 
         Mockito.when(
                         jdbcTemplate.queryForList(
@@ -93,10 +94,10 @@ class PodcastScriptServiceTest {
                                 3000))
                 .thenReturn("Roteiro Final do Podcast");
 
-        String result = podcastScriptService.generateScript(start, end);
+        String result = service.generateScript(start, end);
 
         assertThat(result).isEqualTo("Roteiro Final do Podcast");
-        Mockito.verify(promptRegistryService).getPodcastSystemPrompt();
-        Mockito.verify(promptRegistryService).getPodcastUserPrompt(Mockito.anyString());
+        verify(promptRegistryService).getPodcastSystemPrompt();
+        verify(promptRegistryService).getPodcastUserPrompt(Mockito.anyString());
     }
 }

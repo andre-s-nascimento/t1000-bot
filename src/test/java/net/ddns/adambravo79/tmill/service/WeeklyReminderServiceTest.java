@@ -5,22 +5,31 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.scheduling.Trigger;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @ExtendWith(MockitoExtension.class)
 class WeeklyReminderServiceTest {
 
     @Mock private TelegramFacade telegramFacade;
+    @Mock private JsonConfigLoader jsonConfigLoader;
 
     @InjectMocks private WeeklyReminderService service;
 
@@ -204,5 +213,43 @@ class WeeklyReminderServiceTest {
 
         verify(telegramFacade).enviarMidia(eq(chatId), eq("/app/media/video.mp4"), anyString());
         // Não lança exceção, apenas loga o erro
+    }
+
+    @Test
+    @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
+    void configureTasks_deveRegistrarAsTasksECobrirLambda() {
+        // Preparamos o mock do jsonConfigLoader com todas as chaves possíveis
+        // para que este teste seja reaproveitável em todas as classes
+        lenient()
+                .when(jsonConfigLoader.loadConfig(anyString(), eq(Map.class), anyString()))
+                .thenReturn(
+                        Optional.of(
+                                Map.of(
+                                        "cron", "0 0 12 * * *",
+                                        "updateCron", "0 0 12 * * *",
+                                        "hourlyCron", "0 0 12 * * *",
+                                        "weeklyCron", "0 0 12 * * *",
+                                        "morningCron", "0 0 12 * * *",
+                                        "eveningCron", "0 0 12 * * *",
+                                        "noonCron", "0 0 12 * * *",
+                                        "checkCron", "0 0 12 * * *",
+                                        "cleanCron", "0 0 12 * * *")));
+
+        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
+
+        // Aciona o método que registra as tarefas
+        service.configureTasks(taskRegistrar);
+
+        // Captura as triggers que foram adicionadas
+        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
+        verify(taskRegistrar, atLeastOnce())
+                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
+
+        // Aciona a lambda de cada trigger para cobrir o código do getCron()
+        // 🔧 FIX: Usar SimpleTriggerContext em vez de mock(TriggerContext.class)
+        SimpleTriggerContext ctx = new SimpleTriggerContext();
+        for (Trigger trigger : triggerCaptor.getAllValues()) {
+            trigger.nextExecution(ctx);
+        }
     }
 }

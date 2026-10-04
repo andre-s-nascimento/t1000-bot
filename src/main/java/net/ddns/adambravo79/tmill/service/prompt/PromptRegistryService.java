@@ -16,6 +16,7 @@ import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 @Service
 public class PromptRegistryService {
 
+    private static final String RULES = "rules";
     private static final String SYSTEM_PROMPT = "systemPrompt";
     private final JsonConfigLoader jsonConfigLoader;
     private static final String DEFAULT_PROMPTS_RESOURCE = "prompts/digest-personas.json";
@@ -163,8 +164,8 @@ public class PromptRegistryService {
         }
 
         String closingLine = "E caso eu não veja vocês, bom dia, boa tarde e boa noite!";
-        if (configMap.isPresent() && configMap.get().containsKey("rules")) {
-            Map<String, Object> rules = (Map<String, Object>) configMap.get().get("rules");
+        if (configMap.isPresent() && configMap.get().containsKey(RULES)) {
+            Map<String, Object> rules = (Map<String, Object>) configMap.get().get(RULES);
             if (rules != null && rules.get("closingLine") != null) {
                 closingLine = (String) rules.get("closingLine");
             }
@@ -202,5 +203,31 @@ public class PromptRegistryService {
             return (String) contexts.getOrDefault("MADRUGADA", "");
         }
         return (String) contexts.getOrDefault("DEFAULT", "");
+    }
+
+    /** Obtém o CRON dinâmico do Podcast. Se ausente, usa o padrão (Sexta, 12h). */
+    @SuppressWarnings("unchecked")
+    public String getPodcastCron() {
+        Optional<Map> configMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_CONFIG_RESOURCE, Map.class, podcastConfigOverridePath);
+        return configMap.map(m -> (String) m.get("cron")).orElse("0 0 12 * * 5");
+    }
+
+    /** Obtém a temperatura dinâmica do Groq para o Podcast. Padrão: 0.7. */
+    @SuppressWarnings("unchecked")
+    public double getPodcastTemperature() {
+        Optional<Map> configMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_CONFIG_RESOURCE, Map.class, podcastConfigOverridePath);
+        return configMap
+                .map(
+                        m -> {
+                            Map<String, Object> rules = (Map<String, Object>) m.get(RULES);
+                            return rules != null && rules.get("temperature") != null
+                                    ? ((Number) rules.get("temperature")).doubleValue()
+                                    : 0.7;
+                        })
+                .orElse(0.7);
     }
 }

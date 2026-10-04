@@ -76,8 +76,11 @@ public class PodcastScriptService {
                 end,
                 combined.length());
 
+        // 🔧 FIX: Usar temperatura dinâmica
+        double temperature = promptRegistryService.getPodcastTemperature();
         String script =
-                groqClient.chatCompletion(systemPrompt, userPrompt, digestModel, 0.7, maxTokens);
+                groqClient.chatCompletion(
+                        systemPrompt, userPrompt, digestModel, temperature, maxTokens);
 
         log.info("✅ Roteiro gerado com {} caracteres.", script.length());
         return script;
