@@ -342,4 +342,14 @@ class PromptRegistryServiceTest {
 
         return prompts;
     }
+
+    @Test
+    @DisplayName("getPrompt deve lidar com tipos e chaves inválidas corretamente")
+    void shouldHandleGetPromptEdgeCases() {
+        // Chave inexistente
+        assertThat(service.getPrompt("inexistente", String.class)).isEmpty();
+
+        // Tipo incorreto
+        assertThat(service.getPrompt("userPromptTemplate", Integer.class)).isEmpty();
+    }
 }
