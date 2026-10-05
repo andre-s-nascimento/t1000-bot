@@ -3,12 +3,14 @@ package net.ddns.adambravo79.tmill.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -17,12 +19,15 @@ class DatabaseInitializerTest {
     private JdbcTemplate jdbcTemplate;
     private DatabaseInitializer databaseInitializer;
 
+    @TempDir Path tempDir;
+
     @BeforeEach
     void setUp() {
-        // Configura um DataSource SQLite em memória para os testes
+        // 🔧 Usando um arquivo de banco dedicado no diretório temporário do JUnit
+        Path dbPath = tempDir.resolve("test.db");
         DriverManagerDataSource dataSource = new DriverManagerDataSource();
         dataSource.setDriverClassName("org.sqlite.JDBC");
-        dataSource.setUrl("jdbc:sqlite::memory:");
+        dataSource.setUrl("jdbc:sqlite:" + dbPath.toAbsolutePath());
 
         jdbcTemplate = new JdbcTemplate(dataSource);
         databaseInitializer = new DatabaseInitializer(jdbcTemplate);
