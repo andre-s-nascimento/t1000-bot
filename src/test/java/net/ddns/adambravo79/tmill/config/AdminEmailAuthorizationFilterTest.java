@@ -15,6 +15,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -108,7 +109,11 @@ class AdminEmailAuthorizationFilterTest {
     @DisplayName("Usuário OAuth2 sem permissão em /admin-web: bloqueia, limpa sessão e redireciona")
     void autenticadoNaoAutorizado_bloqueiaERedireciona() throws Exception {
         setOAuth2User("intruso@gmail.com");
-        request.setSession(new org.springframework.mock.web.MockHttpSession());
+
+        // Garante que getSession(false) encontre uma sessão ativa para cobrir o bloco de
+        // invalidação
+        MockHttpSession session = new MockHttpSession();
+        request.setSession(session);
 
         request.setRequestURI("/admin-web");
         filter.doFilterInternal(request, response, chain);
@@ -117,6 +122,7 @@ class AdminEmailAuthorizationFilterTest {
         assertThat(response.getRedirectedUrl()).isEqualTo("/oauth2/authorization/google");
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         assertThat(response.getCookie("JSESSIONID")).isNotNull();
+        assertThat(session.isInvalid()).isTrue();
     }
 
     // ===================== CASOS DE CONFIGURAÇÃO VAZIA =====================
