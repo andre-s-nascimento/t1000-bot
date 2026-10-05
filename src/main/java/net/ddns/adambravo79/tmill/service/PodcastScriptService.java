@@ -60,6 +60,7 @@ public class PodcastScriptService {
 
         String combined = String.join("\n---\n", messages);
 
+        // ... (código anterior mantido) ...
         if (combined.length() > MAX_PROMPT_CHARS) {
             combined =
                     combined.substring(0, MAX_PROMPT_CHARS) + "... [corte por limite de contexto]";
@@ -67,7 +68,7 @@ public class PodcastScriptService {
         }
 
         String systemPrompt = promptRegistryService.getPodcastSystemPrompt();
-        String userPrompt = "Aqui estão as mensagens da semana passada:\n\n" + combined;
+        String userPrompt = promptRegistryService.getPodcastUserPrompt(combined);
 
         log.info(
                 "🎙️ Gerando roteiro do podcast para semana de {} a {} ({} caracteres)",
@@ -75,8 +76,11 @@ public class PodcastScriptService {
                 end,
                 combined.length());
 
+        // 🔧 FIX: Usar temperatura dinâmica
+        double temperature = promptRegistryService.getPodcastTemperature();
         String script =
-                groqClient.chatCompletion(systemPrompt, userPrompt, digestModel, 0.7, maxTokens);
+                groqClient.chatCompletion(
+                        systemPrompt, userPrompt, digestModel, temperature, maxTokens);
 
         log.info("✅ Roteiro gerado com {} caracteres.", script.length());
         return script;

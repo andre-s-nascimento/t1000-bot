@@ -30,6 +30,7 @@ import net.ddns.adambravo79.tmill.dto.TvResult;
 import net.ddns.adambravo79.tmill.model.FullRelease;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +41,7 @@ class DailyReleasesServiceTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private ReleaseNotifiedRepository releaseRepository;
     @Mock private Cache<String, String> providerCache;
+    @Mock private JsonConfigLoader jsonConfigLoader;
 
     @InjectMocks private DailyReleasesService service;
 

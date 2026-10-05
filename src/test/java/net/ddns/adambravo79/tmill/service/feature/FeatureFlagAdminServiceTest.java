@@ -70,7 +70,8 @@ class FeatureFlagAdminServiceTest {
         void registersExpectedKeys() {
             adminService.registerKnownFlags();
 
-            List<String> keys = flagService.list().stream().map(FeatureFlagState::key).toList();
+            // 🔧 FIX: Expressão lambda explícita evita o aviso de Null Type Safety do JDT
+            List<String> keys = flagService.list().stream().map(state -> state.key()).toList();
 
             assertThat(keys)
                     .containsExactlyInAnyOrder(

@@ -273,7 +273,7 @@ jacocoTestCoverageVerification {
                     classDirectories.files.collect { dir ->
                         fileTree(dir: dir, exclude: [
                                 'net/ddns/adambravo79/tmill/client/**',
-                                'net/ddns/adambravo79/tmill/config/**',
+ //                               'net/ddns/adambravo79/tmill/config/**',
                                 'net/ddns/adambravo79/tmill/TmillApplication*'
                         ])
                     }
@@ -302,7 +302,7 @@ jacocoTestCoverageVerification {
             }
             excludes = [
                     'net.ddns.adambravo79.tmill.TmillApplication',
-                    'net.ddns.adambravo79.tmill.config.*',
+                    //'net.ddns.adambravo79.tmill.config.*',
                     'net.ddns.adambravo79.tmill.client.*',
                     'net.ddns.adambravo79.tmill.constant.*',
                     '*.dto.*',

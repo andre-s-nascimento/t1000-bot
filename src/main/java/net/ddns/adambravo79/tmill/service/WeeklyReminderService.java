@@ -1,24 +1,30 @@
 /* (c) 2026 | 20/05/2026 */
 package net.ddns.adambravo79.tmill.service;
 
+import java.time.ZoneId;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class WeeklyReminderService {
+public class WeeklyReminderService implements SchedulingConfigurer {
 
     private final TelegramFacade telegramFacade;
+    private final JsonConfigLoader jsonConfigLoader;
 
     @Value("${bot.allowed-chats:}")
     private String allowedChatsStr;
@@ -48,7 +54,22 @@ public class WeeklyReminderService {
         }
     }
 
-    @Scheduled(cron = "0 0 16 * * 3", zone = "America/Sao_Paulo")
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        taskRegistrar.addTriggerTask(
+                this::sendWednesdayReminder,
+                ctx ->
+                        new CronTrigger(getCron(), ZoneId.of("America/Sao_Paulo"))
+                                .nextExecution(ctx));
+    }
+
+    private String getCron() {
+        return jsonConfigLoader
+                .loadConfig("config/weekly-reminder.json", Map.class, "config/weekly-reminder.json")
+                .map(m -> (String) m.get("cron"))
+                .orElse("0 0 16 * * 3");
+    }
+
     public void sendWednesdayReminder() {
         if (allowedGroups.isEmpty()) {
             log.info("Nenhum grupo configurado para receber o lembrete semanal.");

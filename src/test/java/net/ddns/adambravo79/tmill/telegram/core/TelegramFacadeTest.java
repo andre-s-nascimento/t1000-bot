@@ -16,8 +16,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.io.IOException;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -388,20 +386,22 @@ class TelegramFacadeTest {
     // =========================
     // DOWNLOAD FILE
     // =========================
-
     @Test
-    @DisplayName("downloadFile: falha de rede lança TelegramFileException")
+    @DisplayName("downloadFile: falha na resposta HTTP lança TelegramFileException")
     void downloadFile_deveLancarExcecao() {
         File file = mock(File.class);
         when(file.filePath()).thenReturn("path/to/file");
 
-        // Usa spy para executar o código real
         TelegramFacade spyFacade = spy(facade);
         ReflectionTestUtils.setField(spyFacade, "botToken", "token123");
+        ReflectionTestUtils.setField(spyFacade, "connectTimeout", 60);
+        ReflectionTestUtils.setField(spyFacade, "readTimeout", 120);
+        ReflectionTestUtils.setField(spyFacade, "writeTimeout", 120);
+        spyFacade.init();
 
         assertThatThrownBy(() -> spyFacade.downloadFile(file))
                 .isInstanceOf(TelegramFileException.class)
-                .hasCauseInstanceOf(IOException.class);
+                .hasMessageContaining("Erro ao baixar arquivo");
     }
 
     // =========================================================================

@@ -1,9 +1,8 @@
+/* (c) 2026 */
 package net.ddns.adambravo79.tmill.telegram.core;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URI;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +22,8 @@ import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 @Slf4j
 @Component
@@ -233,33 +234,37 @@ public class TelegramFacade {
     }
 
     /**
-     * Baixa o arquivo usando a URL pública do Telegram. O {@link TelegramBotExecutor} não expõe
-     * {@code downloadFile}, então fazemos manualmente.
+     * Baixa o arquivo usando a URL pública do Telegram com o cliente OkHttp configurado.
      */
     public byte[] downloadFile(File file) {
         String filePath = file.filePath();
         String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
-            // 🔥 Usa os timeouts configurados
-            conn.setConnectTimeout(connectTimeout * 1000);
-            conn.setReadTimeout(readTimeout * 1000);
-            try (InputStream is = conn.getInputStream()) {
+
+        Request request = new Request.Builder().url(url).build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new TelegramFileException(
+                        "Erro ao baixar arquivo: " + filePath + ", HTTP status: " + response.code(),
+                        null);
+            }
+            try (InputStream is = response.body().byteStream()) {
                 return is.readAllBytes();
             }
         } catch (IOException e) {
             throw new TelegramFileException("Erro ao baixar arquivo: " + filePath, e);
-        } finally {
-            if (conn != null) conn.disconnect();
         }
     }
 
     /** Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4 últimos caracteres. */
     private static String maskToken(String token) {
-        if (token == null || token.length() < 8) {
+        if (token == null) {
             return "***";
         }
-        return token.substring(0, 4) + "..." + token.substring(token.length() - 4);
+        int length = token.length();
+        if (length < 8) {
+            return "***";
+        }
+        return token.substring(0, 4) + "..." + token.substring(length - 4);
     }
 }

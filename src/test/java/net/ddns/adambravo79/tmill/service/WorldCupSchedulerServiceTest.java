@@ -6,7 +6,9 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -20,6 +22,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -30,15 +34,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.Trigger;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -51,6 +60,7 @@ class WorldCupSchedulerServiceTest {
     @Mock private WorldCupUpdaterService worldCupUpdaterService;
     @Mock private MetricsService metricsService;
     @Mock private FeatureFlagAdminService featureFlags;
+    @Mock private JsonConfigLoader jsonConfigLoader;
 
     @InjectMocks private WorldCupSchedulerService service;
 
@@ -603,7 +613,8 @@ class WorldCupSchedulerServiceTest {
                         worldCupUpdaterService,
                         fixed,
                         metricsService,
-                        featureFlags);
+                        featureFlags,
+                        jsonConfigLoader);
 
         Set<Long> groups = new HashSet<>();
         groups.add(-100L);
@@ -852,5 +863,43 @@ class WorldCupSchedulerServiceTest {
                 null,
                 List.of(),
                 List.of());
+    }
+
+    @Test
+    @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
+    void configureTasks_deveRegistrarAsTasksECobrirLambda() {
+        // Preparamos o mock do jsonConfigLoader com todas as chaves possíveis
+        // para que este teste seja reaproveitável em todas as classes
+        lenient()
+                .when(jsonConfigLoader.loadConfig(anyString(), eq(Map.class), anyString()))
+                .thenReturn(
+                        Optional.of(
+                                Map.of(
+                                        "cron", "0 0 12 * * *",
+                                        "updateCron", "0 0 12 * * *",
+                                        "hourlyCron", "0 0 12 * * *",
+                                        "weeklyCron", "0 0 12 * * *",
+                                        "morningCron", "0 0 12 * * *",
+                                        "eveningCron", "0 0 12 * * *",
+                                        "noonCron", "0 0 12 * * *",
+                                        "checkCron", "0 0 12 * * *",
+                                        "cleanCron", "0 0 12 * * *")));
+
+        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
+
+        // Aciona o método que registra as tarefas
+        service.configureTasks(taskRegistrar);
+
+        // Captura as triggers que foram adicionadas
+        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
+        verify(taskRegistrar, atLeastOnce())
+                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
+
+        // Aciona a lambda de cada trigger para cobrir o código do getCron()
+        // 🔧 FIX: Usar SimpleTriggerContext em vez de mock(TriggerContext.class)
+        SimpleTriggerContext ctx = new SimpleTriggerContext();
+        for (Trigger trigger : triggerCaptor.getAllValues()) {
+            trigger.nextExecution(ctx);
+        }
     }
 }

@@ -1,3 +1,4 @@
+/* (c) 2026 | 04/10/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.IOException;
@@ -10,25 +11,29 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
-public class PodcastPublisherService {
+public class PodcastPublisherService implements SchedulingConfigurer {
 
     private final PodcastScriptService scriptService;
     private final AzureTtsClient ttsClient;
     private final TelegramFacade telegramFacade;
     private final TempDirService tempDirService;
     private final MetricsService metricsService;
+    private final PromptRegistryService promptRegistryService;
 
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
@@ -43,9 +48,23 @@ public class PodcastPublisherService {
     private long compressTimeoutSeconds;
 
     // Tamanho máximo do áudio antes de comprimir (5MB)
-    private static final long MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
+    private static final long MAX_AUDIO_SIZE_BYTES = 5L * 1024 * 1024;
 
-    @Scheduled(cron = "0 0 12 * * 5", zone = "America/Sao_Paulo")
+    // Constante para formatação de data
+    private static final DateTimeFormatter DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        taskRegistrar.addTriggerTask(
+                this::publishWeeklyPodcast,
+                ctx ->
+                        new CronTrigger(
+                                        promptRegistryService.getPodcastCron(),
+                                        ZoneId.of("America/Sao_Paulo"))
+                                .nextExecution(ctx));
+    }
+
     public void publishWeeklyPodcast() {
         log.info("🎧 Iniciando geração do podcast semanal (Sexta-feira)...");
 
@@ -75,7 +94,29 @@ public class PodcastPublisherService {
         }
         log.info("📝 Roteiro gerado ({} caracteres).", script.length());
 
-        // 2. Sintetiza áudio
+        // 2. Sintetiza e avalia necessidade de compressão do áudio
+        byte[] audioData = generateAndProcessAudio(script, chatId, startDate, endDate);
+
+        // Verifica retorno vazio em vez de nulo (SonarQube)
+        if (audioData.length == 0) {
+            return; // O fluxo foi encerrado (com fallback disparado) nos sub-métodos
+        }
+
+        // 3 e 4. Prepara arquivo, salva e envia
+        saveAndSendPodcast(audioData, script, startDate, endDate, chatId);
+
+        long duration = System.currentTimeMillis() - start;
+        double sizeMb = audioData.length / 1024.0 / 1024.0;
+        log.info(
+                "📊 Métricas: tamanho={}MB, duração={}ms, caracteres={}",
+                String.format("%.2f", sizeMb),
+                duration,
+                script.length());
+        log.info("✅ Podcast finalizado em {}ms", System.currentTimeMillis() - start);
+    }
+
+    private byte[] generateAndProcessAudio(
+            String script, long chatId, LocalDate startDate, LocalDate endDate) {
         log.info("🔊 Iniciando síntese de áudio...");
         byte[] audioData;
         try {
@@ -84,50 +125,57 @@ public class PodcastPublisherService {
             log.error("❌ Exceção na síntese do áudio", e);
             metricsService.error("podcast_tts_vazio");
             enviarRoteiroComoTexto(chatId, script, startDate, endDate);
-            return;
+            return new byte[0];
         }
 
         if (audioData == null || audioData.length == 0) {
             log.error("❌ Áudio vazio.");
             telegramFacade.enviarMensagem(chatId, "❌ Erro ao gerar áudio do podcast.");
             metricsService.error("podcast_tts_vazio");
-            return;
+            return new byte[0];
         }
 
+        return checkAndCompressAudio(audioData);
+    }
+
+    private byte[] checkAndCompressAudio(byte[] audioData) {
         double audioSizeMb = audioData.length / 1024.0 / 1024.0;
         log.info(
                 "🔊 Áudio sintetizado: {} bytes ({} MB)",
                 audioData.length,
                 String.format("%.2f", audioSizeMb));
 
-        // 🔧 FIX: cálculo de redução estava sempre dando 0
-        if (audioData.length > MAX_AUDIO_SIZE_BYTES) {
-            log.info("🔊 Áudio grande ({} MB), comprimindo...", String.format("%.2f", audioSizeMb));
-            long originalSize = audioData.length;
-            audioData = compressAudio(audioData);
-
-            if (audioData.length < originalSize) {
-                double reduction = (1 - audioData.length / (double) originalSize) * 100;
-                double compressedSizeMb = audioData.length / 1024.0 / 1024.0;
-                log.info(
-                        "🔊 Áudio comprimido: {} bytes ({} MB) - redução de {}%",
-                        audioData.length,
-                        String.format("%.2f", compressedSizeMb),
-                        String.format("%.1f", reduction));
-                metricsService.success("podcast_compressao_ok");
-            } else {
-                log.warn("⚠️ FFmpeg não reduziu o tamanho. Mantendo original.");
-                metricsService.error("podcast_compressao_falha");
-            }
-        } else {
+        if (audioData.length <= MAX_AUDIO_SIZE_BYTES) {
             metricsService.success("podcast_compressao_pulada");
+            return audioData;
         }
 
-        // 3. Gera nome do arquivo
+        log.info("🔊 Áudio grande ({} MB), comprimindo...", String.format("%.2f", audioSizeMb));
+        long originalSize = audioData.length;
+        byte[] compressedData = compressAudio(audioData);
+
+        if (compressedData.length < originalSize) {
+            double reduction = (1 - compressedData.length / (double) originalSize) * 100;
+            double compressedSizeMb = compressedData.length / 1024.0 / 1024.0;
+            log.info(
+                    "🔊 Áudio comprimido: {} bytes ({} MB) - redução de {}%",
+                    compressedData.length,
+                    String.format("%.2f", compressedSizeMb),
+                    String.format("%.1f", reduction));
+            metricsService.success("podcast_compressao_ok");
+            return compressedData;
+        }
+
+        log.warn("⚠️ FFmpeg não reduziu o tamanho. Mantendo original.");
+        metricsService.error("podcast_compressao_falha");
+        return audioData;
+    }
+
+    private void saveAndSendPodcast(
+            byte[] audioData, String script, LocalDate startDate, LocalDate endDate, long chatId) {
         String fileName = generatePodcastFileName(endDate);
         log.info("📁 Nome do arquivo: {}", fileName);
 
-        // 4. Salva e envia
         Path tempFile = null;
         try {
             tempFile = tempDirService.createTempFile("podcast_", ".mp3");
@@ -138,11 +186,13 @@ public class PodcastPublisherService {
 
             String caption =
                     String.format(
-                            "<b>🎙️ Silas Cast</b>\n"
-                                    + "📅 Período: %s a %s\n"
-                                    + "📊 Tamanho: %.1f MB",
-                            startDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                            endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                            """
+                            <b>🎙️ Silas Cast</b>
+                            📅 Período: %s a %s
+                            📊 Tamanho: %.1f MB\
+                            """,
+                            startDate.format(DATE_FORMATTER),
+                            endDate.format(DATE_FORMATTER),
                             audioData.length / 1024.0 / 1024.0);
 
             log.info("📤 Enviando para o Telegram...");
@@ -173,19 +223,12 @@ public class PodcastPublisherService {
                 }
             }
         }
-
-        long duration = System.currentTimeMillis() - start;
-        double sizeMb = audioData.length / 1024.0 / 1024.0;
-        log.info(
-                "📊 Métricas: tamanho={}MB, duração={}ms, caracteres={}",
-                String.format("%.2f", sizeMb),
-                duration,
-                script.length());
-        log.info("✅ Podcast finalizado em {}ms", System.currentTimeMillis() - start);
     }
 
     // ===== COMPRESSÃO =====
 
+    @SuppressWarnings(
+            "java:S4036") // Ignorado propositalmente: uso do FFMPEG via PATH da imagem Docker
     private byte[] compressAudio(byte[] audioData) {
         Path inputFile = null;
         Path outputFile = null;
@@ -230,6 +273,10 @@ public class PodcastPublisherService {
                 return audioData;
             }
 
+        } catch (InterruptedException e) { // Captura específica de interrupção (SonarQube)
+            log.warn("⚠️ Compressão interrompida. Mantendo áudio original.");
+            Thread.currentThread().interrupt(); // Restaura flag da Thread
+            return audioData;
         } catch (Exception e) {
             log.warn("⚠️ Falha na compressão: {}. Mantendo áudio original.", e.getMessage());
             return audioData;
@@ -243,7 +290,6 @@ public class PodcastPublisherService {
         }
     }
 
-    // 🔧 FIX: delay configurável via `podcast.retry.delay-ms`
     private boolean sendWithRetry(long chatId, Path file, String caption) {
         for (int attempt = 1; attempt <= maxRetryAttempts; attempt++) {
             try {
@@ -274,11 +320,13 @@ public class PodcastPublisherService {
         try {
             String header =
                     String.format(
-                            "🎙️ Silas Cast (Áudio indisponível)\n"
-                                    + "📅 Período: %s a %s\n\n"
-                                    + "📝 Roteiro:\n",
-                            startDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                            endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+                            """
+                            🎙️ Silas Cast (Áudio indisponível)
+                            📅 Período: %s a %s
+
+                            📝 Roteiro:
+                            """,
+                            startDate.format(DATE_FORMATTER), endDate.format(DATE_FORMATTER));
 
             String fullText = header + script;
             int maxLength = 4000;
@@ -294,7 +342,7 @@ public class PodcastPublisherService {
                     telegramFacade.enviarMensagemHtml(
                             chatId,
                             String.format(
-                                    "📄 Parte %d/%d\n\n%s", partNumber, totalParts, partText));
+                                    "📄 Parte %d/%d%n%n%s", partNumber, totalParts, partText));
                 }
             }
             log.info("📝 Roteiro enviado como texto (fallback)");

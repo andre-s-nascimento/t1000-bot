@@ -53,8 +53,11 @@ class DigestPromptFactoryTest {
     }
 
     @Test
-    @DisplayName("Deve usar T1000 como fallback de persona se personaName for nula ou vazia")
-    void shouldFallbackToT1000WhenPersonaNameIsBlank() {
+    @DisplayName("Deve usar getActivePersonaName como fallback se personaName for nula ou vazia")
+    void shouldFallbackToActivePersonaWhenPersonaNameIsBlank() {
+        // 🔧 Mock do novo comportamento dinâmico
+        when(promptRegistryService.getActivePersonaName()).thenReturn("T1000");
+
         when(promptRegistryService.getDigestSystemPrompt("T1000", "DEFAULT"))
                 .thenReturn("Prompt Padrão T1000");
 
@@ -63,7 +66,23 @@ class DigestPromptFactoryTest {
 
         assertThat(resultNull).isEqualTo("Prompt Padrão T1000");
         assertThat(resultBlank).isEqualTo("Prompt Padrão T1000");
+
+        verify(promptRegistryService, times(2)).getActivePersonaName();
         verify(promptRegistryService, times(2)).getDigestSystemPrompt("T1000", "DEFAULT");
+    }
+
+    @Test
+    @DisplayName("Deve usar getActivePersonaName quando a DigestPersona for nula")
+    void shouldFallbackToActivePersonaWhenDigestPersonaIsNull() {
+        when(promptRegistryService.getActivePersonaName()).thenReturn("T1000");
+
+        when(promptRegistryService.getDigestSystemPrompt("T1000", "MANHÃ"))
+                .thenReturn("Prompt Padrão T1000");
+
+        String result = digestPromptFactory.buildSystemPrompt((DigestPersona) null, "MANHÃ");
+
+        assertThat(result).isEqualTo("Prompt Padrão T1000");
+        verify(promptRegistryService).getActivePersonaName();
     }
 
     @Test

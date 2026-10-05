@@ -1,4 +1,4 @@
-/* (c) 2026 | 22/07/2026 */
+/* (c) 2026 | 04/10/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import static net.ddns.adambravo79.tmill.constant.BotMessages.BRAZIL_ZONE;
@@ -10,17 +10,19 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
@@ -31,11 +33,11 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.GroqClient;
-import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.exception.DigestGenerationException;
 import net.ddns.adambravo79.tmill.exception.DigestSendException;
 import net.ddns.adambravo79.tmill.exception.GroqRateLimitException;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
@@ -45,14 +47,11 @@ import net.ddns.adambravo79.tmill.telegram.util.TelegramMessageSplitter;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DailyDigestService {
+public class DailyDigestService implements SchedulingConfigurer {
 
     private static final int MAX_PROMPT_SIZE = 18000;
     private static final int ALLOWED_MESSAGES_MARGIN = 2000;
     private static final int TRUNCATE_SLICE_DIVISOR = 3;
-
-    private static final DateTimeFormatter SQL_DTF =
-            DateTimeFormatter.ofPattern(BotMessages.FMT_YYYY_MM_DD + " HH:mm:ss");
 
     private static final DateTimeFormatter HOUR_FORMAT = DateTimeFormatter.ofPattern(FMT_HH_MM);
     private static final DateTimeFormatter HEADER_FORMAT =
@@ -64,6 +63,7 @@ public class DailyDigestService {
     private final MetricsService metricsService;
     private final FeatureFlagAdminService featureFlags;
     private final PromptRegistryService promptRegistryService;
+    private final JsonConfigLoader jsonConfigLoader;
 
     @Value("${digest.chat-ids:}")
     private String digestChatIdsStr;
@@ -95,6 +95,31 @@ public class DailyDigestService {
         }
     }
 
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        taskRegistrar.addTriggerTask(
+                this::generateMorningDigest,
+                ctx ->
+                        new CronTrigger(
+                                        getCron("morningCron", "0 30 8 * * *"),
+                                        ZoneId.of(BRAZIL_ZONE))
+                                .nextExecution(ctx));
+        taskRegistrar.addTriggerTask(
+                this::generateEveningDigest,
+                ctx ->
+                        new CronTrigger(
+                                        getCron("eveningCron", "0 30 20 * * *"),
+                                        ZoneId.of(BRAZIL_ZONE))
+                                .nextExecution(ctx));
+    }
+
+    private String getCron(String key, String defaultCron) {
+        return jsonConfigLoader
+                .loadConfig("config/digest-config.json", Map.class, "config/digest-config.json")
+                .map(m -> (String) m.get(key))
+                .orElse(defaultCron);
+    }
+
     public void generateDigestCustom(LocalDateTime from, LocalDateTime to, Long specificChatId) {
         if (from == null || to == null) {
             throw new IllegalArgumentException(
@@ -107,7 +132,6 @@ public class DailyDigestService {
         generateDigest(from, to, "PERÍODO PERSONALIZADO", specificChatId);
     }
 
-    @Scheduled(cron = "0 30 8 * * *", zone = BRAZIL_ZONE)
     public void generateMorningDigest() {
         if (!featureFlags.isEnabled("digest.enabled") || digestChatIds.isEmpty()) {
             log.debug("Digest matinal desabilitado ou sem chats configurados.");
@@ -119,7 +143,6 @@ public class DailyDigestService {
         generateDigest(from, to, "RESUMO DA MADRUGADA/MANHÃ", null);
     }
 
-    @Scheduled(cron = "0 30 20 * * *", zone = BRAZIL_ZONE)
     public void generateEveningDigest() {
         if (!featureFlags.isEnabled("digest.enabled") || digestChatIds.isEmpty()) {
             log.debug("Digest noturno desabilitado ou sem chats configurados.");
@@ -143,7 +166,7 @@ public class DailyDigestService {
 
             if (allMessages.isEmpty()) {
                 log.info("Nenhuma interação encontrada no período.");
-                metricsService.error("digest_sem_mensagens"); // 👈 NOVO
+                metricsService.error("digest_sem_mensagens");
                 return;
             }
 
@@ -155,7 +178,7 @@ public class DailyDigestService {
             String summary = generateSummary(finalMessages, periodLabel);
             if (summary == null || summary.isBlank()) {
                 log.warn("Resumo vazio do Groq para período {}.", periodLabel);
-                metricsService.error("digest_groq_vazio"); // 👈 NOVO
+                metricsService.error("digest_groq_vazio");
                 return;
             }
 
@@ -166,11 +189,11 @@ public class DailyDigestService {
                 sendDigestToChat(chatId, finalMessage);
             }
 
-            metricsService.success("digest_gerado_sucesso"); // 👈 NOVO
+            metricsService.success("digest_gerado_sucesso");
 
         } catch (DataAccessException e) {
             log.error("❌ Erro de acesso ao banco de dados ao gerar digest {}", periodLabel, e);
-            metricsService.error("digest_db_error"); // 👈 NOVO
+            metricsService.error("digest_db_error");
 
         } catch (HttpClientErrorException e) {
             log.error(
@@ -178,26 +201,26 @@ public class DailyDigestService {
                     periodLabel,
                     e.getStatusCode(),
                     e);
-            metricsService.error("digest_groq_http_error"); // 👈 NOVO
+            metricsService.error("digest_groq_http_error");
 
         } catch (GroqRateLimitException e) {
             log.error(
                     "❌ Rate limit do Groq ao gerar digest {}. Considerar retry agendado.",
                     periodLabel,
                     e);
-            metricsService.error("digest_groq_rate_limit"); // 👈 NOVO
+            metricsService.error("digest_groq_rate_limit");
 
         } catch (DigestGenerationException e) {
             log.error("❌ Falha na geração do digest {}", periodLabel, e);
-            metricsService.error("digest_groq_indisponivel"); // 👈 NOVO
+            metricsService.error("digest_groq_indisponivel");
 
         } catch (DigestSendException e) {
             log.error("❌ Falha no envio do digest {}", periodLabel, e);
-            metricsService.error("digest_envio_erro"); // 👈 NOVO
+            metricsService.error("digest_envio_erro");
 
         } catch (RuntimeException e) {
             log.error("❌ Erro inesperado de runtime ao gerar digest {}", periodLabel, e);
-            metricsService.error("digest_erro_inesperado"); // 👈 NOVO
+            metricsService.error("digest_erro_inesperado");
             throw new DigestGenerationException(
                     "Erro inesperado ao gerar digest: " + periodLabel, e);
         }
@@ -205,7 +228,6 @@ public class DailyDigestService {
 
     // ======================== FETCH & BUILD ========================
 
-    @SuppressWarnings("null")
     private List<ChatMessage> fetchMessages(LocalDateTime from, LocalDateTime to) {
         // 🔧 FIX: passar LocalDateTime direto — o driver do Postgres converte para TIMESTAMP.
         // Formatar como String quebra no Postgres (timestamp >= varchar não existe).
@@ -233,17 +255,11 @@ public class DailyDigestService {
                         from,
                         to);
 
-        List<ChatMessage> allMessages = new ArrayList<>(messages.size() + transcripts.size());
-
-        for (Map<String, Object> row : messages) {
-            allMessages.add(buildChatMessage(row, false));
-        }
-        for (Map<String, Object> row : transcripts) {
-            allMessages.add(buildChatMessage(row, true));
-        }
-
-        allMessages.sort(Comparator.comparing(ChatMessage::getTimestamp));
-        return allMessages;
+        return Stream.concat(
+                        messages.stream().map(row -> buildChatMessage(row, false)),
+                        transcripts.stream().map(row -> buildChatMessage(row, true)))
+                .sorted(Comparator.comparing(msg -> msg.getTimestamp()))
+                .toList();
     }
 
     private ChatMessage buildChatMessage(Map<String, Object> row, boolean isAudio) {
@@ -271,7 +287,7 @@ public class DailyDigestService {
                 .build();
     }
 
-    @SuppressWarnings({"null", "TimeZone"})
+    @SuppressWarnings("TimeZone")
     private String buildMessagesBlock(List<ChatMessage> messages) {
         StringBuilder sb = new StringBuilder();
         LocalDateTime previous = null;

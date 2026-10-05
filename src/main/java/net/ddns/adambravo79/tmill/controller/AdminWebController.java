@@ -87,6 +87,9 @@ import tools.jackson.databind.ObjectMapper;
 @RequestMapping("/admin-web")
 @RequiredArgsConstructor
 @Slf4j
+@SuppressWarnings(
+        "java:S3516") // 🔧 FIX: Suprime alerta de múltiplos retornos iguais. É esperado em
+// controllers Spring MVC (Post-Redirect-Get)
 public class AdminWebController {
 
     // =========================================================================
@@ -102,6 +105,11 @@ public class AdminWebController {
     private static final String SUCCESS = "success";
     private static final String ERROR = "error";
     private static final String REDIRECT_ADMIN_WEB = "redirect:/admin-web";
+
+    // 🔧 FIX: Extração de literais duplicados exigida pelo Sonar (java:S1192)
+    private static final String PROP_WORLDCUP_FILE = "worldcup.data.file";
+    private static final String PROP_AUTO_RESPONSE_FILE = "auto.response.file";
+    private static final String PROP_EASTER_EGG_FILE = "easter-egg.file";
 
     // =========================================================================
     // DEPENDÊNCIAS
@@ -156,6 +164,9 @@ public class AdminWebController {
     // =========================================================================
 
     @GetMapping
+    @SuppressWarnings(
+            "null") // 🔧 FIX: Silencia o JDT Null Type Safety para manter o Method Reference do
+    // Sonar
     public String adminPage(Model model) {
         model.addAttribute("worldcupEnabled", worldcupEnabled);
         model.addAttribute("ownerId", ownerId);
@@ -897,6 +908,9 @@ public class AdminWebController {
 
     @GetMapping("/migrate-sqlite/preview")
     @ResponseBody
+    @SuppressWarnings(
+            "null") // 🔧 FIX: Silencia o JDT Null Type Safety para manter o Method Reference do
+    // Sonar
     public ResponseEntity<Map<String, Object>> previewMigration() {
         try {
             Map<String, Integer> counts = migrationService.previewCounts();
@@ -1052,11 +1066,11 @@ public class AdminWebController {
         props.put("digest.enabled", environment.getProperty("digest.enabled"));
         props.put("digest.chat-ids", environment.getProperty("digest.chat-ids"));
         props.put("worldcup.enabled", environment.getProperty("worldcup.enabled"));
-        props.put("worldcup.data.file", environment.getProperty("worldcup.data.file"));
+        props.put(PROP_WORLDCUP_FILE, environment.getProperty(PROP_WORLDCUP_FILE));
         props.put("worldcup.update.enabled", environment.getProperty("worldcup.update.enabled"));
         props.put("auto.response.enabled", environment.getProperty("auto.response.enabled"));
-        props.put("auto.response.file", environment.getProperty("auto.response.file"));
-        props.put("easter-egg.file", environment.getProperty("easter-egg.file"));
+        props.put(PROP_AUTO_RESPONSE_FILE, environment.getProperty(PROP_AUTO_RESPONSE_FILE));
+        props.put(PROP_EASTER_EGG_FILE, environment.getProperty(PROP_EASTER_EGG_FILE));
         props.put(
                 "weekly.reminder.media-file",
                 environment.getProperty("weekly.reminder.media-file"));
@@ -1088,15 +1102,15 @@ public class AdminWebController {
                 List.of(
                         new ConfigFile(
                                 "easter-eggs.json",
-                                "easter-egg.file",
+                                PROP_EASTER_EGG_FILE,
                                 "classpath:easter-eggs.json"),
                         new ConfigFile(
                                 "auto-responses.json",
-                                "auto.response.file",
+                                PROP_AUTO_RESPONSE_FILE,
                                 "classpath:auto-responses.json"),
                         new ConfigFile(
                                 "worldcup2026.json",
-                                "worldcup.data.file",
+                                PROP_WORLDCUP_FILE,
                                 "classpath:worldcup2026.json"));
 
         for (ConfigFile file : files) {
