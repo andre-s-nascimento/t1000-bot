@@ -32,8 +32,26 @@ import lombok.extern.slf4j.Slf4j;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private static final String DEV_MODE_BORDER_PADDING =
-            "║                                                                ║";
+    private static final String DEV_MODE_BANNER =
+            """
+
+            ╔════════════════════════════════════════════════════════════════╗
+            ║  ⚠️  MODO DEV ATIVADO — SPRING SECURITY DESABILITADO          ║
+            ║                                                                ║
+            ║  Endpoints /admin/** e /admin-web/** estão SEM AUTENTICAÇÃO.   ║
+            ║                                                                ║
+            ║  ❌ NUNCA use isso em produção!                                ║
+            ║  ❌ NUNCA exponha essa porta publicamente!                     ║
+            ║                                                                ║
+            ║  Para desligar: ADMIN_SECURITY_DISABLED=false (ou remova).     ║
+            ╚════════════════════════════════════════════════════════════════╝
+
+            """;
+
+    private static final String JSON_401_UNAUTHENTICATED =
+            "{\"erro\":\"Não autenticado. Faça login novamente.\"}";
+
+    private static final String JSON_403_FORBIDDEN = "{\"erro\":\"Acesso negado.\"}";
 
     @Value("${admin.google.client-id:}")
     private String googleClientId;
@@ -59,28 +77,15 @@ public class SecurityConfig {
     /** Falha o boot se a flag de desabilitar segurança for usada em produção. */
     @PostConstruct
     public void validateSecurityConfig() {
-        if (securityDisabled) {
-            boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
-
-            if (isProd) {
-                throw new IllegalStateException(
-                        "🚨 FALHA CRÍTICA: `admin.security.disabled=true` NÃO é permitido no"
-                                + " profile `prod`. Desative a flag ou remova o profile `prod`.");
-            }
-
-            log.warn("");
-            log.warn("╔════════════════════════════════════════════════════════════════╗");
-            log.warn("║  ⚠️  MODO DEV ATIVADO — SPRING SECURITY DESABILITADO          ║");
-            log.warn(DEV_MODE_BORDER_PADDING);
-            log.warn("║  Endpoints /admin/** e /admin-web/** estão SEM AUTENTICAÇÃO.   ║");
-            log.warn(DEV_MODE_BORDER_PADDING);
-            log.warn("║  ❌ NUNCA use isso em produção!                                ║");
-            log.warn("║  ❌ NUNCA exponha essa porta publicamente!                      ║");
-            log.warn(DEV_MODE_BORDER_PADDING);
-            log.warn("║  Para desligar: ADMIN_SECURITY_DISABLED=false (ou remova).     ║");
-            log.warn("╚════════════════════════════════════════════════════════════════╝");
-            log.warn("");
+        if (!securityDisabled) {
+            return;
         }
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            throw new IllegalStateException(
+                    "🚨 FALHA CRÍTICA: `admin.security.disabled=true` NÃO é permitido no profile"
+                            + " `prod`. Desative a flag ou remova o profile `prod`.");
+        }
+        log.warn(DEV_MODE_BANNER);
     }
 
     @Bean
@@ -89,7 +94,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    @SuppressWarnings({"java:S4502", "null"})
+    @SuppressWarnings("java:S4502") // CSRF desabilitado intencionalmente em modo dev
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         // ===================== MODO DEV (sem autenticação) =====================
@@ -138,13 +143,13 @@ public class SecurityConfig {
                 .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
                 .sessionManagement(sm -> sm.sessionFixation().changeSessionId());
 
-        // CSRF: ignorar rotas admin (API interna consumida por scripts) e actuator
+        // CSRF: ignorar rotas admin (API interna) e actuator
         http.csrf(
                 csrf ->
                         csrf.ignoringRequestMatchers("/admin/**", "/admin-web/**")
                                 .ignoringRequestMatchers("/actuator/**"));
 
-        // 🔧 FIX CRÍTICO: para /admin/** (API REST), devolver JSON em 401/403
+        // Para /admin/** (API REST), devolver JSON em 401/403
         http.exceptionHandling(
                 ex ->
                         ex.defaultAuthenticationEntryPointFor(
@@ -152,14 +157,10 @@ public class SecurityConfig {
                                             log.warn(
                                                     "🔒 401 JSON em /admin/** path={}",
                                                     request.getRequestURI());
-                                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                                            response.setContentType(
-                                                    MediaType.APPLICATION_JSON_VALUE);
-                                            response.setCharacterEncoding("UTF-8");
-                                            response.getWriter()
-                                                    .write(
-                                                            "{\"erro\":\"Não autenticado. Faça"
-                                                                    + " login novamente.\"}");
+                                            writeJson(
+                                                    response,
+                                                    HttpServletResponse.SC_UNAUTHORIZED,
+                                                    JSON_401_UNAUTHENTICATED);
                                         },
                                         request -> request.getRequestURI().startsWith("/admin/"))
                                 .defaultAccessDeniedHandlerFor(
@@ -167,12 +168,10 @@ public class SecurityConfig {
                                             log.warn(
                                                     "🔒 403 JSON em /admin/** path={}",
                                                     request.getRequestURI());
-                                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                                            response.setContentType(
-                                                    MediaType.APPLICATION_JSON_VALUE);
-                                            response.setCharacterEncoding("UTF-8");
-                                            response.getWriter()
-                                                    .write("{\"erro\":\"Acesso negado.\"}");
+                                            writeJson(
+                                                    response,
+                                                    HttpServletResponse.SC_FORBIDDEN,
+                                                    JSON_403_FORBIDDEN);
                                         },
                                         request -> request.getRequestURI().startsWith("/admin/")));
 
@@ -234,15 +233,13 @@ public class SecurityConfig {
         };
     }
 
-    // SuppressWarnings("null"): Falso positivo de Null Type Safety no analisador JDT/Eclipse ao
-    // usar method reference String::trim em Stream.
     @SuppressWarnings("null")
     private List<String> parseAllowedEmails() {
         if (allowedEmailsStr == null || allowedEmailsStr.isBlank()) {
             return List.of();
         }
         return Arrays.stream(allowedEmailsStr.split(","))
-                .filter(s -> s != null && !s.isBlank())
+                .filter(s -> !s.isBlank())
                 .map(String::trim)
                 .toList();
     }
@@ -257,5 +254,14 @@ public class SecurityConfig {
             return realIp.trim();
         }
         return request.getRemoteAddr();
+    }
+
+    /** Escreve uma resposta JSON com status HTTP e charset UTF-8. */
+    private static void writeJson(HttpServletResponse response, int status, String body)
+            throws java.io.IOException {
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(body);
     }
 }

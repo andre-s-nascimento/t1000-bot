@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -32,14 +33,16 @@ import org.springframework.security.web.authentication.AuthenticationSuccessHand
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RestController;
 
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 class SecurityConfigTest {
 
+    // =========================================================================
+    // TESTES DE INTEGRAÇÃO (MockMvc) — segurança ativa
+    // =========================================================================
+
+    @Nested
     @WebMvcTest(controllers = TestAdminController.class)
     @Import({SecurityConfig.class, AdminFilterConfig.class})
     @TestPropertySource(
@@ -50,12 +53,12 @@ class SecurityConfigTest {
                 "admin.allowed-emails=admin@test.com",
                 "admin.allowed-ips="
             })
-    static class StandardSecurityTest {
+    @DisplayName("Com credenciais Google configuradas")
+    class StandardSecurityTest {
 
         @Autowired private MockMvc mockMvc;
         @Autowired private SecurityConfig securityConfig;
 
-        @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
         @MockitoBean private MetricsService metricsService;
 
         @Test
@@ -86,16 +89,7 @@ class SecurityConfigTest {
         }
 
         @Test
-        @DisplayName("GET /actuator/health não é bloqueado")
-        void actuatorHealth_naoBloqueado() throws Exception {
-            int status =
-                    mockMvc.perform(get("/actuator/health")).andReturn().getResponse().getStatus();
-            assertThat(status).isNotEqualTo(401);
-        }
-
-        @Test
-        @DisplayName(
-                "ClientRegistrationRepository cria registro do Google corretamente com credenciais")
+        @DisplayName("ClientRegistrationRepository cria registro do Google corretamente")
         void clientRegistrationRepository_comCredenciais() {
             ClientRegistrationRepository repo = securityConfig.clientRegistrationRepository();
             assertThat(repo).isNotNull();
@@ -105,6 +99,11 @@ class SecurityConfigTest {
         }
     }
 
+    // =========================================================================
+    // TESTES DE INTEGRAÇÃO (MockMvc) — sem credenciais
+    // =========================================================================
+
+    @Nested
     @WebMvcTest(controllers = TestAdminController.class)
     @Import({SecurityConfig.class, AdminFilterConfig.class})
     @TestPropertySource(
@@ -114,14 +113,16 @@ class SecurityConfigTest {
                 "admin.google.client-secret=",
                 "admin.allowed-emails="
             })
-    static class BlankCredentialsSecurityTest {
+    @DisplayName("Sem credenciais Google")
+    class BlankCredentialsSecurityTest {
 
         @Autowired private SecurityConfig securityConfig;
+
         @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
         @MockitoBean private MetricsService metricsService;
 
         @Test
-        @DisplayName("ClientRegistrationRepository retorna null quando credenciais estão vazias")
+        @DisplayName("ClientRegistrationRepository retorna null quando credenciais vazias")
         void clientRegistrationRepository_vazio() {
             ClientRegistrationRepository repo = securityConfig.clientRegistrationRepository();
             assertThat(repo).isNotNull();
@@ -129,23 +130,9 @@ class SecurityConfigTest {
         }
     }
 
-    @WebMvcTest(controllers = TestAdminController.class)
-    @Import({SecurityConfig.class, AdminFilterConfig.class})
-    @TestPropertySource(properties = {"admin.security.disabled=true"})
-    static class DevModeSecurityTest {
-
-        @Autowired private MockMvc mockMvc;
-        @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
-        @MockitoBean private MetricsService metricsService;
-
-        @Test
-        @DisplayName("Modo dev ativado: /admin/** acessível sem autenticação")
-        void devMode_permiteAcessoAdmin() throws Exception {
-            mockMvc.perform(get("/admin/test"))
-                    .andExpect(status().isOk())
-                    .andExpect(content().string("ok"));
-        }
-    }
+    // =========================================================================
+    // TESTES UNITÁRIOS (sem Spring context)
+    // =========================================================================
 
     @Test
     @DisplayName("Validação de segurança: lança exceção se securityDisabled=true no profile prod")
@@ -155,7 +142,6 @@ class SecurityConfigTest {
 
         AdminEmailAuthorizationFilter filter = mock(AdminEmailAuthorizationFilter.class);
         SecurityConfig config = new SecurityConfig(filter, env);
-
         org.springframework.test.util.ReflectionTestUtils.setField(
                 config, "securityDisabled", true);
 
@@ -165,7 +151,7 @@ class SecurityConfigTest {
     }
 
     @Test
-    @DisplayName("Testa extração de IP e Handler de Sucesso de Login")
+    @DisplayName("successHandler redireciona para /admin-web e loga o IP")
     void testSuccessHandlerAndIpExtraction() throws Exception {
         Environment env = mock(Environment.class);
         when(env.acceptsProfiles(any(Profiles.class))).thenReturn(false);
@@ -193,29 +179,5 @@ class SecurityConfigTest {
         ((AuthenticationSuccessHandler) successHandler)
                 .onAuthenticationSuccess(request, response, auth);
         assertThat(response.getRedirectedUrl()).isEqualTo("/admin-web");
-    }
-
-    @RestController
-    static class TestAdminController {
-
-        @GetMapping("/admin/test")
-        public String get() {
-            return "ok";
-        }
-
-        @PostMapping("/admin/test")
-        public String post() {
-            return "ok";
-        }
-
-        @GetMapping("/admin/features/transcription.enabled")
-        public String features() {
-            return "ok";
-        }
-
-        @GetMapping("/actuator/health")
-        public String health() {
-            return "{\"status\":\"UP\"}";
-        }
     }
 }

@@ -1,4 +1,5 @@
 /* (c) 2026 | 15/09/2026 */
+/* (c) 2026 | 15/09/2026 */
 package net.ddns.adambravo79.tmill.config;
 
 import java.io.IOException;
@@ -24,6 +25,10 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
     @Value("${admin.allowed-emails:}")
     private String allowedEmailsStr;
 
+    // 🔧 Adicionado para suportar o bypass do filtro quando o modo dev estiver ativo
+    @Value("${admin.security.disabled:false}")
+    private boolean securityDisabled;
+
     private List<String> allowedEmails;
 
     @Override
@@ -46,6 +51,12 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+
+        // 🔧 FIX: Se a segurança estiver desabilitada (modo dev), ignora o filtro e deixa passar
+        if (securityDisabled) {
+            chain.doFilter(request, response);
+            return;
+        }
 
         String path = request.getRequestURI();
 
