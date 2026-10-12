@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,11 +14,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverMovieResponse;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverTvResponse;
 import net.ddns.adambravo79.tmill.model.*;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
 @Slf4j
@@ -30,21 +33,23 @@ public class TmdbClient {
 
     private static final String LANGUAGE = "language";
 
-    private static final Map<String, String> ATALHOS =
-            Map.of(
-                    "duna", "Dune 2021",
-                    "dune", "Dune 2021",
-                    "batman", "The Batman 2022",
-                    "o poderoso chefao", "The Godfather 1972");
-
     private final RestClient restClient;
+    private final JsonConfigLoader jsonConfigLoader;
+
+    /** Atalhos carregados do JSON; recarregáveis via {@link #reloadAliases()}. */
+    private volatile Map<String, String> atalhos = Map.of();
+
+    /** Path do JSON de atalhos (override via property). */
+    @Value("${tmdb.aliases.file:classpath:tmdb-aliases.json}")
+    private String aliasesFile;
 
     @Autowired
     public TmdbClient(
             @Value("${tmdb.token}") String tmdbToken,
             @Value("${tmdb.api.url}") String apiUrl,
             @Value("${groq.connect-timeout:5s}") Duration connectTimeout,
-            @Value("${groq.read-timeout:30s}") Duration readTimeout) {
+            @Value("${groq.read-timeout:30s}") Duration readTimeout,
+            JsonConfigLoader jsonConfigLoader) {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
@@ -57,11 +62,59 @@ public class TmdbClient {
                         .defaultHeader("accept", "application/json")
                         .requestFactory(factory)
                         .build();
+        this.jsonConfigLoader = jsonConfigLoader;
     }
 
-    // Construtor para testes
+    /** Construtor para testes — mantém assinatura antiga sem JSON loader. */
     public TmdbClient(RestClient restClient) {
         this.restClient = restClient;
+        this.jsonConfigLoader = null;
+    }
+
+    @PostConstruct
+    public void init() {
+        if (jsonConfigLoader != null) {
+            reloadAliases();
+        }
+    }
+
+    /**
+     * Recarrega os atalhos do JSON. Pode ser chamado em runtime via endpoint admin.
+     * Mantém o valor anterior em caso de falha.
+     */
+    public synchronized void reloadAliases() {
+        if (jsonConfigLoader == null) {
+            return;
+        }
+        try {
+            var loaded =
+                    jsonConfigLoader.loadConfig(
+                            "tmdb-aliases.json",
+                            Map.class,
+                            aliasesFile != null && !aliasesFile.isBlank() ? aliasesFile : null);
+
+            if (loaded.isEmpty()) {
+                log.warn("⚠️ Nenhum arquivo de atalhos TMDB encontrado — usando mapa vazio.");
+                return;
+            }
+
+            Object aliasesNode = loaded.get().get("aliases");
+            if (aliasesNode instanceof Map<?, ?> rawMap) {
+                Map<String, String> novo = new ConcurrentHashMap<>();
+                rawMap.forEach(
+                        (k, v) -> {
+                            if (k != null && v != null) {
+                                novo.put(k.toString().toLowerCase(), v.toString());
+                            }
+                        });
+                this.atalhos = Map.copyOf(novo);
+                log.info("✅ TMDB: {} atalhos carregados de {}", atalhos.size(), aliasesFile);
+            } else {
+                log.warn("⚠️ Chave 'aliases' ausente ou inválida no JSON de atalhos.");
+            }
+        } catch (Exception e) {
+            log.error("❌ Falha ao carregar atalhos TMDB — mantendo os anteriores", e);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -76,7 +129,7 @@ public class TmdbClient {
             maxDelay = 5000)
     public MovieSearchResponse pesquisarFilme(String query) {
         String queryNormalizada = query.trim().toLowerCase();
-        String queryFinal = ATALHOS.getOrDefault(queryNormalizada, query);
+        String queryFinal = atalhos.getOrDefault(queryNormalizada, query);
         if (!queryFinal.equals(query)) {
             log.info(
                     "🎬 TMDB: Atalho aplicado '{}' -> '{}'",

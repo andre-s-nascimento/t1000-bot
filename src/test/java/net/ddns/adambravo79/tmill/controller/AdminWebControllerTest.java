@@ -35,6 +35,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.Birthday;
@@ -52,9 +53,12 @@ import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
@@ -85,9 +89,15 @@ class AdminWebControllerTest {
     @Mock private MigrationService migrationService;
     @Mock private FeatureFlagAdminService featureFlagAdminService;
     @Mock private PromptRegistryService promptRegistryService;
+    @Mock private WorldCupTeamsService teamsService;
+    @Mock private TelegramExceptionHandler telegramExceptionHandler;
+    @Mock private TmdbClient tmdbClient;
+    @Mock private AdminConfigService adminConfigService;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
+
+    private static final long SHOWCASE_CHAT_ID = -1003703557250L;
 
     // =========================================================================
     // SETUP
@@ -117,7 +127,11 @@ class AdminWebControllerTest {
                         birthdayRepository,
                         migrationService,
                         featureFlagAdminService,
-                        promptRegistryService);
+                        promptRegistryService,
+                        teamsService,
+                        telegramExceptionHandler,
+                        tmdbClient,
+                        adminConfigService);
 
         // @Value fields — não injetados por ReflectionTestUtils
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
@@ -127,6 +141,8 @@ class AdminWebControllerTest {
         ReflectionTestUtils.setField(controller, "digestChatIdsStr", "333,444");
         ReflectionTestUtils.setField(controller, "migrationSqlitePath", "./data/test.db");
 
+        // 🔧 FIX: mesmo problema do AdminControllerTest — sem isso, getShowcaseChatId() retorna 0L.
+        lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -1289,7 +1305,7 @@ class AdminWebControllerTest {
         RedirectAttributes attrs = newRedirectAttributes();
         controller.testWeeklyReminderShowcase(null, attrs);
 
-        verify(weeklyReminderService).sendReminderToChat(AdminUtils.SHOWCASE_CHAT_ID);
+        verify(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
     }
 
     @Test

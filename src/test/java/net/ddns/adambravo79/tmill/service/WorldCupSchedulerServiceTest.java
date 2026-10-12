@@ -25,15 +25,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -48,6 +44,7 @@ import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
 import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -61,6 +58,7 @@ class WorldCupSchedulerServiceTest {
     @Mock private MetricsService metricsService;
     @Mock private FeatureFlagAdminService featureFlags;
     @Mock private JsonConfigLoader jsonConfigLoader;
+    @Mock private WorldCupTeamsService teamsService;
 
     @InjectMocks private WorldCupSchedulerService service;
 
@@ -70,72 +68,46 @@ class WorldCupSchedulerServiceTest {
         // lenient() evita UnnecessaryStubbingException nos testes que não consultam a flag.
         lenient().when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(true);
 
+        // Como o WorldCupSchedulerService agora delega para WorldCupTeamsService,
+        // configuramos respostas determinísticas para os times usados nos testes.
+        lenient()
+                .when(teamsService.translateTeam(anyString()))
+                .thenAnswer(
+                        i -> {
+                            String team = i.getArgument(0);
+                            if (team == null || team.isBlank()) return "?";
+                            return switch (team.toLowerCase()) {
+                                case "brazil" -> "Brasil";
+                                case "argentina" -> "Argentina";
+                                case "england" -> "Inglaterra";
+                                case "united states", "usa" -> "Estados Unidos";
+                                case "dr congo" -> "Republica Democratica do Congo";
+                                default -> team;
+                            };
+                        });
+
+        lenient()
+                .when(teamsService.flagEmoji(anyString()))
+                .thenAnswer(
+                        i -> {
+                            String team = i.getArgument(0);
+                            if (team == null || team.isBlank()) return "🏳️";
+                            return switch (team.toLowerCase()) {
+                                case "brazil" -> "🇧🇷";
+                                case "argentina" -> "🇦🇷";
+                                case "france" -> "🇫🇷";
+                                case "united states", "usa" -> "🇺🇸";
+                                case "dr congo" -> "🇨🇩";
+                                default -> "🏳️";
+                            };
+                        });
+
         Set<Long> mutableAllowedGroups = new HashSet<>();
         mutableAllowedGroups.add(-100L);
         ReflectionTestUtils.setField(service, "allowedGroups", mutableAllowedGroups);
         ReflectionTestUtils.setField(service, "allowedChatsStr", "");
 
         service.init();
-    }
-
-    // ============================================================
-    // TRADUÇÃO E BANDEIRAS
-    // ============================================================
-
-    @Test
-    @DisplayName("translateTeam: traduz times conhecidos")
-    void translateTeam_conhecidos() throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("translateTeam", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, "brazil")).isEqualTo("Brasil");
-        assertThat(m.invoke(service, "england")).isEqualTo("Inglaterra");
-        assertThat(m.invoke(service, "unknown")).isEqualTo("unknown");
-    }
-
-    @ParameterizedTest
-    @MethodSource("translateTeamProvider")
-    void translateTeam_parametrizado(String input, String expected) throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("translateTeam", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, input)).isEqualTo(expected);
-    }
-
-    static Stream<Arguments> translateTeamProvider() {
-        return Stream.of(
-                Arguments.of(null, "?"),
-                Arguments.of("", "?"),
-                Arguments.of("brazil", "Brasil"),
-                Arguments.of("United States of America", "Estados Unidos"),
-                Arguments.of("DR Congo", "Republica Democratica do Congo"),
-                Arguments.of("unknown", "unknown"));
-    }
-
-    @Test
-    @DisplayName("flagEmoji: bandeira para time conhecido")
-    void flagEmoji_conhecido() throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("flagEmoji", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, "brazil")).isEqualTo("🇧🇷");
-        assertThat(m.invoke(service, "france")).isEqualTo("🇫🇷");
-        assertThat(m.invoke(service, "unknown")).isEqualTo("🏳️");
-    }
-
-    @ParameterizedTest
-    @MethodSource("flagEmojiProvider")
-    void flagEmoji_parametrizado(String input, String expected) throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("flagEmoji", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, input)).isEqualTo(expected);
-    }
-
-    static Stream<Arguments> flagEmojiProvider() {
-        return Stream.of(
-                Arguments.of(null, "🏳️"),
-                Arguments.of("", "🏳️"),
-                Arguments.of("BRAZIL", "🇧🇷"),
-                Arguments.of("xyzzz", "🏳️"),
-                Arguments.of("United States of America", "🇺🇸"),
-                Arguments.of("DR Congo", "🇨🇩"));
     }
 
     // ============================================================
@@ -614,7 +586,8 @@ class WorldCupSchedulerServiceTest {
                         fixed,
                         metricsService,
                         featureFlags,
-                        jsonConfigLoader);
+                        jsonConfigLoader,
+                        teamsService);
 
         Set<Long> groups = new HashSet<>();
         groups.add(-100L);
@@ -804,6 +777,42 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
+    // CONFIGURE TASKS
+    // ============================================================
+
+    @Test
+    @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
+    void configureTasks_deveRegistrarAsTasksECobrirLambda() {
+        lenient()
+                .when(jsonConfigLoader.loadConfig(anyString(), eq(Map.class), anyString()))
+                .thenReturn(
+                        Optional.of(
+                                Map.of(
+                                        "cron", "0 0 12 * * *",
+                                        "updateCron", "0 0 12 * * *",
+                                        "hourlyCron", "0 0 12 * * *",
+                                        "weeklyCron", "0 0 12 * * *",
+                                        "morningCron", "0 0 12 * * *",
+                                        "eveningCron", "0 0 12 * * *",
+                                        "noonCron", "0 0 12 * * *",
+                                        "checkCron", "0 0 12 * * *",
+                                        "cleanCron", "0 0 12 * * *")));
+
+        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
+
+        service.configureTasks(taskRegistrar);
+
+        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
+        verify(taskRegistrar, atLeastOnce())
+                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
+
+        SimpleTriggerContext ctx = new SimpleTriggerContext();
+        for (Trigger trigger : triggerCaptor.getAllValues()) {
+            trigger.nextExecution(ctx);
+        }
+    }
+
+    // ============================================================
     // HELPERS
     // ============================================================
 
@@ -863,43 +872,5 @@ class WorldCupSchedulerServiceTest {
                 null,
                 List.of(),
                 List.of());
-    }
-
-    @Test
-    @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
-    void configureTasks_deveRegistrarAsTasksECobrirLambda() {
-        // Preparamos o mock do jsonConfigLoader com todas as chaves possíveis
-        // para que este teste seja reaproveitável em todas as classes
-        lenient()
-                .when(jsonConfigLoader.loadConfig(anyString(), eq(Map.class), anyString()))
-                .thenReturn(
-                        Optional.of(
-                                Map.of(
-                                        "cron", "0 0 12 * * *",
-                                        "updateCron", "0 0 12 * * *",
-                                        "hourlyCron", "0 0 12 * * *",
-                                        "weeklyCron", "0 0 12 * * *",
-                                        "morningCron", "0 0 12 * * *",
-                                        "eveningCron", "0 0 12 * * *",
-                                        "noonCron", "0 0 12 * * *",
-                                        "checkCron", "0 0 12 * * *",
-                                        "cleanCron", "0 0 12 * * *")));
-
-        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
-
-        // Aciona o método que registra as tarefas
-        service.configureTasks(taskRegistrar);
-
-        // Captura as triggers que foram adicionadas
-        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
-        verify(taskRegistrar, atLeastOnce())
-                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
-
-        // Aciona a lambda de cada trigger para cobrir o código do getCron()
-        // 🔧 FIX: Usar SimpleTriggerContext em vez de mock(TriggerContext.class)
-        SimpleTriggerContext ctx = new SimpleTriggerContext();
-        for (Trigger trigger : triggerCaptor.getAllValues()) {
-            trigger.nextExecution(ctx);
-        }
     }
 }

@@ -44,6 +44,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
@@ -60,9 +61,12 @@ import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.databind.ObjectMapper;
 
@@ -136,6 +140,10 @@ public class AdminWebController {
     private final MigrationService migrationService;
     private final FeatureFlagAdminService featureFlagAdminService;
     private final PromptRegistryService promptRegistryService;
+    private final WorldCupTeamsService teamsService;
+    private final TelegramExceptionHandler telegramExceptionHandler;
+    private final TmdbClient tmdbClient;
+    private final AdminConfigService adminConfigService;
 
     // =========================================================================
     // @Value
@@ -211,6 +219,30 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
+    }
+
+    @PostMapping("/reload-tmdb-aliases")
+    public String reloadTmdbAliases(RedirectAttributes redirectAttrs) {
+        try {
+            tmdbClient.reloadAliases();
+            redirectAttrs.addFlashAttribute(SUCCESS, "Atalhos TMDB recarregados.");
+        } catch (Exception e) {
+            log.error("Erro ao recarregar atalhos TMDB", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    @PostMapping("/reload-worldcup-teams")
+    public ResponseEntity<String> reloadWorldCupTeams() {
+        teamsService.reload();
+        return ResponseEntity.ok("Times da Copa recarregados com sucesso");
+    }
+
+    @PostMapping("/reload-telegram-errors")
+    public ResponseEntity<String> reloadTelegramErrors() {
+        telegramExceptionHandler.reload();
+        return ResponseEntity.ok("Regras de erro do Telegram recarregadas");
     }
 
     // =========================================================================
@@ -697,6 +729,12 @@ public class AdminWebController {
         return REDIRECT_ADMIN_WEB;
     }
 
+    @PostMapping("/reload-admin-config")
+    public ResponseEntity<String> reloadAdminConfig() {
+        adminConfigService.reload();
+        return ResponseEntity.ok("admin-config.json recarregado");
+    }
+
     // =========================================================================
     // PODCAST
     // =========================================================================
@@ -1147,22 +1185,18 @@ public class AdminWebController {
      * digestChatId → showcase. Retorna {@code 0} se nada estiver disponível.
      */
     private long resolveTargetChatId(Long chatIdParam) {
-        if (chatIdParam != null) {
-            return chatIdParam;
-        }
-        if (ownerId != 0) {
-            return ownerId;
-        }
+        if (chatIdParam != null) return chatIdParam;
+        if (ownerId != 0) return ownerId;
         if (digestChatIdsStr != null && !digestChatIdsStr.isBlank()) {
             for (String s : digestChatIdsStr.split(",")) {
                 try {
                     return Long.parseLong(s.trim());
                 } catch (NumberFormatException ignored) {
-                    // continua
+                    /** ignorado */
                 }
             }
         }
-        return AdminUtils.SHOWCASE_CHAT_ID;
+        return adminConfigService.getShowcaseChatId();
     }
 
     /** Deleta arquivo temporário silenciosamente. */

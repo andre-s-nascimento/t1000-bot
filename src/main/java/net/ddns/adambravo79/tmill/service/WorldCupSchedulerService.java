@@ -26,6 +26,7 @@ import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
 import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -49,6 +50,7 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
     private final MetricsService metricsService;
     private final FeatureFlagAdminService featureFlags;
     private final JsonConfigLoader jsonConfigLoader;
+    private final WorldCupTeamsService teamsService;
 
     @Value(BotMessages.DEFAULT_BOT_ALLOWED_CHATS)
     private String allowedChatsStr;
@@ -60,7 +62,8 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
             Clock clock,
             MetricsService metricsService,
             FeatureFlagAdminService featureFlags,
-            JsonConfigLoader jsonConfigLoader) {
+            JsonConfigLoader jsonConfigLoader,
+            WorldCupTeamsService teamsService) {
         this.worldCupService = worldCupService;
         this.telegramFacade = telegramFacade;
         this.worldCupUpdaterService = worldCupUpdaterService;
@@ -68,6 +71,7 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         this.metricsService = metricsService;
         this.featureFlags = featureFlags;
         this.jsonConfigLoader = jsonConfigLoader;
+        this.teamsService = teamsService;
     }
 
     @PostConstruct
@@ -183,10 +187,10 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
             String line =
                     String.format(
                             POSICAO_PLACAR,
-                            translateTeam(m.homeTeam()),
-                            flagEmoji(m.homeTeam()),
-                            flagEmoji(m.awayTeam()),
-                            translateTeam(m.awayTeam()),
+                            teamsService.translateTeam(m.homeTeam()),
+                            teamsService.flagEmoji(m.homeTeam()),
+                            teamsService.flagEmoji(m.awayTeam()),
+                            teamsService.translateTeam(m.awayTeam()),
                             localTime.format(timeFormatter));
             if (m.stadium() != null && !m.stadium().isBlank()) {
                 line += " - " + m.stadium();
@@ -210,10 +214,10 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
                 ⚽ %s (%s) x (%s) %s - %s
                 """
                         .formatted(
-                                translateTeam(match.homeTeam()),
-                                flagEmoji(match.homeTeam()),
-                                flagEmoji(match.awayTeam()),
-                                translateTeam(match.awayTeam()),
+                                teamsService.translateTeam(match.homeTeam()),
+                                teamsService.flagEmoji(match.homeTeam()),
+                                teamsService.flagEmoji(match.awayTeam()),
+                                teamsService.translateTeam(match.awayTeam()),
                                 localTime.format(
                                         DateTimeFormatter.ofPattern(BotMessages.FMT_HH_MM)));
         for (Long groupId : allowedGroups) {
@@ -260,13 +264,13 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         StringBuilder sb = new StringBuilder();
         if (!match.hasScore()) {
             sb.append("⏳ ")
-                    .append(translateTeam(match.homeTeam()))
+                    .append(teamsService.translateTeam(match.homeTeam()))
                     .append(" (")
-                    .append(flagEmoji(match.homeTeam()))
+                    .append(teamsService.flagEmoji(match.homeTeam()))
                     .append(") x (")
-                    .append(flagEmoji(match.awayTeam()))
+                    .append(teamsService.flagEmoji(match.awayTeam()))
                     .append(") ")
-                    .append(translateTeam(match.awayTeam()))
+                    .append(teamsService.translateTeam(match.awayTeam()))
                     .append(" - Aguardando resultado\n\n");
             return sb.toString();
         }
@@ -292,17 +296,17 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         int awayGoals = ft.get(1);
 
         StringBuilder header = new StringBuilder();
-        header.append(flagEmoji(match.homeTeam()))
+        header.append(teamsService.flagEmoji(match.homeTeam()))
                 .append(" ")
-                .append(translateTeam(match.homeTeam()))
+                .append(teamsService.translateTeam(match.homeTeam()))
                 .append(" ")
                 .append(homeGoals)
                 .append(" x ")
                 .append(awayGoals)
                 .append(" ")
-                .append(translateTeam(match.awayTeam()))
+                .append(teamsService.translateTeam(match.awayTeam()))
                 .append(" ")
-                .append(flagEmoji(match.awayTeam()));
+                .append(teamsService.flagEmoji(match.awayTeam()));
 
         if (score.et() != null && score.et().size() == 2) {
             int etHome = score.et().get(0);
@@ -334,7 +338,7 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         String team = determineGoalTeam(goal, match);
         StringBuilder line =
                 new StringBuilder("  ⚽ ")
-                        .append(flagEmoji(team))
+                        .append(teamsService.flagEmoji(team))
                         .append(" ")
                         .append(goal.name())
                         .append(" ")
@@ -433,10 +437,10 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
             sb.append(
                     String.format(
                             POSICAO_PLACAR,
-                            translateTeam(m.homeTeam()),
-                            flagEmoji(m.homeTeam()),
-                            flagEmoji(m.awayTeam()),
-                            translateTeam(m.awayTeam()),
+                            teamsService.translateTeam(m.homeTeam()),
+                            teamsService.flagEmoji(m.homeTeam()),
+                            teamsService.flagEmoji(m.awayTeam()),
+                            teamsService.translateTeam(m.awayTeam()),
                             localTime.format(timeFormatter)));
             if (m.stadium() != null && !m.stadium().isBlank()) {
                 sb.append(" - ").append(m.stadium());
@@ -455,20 +459,6 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         }
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         sendMatchesMessage(today, "🧪 TESTE MANUAL - Copa 2026");
-    }
-
-    private String flagEmoji(String team) {
-        if (team == null || team.isBlank()) return "🏳️";
-        String normalized = team.toLowerCase().trim();
-        String flag = FLAG_MAP.get(normalized);
-        if (flag != null) return flag;
-        for (var entry : FLAG_MAP.entrySet()) {
-            if (normalized.contains(entry.getKey())) {
-                return entry.getValue();
-            }
-        }
-        log.warn("Bandeira nao encontrada para: {}", team);
-        return "🏳️";
     }
 
     public void sendMatchesToChat(long chatId, LocalDate date) {
@@ -492,10 +482,10 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
             sb.append(
                     String.format(
                             POSICAO_PLACAR,
-                            translateTeam(m.homeTeam()),
-                            flagEmoji(m.homeTeam()),
-                            flagEmoji(m.awayTeam()),
-                            translateTeam(m.awayTeam()),
+                            teamsService.translateTeam(m.homeTeam()),
+                            teamsService.flagEmoji(m.homeTeam()),
+                            teamsService.flagEmoji(m.awayTeam()),
+                            teamsService.translateTeam(m.awayTeam()),
                             localTime.format(timeFormatter)));
             if (m.stadium() != null && !m.stadium().isBlank()) {
                 sb.append(" - ").append(m.stadium());
@@ -505,180 +495,4 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         telegramFacade.enviarMensagemHtml(chatId, sb.toString());
         metricsService.success(WORLDCUP_JOGOS_ENVIADOS);
     }
-
-    private static final Map<String, String> TEAM_NAME_PT =
-            Map.ofEntries(
-                    // CONMEBOL
-                    Map.entry("brazil", "Brasil"),
-                    Map.entry("argentina", "Argentina"),
-                    Map.entry("uruguay", "Uruguai"),
-                    Map.entry("colombia", "Colombia"),
-                    Map.entry("ecuador", "Equador"),
-                    Map.entry("paraguay", "Paraguai"),
-                    Map.entry("peru", "Peru"),
-                    Map.entry("chile", "Chile"),
-                    Map.entry("bolivia", "Bolivia"),
-                    Map.entry("venezuela", "Venezuela"),
-                    // UEFA
-                    Map.entry("germany", "Alemanha"),
-                    Map.entry("france", "Franca"),
-                    Map.entry("spain", "Espanha"),
-                    Map.entry("england", "Inglaterra"),
-                    Map.entry("italy", "Italia"),
-                    Map.entry("netherlands", "Holanda"),
-                    Map.entry("portugal", "Portugal"),
-                    Map.entry("belgium", "Belgica"),
-                    Map.entry("croatia", "Croacia"),
-                    Map.entry("switzerland", "Suica"),
-                    Map.entry("denmark", "Dinamarca"),
-                    Map.entry("sweden", "Suecia"),
-                    Map.entry("poland", "Polonia"),
-                    Map.entry("serbia", "Servia"),
-                    Map.entry("turkey", "Turquia"),
-                    Map.entry("ukraine", "Ucrania"),
-                    Map.entry("austria", "Austria"),
-                    Map.entry("czech republic", "Republica Tcheca"),
-                    Map.entry("bosnia & herzegovina", "Bosnia"),
-                    Map.entry("norway", "Noruega"),
-                    Map.entry("scotland", "Escocia"),
-                    // CONCACAF
-                    Map.entry("mexico", "Mexico"),
-                    Map.entry("united states", "Estados Unidos"),
-                    Map.entry("usa", "Estados Unidos"),
-                    Map.entry("canada", "Canada"),
-                    Map.entry("panama", "Panama"),
-                    Map.entry("costa rica", "Costa Rica"),
-                    Map.entry("honduras", "Honduras"),
-                    Map.entry("jamaica", "Jamaica"),
-                    Map.entry("el salvador", "El Salvador"),
-                    Map.entry("haiti", "Haiti"),
-                    Map.entry("curacao", "Curacao"),
-                    // CAF
-                    Map.entry("morocco", "Marrocos"),
-                    Map.entry("senegal", "Senegal"),
-                    Map.entry("tunisia", "Tunisia"),
-                    Map.entry("algeria", "Argelia"),
-                    Map.entry("nigeria", "Nigeria"),
-                    Map.entry("cameroon", "Camaroes"),
-                    Map.entry("ivory coast", "Costa do Marfim"),
-                    Map.entry("ghana", "Gana"),
-                    Map.entry("egypt", "Egito"),
-                    Map.entry("mali", "Mali"),
-                    Map.entry("burkina faso", "Burkina Faso"),
-                    Map.entry("dr congo", "Republica Democratica do Congo"),
-                    Map.entry("south africa", "Africa do Sul"),
-                    Map.entry("cape verde", "Cabo Verde"),
-                    // AFC
-                    Map.entry("japan", "Japao"),
-                    Map.entry("south korea", "Coreia do Sul"),
-                    Map.entry("australia", "Australia"),
-                    Map.entry("saudi arabia", "Arabia Saudita"),
-                    Map.entry("iran", "Ira"),
-                    Map.entry("iraq", "Iraque"),
-                    Map.entry("uzbekistan", "Uzbequistao"),
-                    Map.entry("united arab emirates", "Emirados Arabes Unidos"),
-                    Map.entry("qatar", "Catar"),
-                    Map.entry("china", "China"),
-                    Map.entry("syria", "Siria"),
-                    Map.entry("vietnam", "Vietna"),
-                    Map.entry("oman", "Oma"),
-                    Map.entry("jordan", "Jordania"),
-                    // OFC
-                    Map.entry("new zealand", "Nova Zelandia"),
-                    Map.entry("tahiti", "Taiti"));
-
-    private String translateTeam(String teamName) {
-        if (teamName == null || teamName.isBlank()) return "?";
-        String key = teamName.toLowerCase().trim();
-        if (TEAM_NAME_PT.containsKey(key)) {
-            return TEAM_NAME_PT.get(key);
-        }
-        for (var entry : TEAM_NAME_PT.entrySet()) {
-            if (key.contains(entry.getKey())) {
-                return entry.getValue();
-            }
-        }
-        return teamName;
-    }
-
-    private static final Map<String, String> FLAG_MAP =
-            Map.ofEntries(
-                    // CONMEBOL
-                    Map.entry("brazil", "🇧🇷"),
-                    Map.entry("argentina", "🇦🇷"),
-                    Map.entry("uruguay", "🇺🇾"),
-                    Map.entry("colombia", "🇨🇴"),
-                    Map.entry("ecuador", "🇪🇨"),
-                    Map.entry("paraguay", "🇵🇾"),
-                    Map.entry("peru", "🇵🇪"),
-                    Map.entry("chile", "🇨🇱"),
-                    Map.entry("bolivia", "🇧🇴"),
-                    Map.entry("venezuela", "🇻🇪"),
-                    // UEFA
-                    Map.entry("germany", "🇩🇪"),
-                    Map.entry("france", "🇫🇷"),
-                    Map.entry("spain", "🇪🇸"),
-                    Map.entry("england", "🏴󠁧󠁢󠁥󠁮󠁧󠁿"),
-                    Map.entry("italy", "🇮🇹"),
-                    Map.entry("netherlands", "🇳🇱"),
-                    Map.entry("portugal", "🇵🇹"),
-                    Map.entry("belgium", "🇧🇪"),
-                    Map.entry("croatia", "🇭🇷"),
-                    Map.entry("switzerland", "🇨🇭"),
-                    Map.entry("denmark", "🇩🇰"),
-                    Map.entry("sweden", "🇸🇪"),
-                    Map.entry("poland", "🇵🇱"),
-                    Map.entry("serbia", "🇷🇸"),
-                    Map.entry("turkey", "🇹🇷"),
-                    Map.entry("ukraine", "🇺🇦"),
-                    Map.entry("austria", "🇦🇹"),
-                    Map.entry("czech republic", "🇨🇿"),
-                    Map.entry("bosnia & herzegovina", "🇧🇦"),
-                    Map.entry("norway", "🇳🇴"),
-                    Map.entry("scotland", "🏴󠁧󠁢󠁳󠁣󠁴󠁿"),
-                    // CONCACAF
-                    Map.entry("mexico", "🇲🇽"),
-                    Map.entry("united states", "🇺🇸"),
-                    Map.entry("usa", "🇺🇸"),
-                    Map.entry("canada", "🇨🇦"),
-                    Map.entry("panama", "🇵🇦"),
-                    Map.entry("costa rica", "🇨🇷"),
-                    Map.entry("honduras", "🇭🇳"),
-                    Map.entry("jamaica", "🇯🇲"),
-                    Map.entry("el salvador", "🇸🇻"),
-                    Map.entry("haiti", "🇭🇹"),
-                    Map.entry("curacao", "🇨🇼"),
-                    // CAF
-                    Map.entry("morocco", "🇲🇦"),
-                    Map.entry("senegal", "🇸🇳"),
-                    Map.entry("tunisia", "🇹🇳"),
-                    Map.entry("algeria", "🇩🇿"),
-                    Map.entry("nigeria", "🇳🇬"),
-                    Map.entry("cameroon", "🇨🇲"),
-                    Map.entry("ivory coast", "🇨🇮"),
-                    Map.entry("ghana", "🇬🇭"),
-                    Map.entry("egypt", "🇪🇬"),
-                    Map.entry("mali", "🇲🇱"),
-                    Map.entry("burkina faso", "🇧🇫"),
-                    Map.entry("dr congo", "🇨🇩"),
-                    Map.entry("south africa", "🇿🇦"),
-                    Map.entry("cape verde", "🇨🇻"),
-                    // AFC
-                    Map.entry("japan", "🇯🇵"),
-                    Map.entry("south korea", "🇰🇷"),
-                    Map.entry("australia", "🇦🇺"),
-                    Map.entry("saudi arabia", "🇸🇦"),
-                    Map.entry("iran", "🇮🇷"),
-                    Map.entry("iraq", "🇮🇶"),
-                    Map.entry("uzbekistan", "🇺🇿"),
-                    Map.entry("united arab emirates", "🇦🇪"),
-                    Map.entry("qatar", "🇶🇦"),
-                    Map.entry("china", "🇨🇳"),
-                    Map.entry("syria", "🇸🇾"),
-                    Map.entry("vietnam", "🇻🇳"),
-                    Map.entry("oman", "🇴🇲"),
-                    Map.entry("jordan", "🇯🇴"),
-                    // OFC
-                    Map.entry("new zealand", "🇳🇿"),
-                    Map.entry("tahiti", "🇵🇫"));
 }

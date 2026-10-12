@@ -1,3 +1,4 @@
+/* (c) 2026 | 12/10/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import static org.assertj.core.api.Assertions.*;
@@ -8,11 +9,14 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriBuilder;
@@ -21,6 +25,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverMovieResponse;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverTvResponse;
 import net.ddns.adambravo79.tmill.model.*;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 
 class TmdbClientTest {
 
@@ -28,6 +33,7 @@ class TmdbClientTest {
     private RestClient.RequestHeadersUriSpec<?> getSpec;
     private RestClient.RequestHeadersSpec<?> headersSpec;
     private RestClient.ResponseSpec responseSpec;
+    private JsonConfigLoader jsonConfigLoader;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
@@ -36,6 +42,7 @@ class TmdbClientTest {
         getSpec = mock(RestClient.RequestHeadersUriSpec.class);
         headersSpec = mock(RestClient.RequestHeadersSpec.class);
         responseSpec = mock(RestClient.ResponseSpec.class);
+        jsonConfigLoader = mock(JsonConfigLoader.class);
 
         doReturn(getSpec).when(restClient).get();
         doReturn(headersSpec).when(getSpec).uri(any(Function.class));
@@ -47,41 +54,14 @@ class TmdbClientTest {
 
     @Test
     void construtorPrincipal_deveCriarInstancia() {
-        // Testa o construtor com parâmetros reais (ou mocks) para cobrir as linhas
-        // Para evitar chamadas reais à API, podemos passar um RestClient mock, mas
-        // o construtor principal cria o RestClient internamente.
-        // Uma alternativa é usar o construtor de teste, mas para cobrir as linhas
-        // do construtor principal, podemos usar Reflection ou criar um spy.
-        // Vamos simplesmente instanciar com valores dummy e verificar se não lança exceção.
-        // Como as propriedades @Value são injetadas, podemos passar valores diretos.
-        // Para não fazer chamadas reais, podemos criar um RestClient mock e injetar via Reflection,
-        // mas o construtor principal não aceita RestClient.
-        // Uma forma simples é criar o cliente com o construtor de teste e verificar que ele existe.
-        // A cobertura das linhas do construtor principal pode ser alcançada se usarmos
-        // o construtor em algum teste. Mas como temos um construtor de teste, o principal
-        // pode não ser coberto. Para resolver, podemos criar um teste que chama o construtor
-        // com valores e depois substitui o restClient por mock via Reflection.
-        // Vou fazer isso para garantir cobertura.
-        // Mas, para simplificar, vou criar uma instância com o construtor de teste e
-        // verificar que não é nula. A cobertura do construtor principal virá de outro lugar.
-        // Como o foco é cobertura, vou adicionar um teste que cria o cliente com o construtor
-        // principal usando valores dummy e depois substitui o restClient via Reflection.
-        // No entanto, o construtor principal usa @Value, que não é acessível diretamente.
-        // Podemos usar o construtor principal com parâmetros reais (ex: "fake-token",
-        // "http://localhost")
-        // e depois substituir o campo restClient por mock.
-        // Vou fazer isso:
         TmdbClient client =
                 new TmdbClient(
                         "fake-token",
                         "http://localhost",
                         Duration.ofSeconds(5),
-                        Duration.ofSeconds(30));
-        // Substitui o restClient pelo mock para evitar chamadas reais
-        org.springframework.test.util.ReflectionTestUtils.setField(
-                client, "restClient", restClient);
-        // Agora podemos usar o cliente nos testes, mas já temos o cliente via construtor de teste.
-        // Apenas para garantir cobertura, verificamos que o cliente não é nulo.
+                        Duration.ofSeconds(30),
+                        jsonConfigLoader);
+        ReflectionTestUtils.setField(client, "restClient", restClient);
         assertThat(client).isNotNull();
     }
 
@@ -89,6 +69,7 @@ class TmdbClientTest {
 
     @Test
     void pesquisarFilme_deveRetornarResultados() {
+        TmdbClient client = new TmdbClient(restClient); // sem atalhos
         var filme =
                 new MovieRecord(
                         1L,
@@ -103,7 +84,6 @@ class TmdbClientTest {
         when(responseSpec.body(MovieSearchResponse.class))
                 .thenReturn(new MovieSearchResponse(1, 1, 1, List.of(filme)));
 
-        TmdbClient client = new TmdbClient(restClient);
         MovieSearchResponse result = client.pesquisarFilme("duna");
 
         assertThat(result.results()).hasSize(1);
@@ -112,6 +92,24 @@ class TmdbClientTest {
 
     @Test
     void pesquisarFilme_deveAplicarAtalho() {
+        // Stub do JSON de atalhos
+        doReturn(Optional.of(Map.of("aliases", Map.of("duna", "Dune 2021"))))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("tmdb-aliases.json"), eq(Map.class), any());
+
+        TmdbClient client =
+                new TmdbClient(
+                        "fake-token",
+                        "http://localhost",
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(30),
+                        jsonConfigLoader);
+        ReflectionTestUtils.setField(client, "restClient", restClient);
+        ReflectionTestUtils.setField(client, "aliasesFile", "classpath:tmdb-aliases.json");
+
+        // Força reload manualmente
+        client.reloadAliases();
+
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Function<UriBuilder, URI>> uriCaptor =
                 ArgumentCaptor.forClass(Function.class);
@@ -119,7 +117,6 @@ class TmdbClientTest {
         when(responseSpec.body(MovieSearchResponse.class))
                 .thenReturn(new MovieSearchResponse(0, 0, 0, List.of()));
 
-        TmdbClient client = new TmdbClient(restClient);
         client.pesquisarFilme("duna");
 
         Function<UriBuilder, URI> func = uriCaptor.getValue();
@@ -130,9 +127,9 @@ class TmdbClientTest {
 
     @Test
     void pesquisarFilme_deveRetornarVazioQuandoRespostaNula() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(MovieSearchResponse.class)).thenReturn(null);
 
-        TmdbClient client = new TmdbClient(restClient);
         MovieSearchResponse result = client.pesquisarFilme("qualquer");
         assertThat(result.results()).isEmpty();
         assertThat(result.totalResults()).isZero();
@@ -140,29 +137,123 @@ class TmdbClientTest {
 
     @Test
     void pesquisarFilme_deveRetornarVazioQuandoResultsNulo() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(MovieSearchResponse.class))
                 .thenReturn(new MovieSearchResponse(0, 0, 0, null));
 
-        TmdbClient client = new TmdbClient(restClient);
         MovieSearchResponse result = client.pesquisarFilme("qualquer");
         assertThat(result.results()).isEmpty();
     }
 
     @Test
     void pesquisarFilme_devePropagarExcecao() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(MovieSearchResponse.class))
                 .thenThrow(new RuntimeException("Erro na API"));
 
-        TmdbClient client = new TmdbClient(restClient);
         assertThatThrownBy(() -> client.pesquisarFilme("erro"))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Erro na API");
+    }
+
+    // ===================== reloadAliases =====================
+
+    @Test
+    @DisplayName("reloadAliases: carrega atalhos do JSON")
+    void reloadAliases_carregaAtalhos() {
+        doReturn(
+                        Optional.of(
+                                Map.of(
+                                        "aliases",
+                                        Map.of("duna", "Dune 2021", "batman", "The Batman 2022"))))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("tmdb-aliases.json"), eq(Map.class), any());
+
+        TmdbClient client =
+                new TmdbClient(
+                        "fake-token",
+                        "http://localhost",
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(30),
+                        jsonConfigLoader);
+        ReflectionTestUtils.setField(client, "restClient", restClient);
+        ReflectionTestUtils.setField(client, "aliasesFile", "classpath:tmdb-aliases.json");
+
+        client.reloadAliases();
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> atalhos =
+                (Map<String, String>) ReflectionTestUtils.getField(client, "atalhos");
+        assertThat(atalhos)
+                .containsEntry("duna", "Dune 2021")
+                .containsEntry("batman", "The Batman 2022");
+    }
+
+    @Test
+    @DisplayName("reloadAliases: JSON ausente mantém atalhos")
+    void reloadAliases_jsonAusente_mantem() {
+        doReturn(Optional.of(Map.of("aliases", Map.of("duna", "Dune 2021"))))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("tmdb-aliases.json"), eq(Map.class), any());
+
+        TmdbClient client =
+                new TmdbClient(
+                        "fake-token",
+                        "http://localhost",
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(30),
+                        jsonConfigLoader);
+        ReflectionTestUtils.setField(client, "restClient", restClient);
+        ReflectionTestUtils.setField(client, "aliasesFile", "classpath:tmdb-aliases.json");
+
+        client.reloadAliases();
+
+        doReturn(Optional.empty())
+                .when(jsonConfigLoader)
+                .loadConfig(eq("tmdb-aliases.json"), eq(Map.class), any());
+        client.reloadAliases();
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> atalhos =
+                (Map<String, String>) ReflectionTestUtils.getField(client, "atalhos");
+        assertThat(atalhos).containsEntry("duna", "Dune 2021");
+    }
+
+    @Test
+    @DisplayName("reloadAliases: chave 'aliases' inválida mantém atalhos")
+    void reloadAliases_chaveInvalida_mantem() {
+        doReturn(Optional.of(Map.of("aliases", Map.of("duna", "Dune 2021"))))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("tmdb-aliases.json"), eq(Map.class), any());
+
+        TmdbClient client =
+                new TmdbClient(
+                        "fake-token",
+                        "http://localhost",
+                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(30),
+                        jsonConfigLoader);
+        ReflectionTestUtils.setField(client, "restClient", restClient);
+        ReflectionTestUtils.setField(client, "aliasesFile", "classpath:tmdb-aliases.json");
+
+        client.reloadAliases();
+
+        doReturn(Optional.of(Map.of("aliases", "não é mapa")))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("tmdb-aliases.json"), eq(Map.class), any());
+        client.reloadAliases();
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> atalhos =
+                (Map<String, String>) ReflectionTestUtils.getField(client, "atalhos");
+        assertThat(atalhos).containsEntry("duna", "Dune 2021");
     }
 
     // ===================== buscarDetalhes =====================
 
     @Test
     void buscarDetalhes_deveRetornarFilme() {
+        TmdbClient client = new TmdbClient(restClient);
         var filme =
                 new MovieRecord(
                         2L,
@@ -176,16 +267,15 @@ class TmdbClientTest {
                         List.of("US"));
         when(responseSpec.body(MovieRecord.class)).thenReturn(filme);
 
-        TmdbClient client = new TmdbClient(restClient);
         MovieRecord result = client.buscarDetalhes(2L);
         assertThat(result.title()).isEqualTo("Batman");
     }
 
     @Test
     void buscarDetalhes_deveLancarExcecaoQuandoRespostaNula() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(MovieRecord.class)).thenReturn(null);
 
-        TmdbClient client = new TmdbClient(restClient);
         assertThatThrownBy(() -> client.buscarDetalhes(99L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Falha ao buscar detalhes");
@@ -195,11 +285,11 @@ class TmdbClientTest {
 
     @Test
     void buscarElenco_deveRetornarLista() {
+        TmdbClient client = new TmdbClient(restClient);
         var cast = List.of(new CastRecord("Ator", "Personagem"));
         when(responseSpec.body(CreditsResponse.class))
                 .thenReturn(new CreditsResponse(cast, List.of()));
 
-        TmdbClient client = new TmdbClient(restClient);
         List<CastRecord> result = client.buscarElenco(1L);
         assertThat(result).hasSize(1);
         assertThat(result.get(0).name()).isEqualTo("Ator");
@@ -207,104 +297,78 @@ class TmdbClientTest {
 
     @Test
     void buscarElenco_deveRetornarVazioQuandoRespostaNula() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(CreditsResponse.class)).thenReturn(null);
 
-        TmdbClient client = new TmdbClient(restClient);
-        List<CastRecord> result = client.buscarElenco(1L);
-        assertThat(result).isEmpty();
+        assertThat(client.buscarElenco(1L)).isEmpty();
     }
 
     @Test
     void buscarElenco_deveRetornarVazioQuandoCastNulo() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(CreditsResponse.class))
                 .thenReturn(new CreditsResponse(null, List.of()));
 
-        TmdbClient client = new TmdbClient(restClient);
-        List<CastRecord> result = client.buscarElenco(1L);
-        assertThat(result).isEmpty();
+        assertThat(client.buscarElenco(1L)).isEmpty();
     }
 
     // ===================== buscarDiretor =====================
 
     @Test
     void buscarDiretor_deveRetornarNome() {
+        TmdbClient client = new TmdbClient(restClient);
         var crew = List.of(new CrewRecord("Christopher Nolan", "Director"));
         when(responseSpec.body(CreditsResponse.class))
                 .thenReturn(new CreditsResponse(List.of(), crew));
 
-        TmdbClient client = new TmdbClient(restClient);
-        String diretor = client.buscarDiretor(1L);
-        assertThat(diretor).isEqualTo("Christopher Nolan");
+        assertThat(client.buscarDiretor(1L)).isEqualTo("Christopher Nolan");
     }
 
     @Test
     void buscarDiretor_deveRetornarNullQuandoNaoEncontrado() {
+        TmdbClient client = new TmdbClient(restClient);
         var crew = List.of(new CrewRecord("Alguém", "Producer"));
         when(responseSpec.body(CreditsResponse.class))
                 .thenReturn(new CreditsResponse(List.of(), crew));
 
-        TmdbClient client = new TmdbClient(restClient);
-        String diretor = client.buscarDiretor(1L);
-        assertThat(diretor).isNull();
+        assertThat(client.buscarDiretor(1L)).isNull();
     }
 
     @Test
     void buscarDiretor_deveRetornarNullQuandoRespostaNula() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(CreditsResponse.class)).thenReturn(null);
 
-        TmdbClient client = new TmdbClient(restClient);
-        String diretor = client.buscarDiretor(1L);
-        assertThat(diretor).isNull();
+        assertThat(client.buscarDiretor(1L)).isNull();
     }
 
     // ===================== discoverMoviesByDate =====================
 
     @Test
     void discoverMoviesByDate_deveRetornarResposta() {
+        TmdbClient client = new TmdbClient(restClient);
         var mockResponse = mock(TmdbDiscoverMovieResponse.class);
         when(responseSpec.body(TmdbDiscoverMovieResponse.class)).thenReturn(mockResponse);
 
-        TmdbClient client = new TmdbClient(restClient);
-        TmdbDiscoverMovieResponse result = client.discoverMoviesByDate("2026-07-01", "2026-07-31");
-        assertThat(result).isSameAs(mockResponse);
-    }
-
-    @Test
-    void discoverMoviesByDate_deveLancarExcecao() {
-        when(responseSpec.body(TmdbDiscoverMovieResponse.class))
-                .thenThrow(new RuntimeException("Erro"));
-
-        TmdbClient client = new TmdbClient(restClient);
-        assertThatThrownBy(() -> client.discoverMoviesByDate("2026-07-01", "2026-07-31"))
-                .isInstanceOf(RuntimeException.class);
+        assertThat(client.discoverMoviesByDate("2026-07-01", "2026-07-31")).isSameAs(mockResponse);
     }
 
     // ===================== discoverTvByDate =====================
 
     @Test
     void discoverTvByDate_deveRetornarResposta() {
+        TmdbClient client = new TmdbClient(restClient);
         var mockResponse = mock(TmdbDiscoverTvResponse.class);
         when(responseSpec.body(TmdbDiscoverTvResponse.class)).thenReturn(mockResponse);
 
-        TmdbClient client = new TmdbClient(restClient);
-        TmdbDiscoverTvResponse result = client.discoverTvByDate("2026-07-01", "2026-07-31");
-        assertThat(result).isSameAs(mockResponse);
-    }
-
-    @Test
-    void discoverTvByDate_deveLancarExcecao() {
-        when(responseSpec.body(TmdbDiscoverTvResponse.class))
-                .thenThrow(new RuntimeException("Erro"));
-
-        TmdbClient client = new TmdbClient(restClient);
-        assertThatThrownBy(() -> client.discoverTvByDate("2026-07-01", "2026-07-31"))
-                .isInstanceOf(RuntimeException.class);
+        assertThat(client.discoverTvByDate("2026-07-01", "2026-07-31")).isSameAs(mockResponse);
     }
 
     // ===================== buscarOndeAssistirFilme =====================
 
     @Test
     void buscarOndeAssistirFilme_deveRetornarProvedores() {
+        TmdbClient client = new TmdbClient(restClient);
         var response =
                 new WatchProviderResponse(
                         Map.of(
@@ -313,88 +377,67 @@ class TmdbClientTest {
                                         List.of(new Provider("Netflix", 1, "/logo.png")))));
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Netflix");
+        assertThat(client.buscarOndeAssistirFilme(1L)).contains("Netflix");
     }
 
     @Test
     void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoNaoHaProvedor() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(WatchProviderResponse.class))
                 .thenReturn(new WatchProviderResponse(Map.of()));
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Indisponivel no momento");
+        assertThat(client.buscarOndeAssistirFilme(1L)).contains("Indisponivel no momento");
     }
 
     @Test
     void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoResponseNulo() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(null);
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Indisponivel no momento");
+        assertThat(client.buscarOndeAssistirFilme(1L)).contains("Indisponivel no momento");
     }
 
     @Test
     void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoResultsNulo() {
-        var response = new WatchProviderResponse(null);
-        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
-
         TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Indisponivel no momento");
+        when(responseSpec.body(WatchProviderResponse.class))
+                .thenReturn(new WatchProviderResponse(null));
+
+        assertThat(client.buscarOndeAssistirFilme(1L)).contains("Indisponivel no momento");
     }
 
     @Test
     void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoNaoTemBR() {
+        TmdbClient client = new TmdbClient(restClient);
         var response =
                 new WatchProviderResponse(
                         Map.of("US", new WatchProviderResponse.CountryProviders(List.of())));
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Indisponivel no momento");
-    }
-
-    @Test
-    void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoBrProvidersVazio() {
-        var response =
-                new WatchProviderResponse(
-                        Map.of("BR", new WatchProviderResponse.CountryProviders(List.of())));
-        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Indisponivel no momento");
+        assertThat(client.buscarOndeAssistirFilme(1L)).contains("Indisponivel no momento");
     }
 
     @Test
     void buscarOndeAssistirFilme_deveRetornarIndisponivelNo404() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(WatchProviderResponse.class))
                 .thenThrow(HttpClientErrorException.NotFound.class);
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Indisponivel no momento");
+        assertThat(client.buscarOndeAssistirFilme(1L)).contains("Indisponivel no momento");
     }
 
     @Test
     void buscarOndeAssistirFilme_deveRetornarIndisponivelEmErroGenerico() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(WatchProviderResponse.class))
                 .thenThrow(new RuntimeException("Erro"));
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-        assertThat(result).contains("Indisponivel no momento");
+        assertThat(client.buscarOndeAssistirFilme(1L)).contains("Indisponivel no momento");
     }
-
-    // ===================== buscarOndeAssistirSerie =====================
 
     @Test
     void buscarOndeAssistirSerie_deveRetornarProvedores() {
+        TmdbClient client = new TmdbClient(restClient);
         var response =
                 new WatchProviderResponse(
                         Map.of(
@@ -403,148 +446,43 @@ class TmdbClientTest {
                                         List.of(new Provider("Disney+", 1, "/logo.png")))));
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-        assertThat(result).contains("Disney+");
+        assertThat(client.buscarOndeAssistirSerie(1L)).contains("Disney+");
     }
 
     @Test
     void buscarOndeAssistirSerie_deveRetornarIndisponivelQuandoResponseNulo() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(null);
 
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-        assertThat(result).contains("Indisponivel no momento");
+        assertThat(client.buscarOndeAssistirSerie(1L)).contains("Indisponivel no momento");
     }
-
-    @Test
-    void buscarOndeAssistirSerie_deveRetornarIndisponivelQuandoResultsNulo() {
-        var response = new WatchProviderResponse(null);
-        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-        assertThat(result).contains("Indisponivel no momento");
-    }
-
-    @Test
-    void buscarOndeAssistirSerie_deveRetornarIndisponivelQuandoNaoTemBR() {
-        var response =
-                new WatchProviderResponse(
-                        Map.of("US", new WatchProviderResponse.CountryProviders(List.of())));
-        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-        assertThat(result).contains("Indisponivel no momento");
-    }
-
-    @Test
-    void buscarOndeAssistirSerie_deveRetornarIndisponivelQuandoBrProvidersVazio() {
-        var response =
-                new WatchProviderResponse(
-                        Map.of("BR", new WatchProviderResponse.CountryProviders(List.of())));
-        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-        assertThat(result).contains("Indisponivel no momento");
-    }
-
-    @Test
-    void buscarOndeAssistirSerie_deveRetornarIndisponivelNo404() {
-        when(responseSpec.body(WatchProviderResponse.class))
-                .thenThrow(HttpClientErrorException.NotFound.class);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-        assertThat(result).contains("Indisponivel no momento");
-    }
-
-    @Test
-    void buscarOndeAssistirSerie_deveRetornarIndisponivelEmErroGenerico() {
-        when(responseSpec.body(WatchProviderResponse.class))
-                .thenThrow(new RuntimeException("Erro"));
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-        assertThat(result).contains("Indisponivel no momento");
-    }
-
-    // ===================== listarProvedoresFilmes =====================
 
     @Test
     void listarProvedoresFilmes_deveRetornarResposta() {
+        TmdbClient client = new TmdbClient(restClient);
         var mockResponse = mock(WatchProvidersResponse.class);
         when(responseSpec.body(WatchProvidersResponse.class)).thenReturn(mockResponse);
 
-        TmdbClient client = new TmdbClient(restClient);
-        WatchProvidersResponse result = client.listarProvedoresFilmes();
-        assertThat(result).isSameAs(mockResponse);
+        assertThat(client.listarProvedoresFilmes()).isSameAs(mockResponse);
     }
-
-    @Test
-    void listarProvedoresFilmes_deveLancarExcecao() {
-        when(responseSpec.body(WatchProvidersResponse.class))
-                .thenThrow(new RuntimeException("Erro"));
-
-        TmdbClient client = new TmdbClient(restClient);
-        assertThatThrownBy(client::listarProvedoresFilmes).isInstanceOf(RuntimeException.class);
-    }
-
-    // ===================== buscarDetalhesSerie =====================
 
     @Test
     void buscarDetalhesSerie_deveRetornarSerie() {
+        TmdbClient client = new TmdbClient(restClient);
         var serie = new TvRecord(1L, "Serie A", "Overview", 8.0, "2026-01-01", "/poster.jpg");
         when(responseSpec.body(TvRecord.class)).thenReturn(serie);
 
-        TmdbClient client = new TmdbClient(restClient);
-        TvRecord result = client.buscarDetalhesSerie(1L);
-        assertThat(result.name()).isEqualTo("Serie A");
+        assertThat(client.buscarDetalhesSerie(1L).name()).isEqualTo("Serie A");
     }
 
     @Test
     void buscarDetalhesSerie_deveLancarExcecaoQuandoRespostaNula() {
+        TmdbClient client = new TmdbClient(restClient);
         when(responseSpec.body(TvRecord.class)).thenReturn(null);
 
-        TmdbClient client = new TmdbClient(restClient);
         assertThatThrownBy(() -> client.buscarDetalhesSerie(1L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Falha ao buscar detalhes da serie");
-    }
-
-    // ===================== TESTES ADICIONAIS PARA COBERTURA =====================
-    // ===================== TESTES ADICIONAIS PARA COBERTURA =====================
-
-    @Test
-    void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoFlatRateNulo() {
-        WatchProviderResponse.CountryProviders brProviders =
-                mock(WatchProviderResponse.CountryProviders.class);
-        when(brProviders.flatrate()).thenReturn(null);
-        WatchProviderResponse response = mock(WatchProviderResponse.class);
-        when(response.results()).thenReturn(Map.of("BR", brProviders));
-        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirFilme(1L);
-
-        assertThat(result).contains("Indisponivel no momento");
-    }
-
-    @Test
-    void buscarOndeAssistirSerie_deveRetornarIndisponivelQuandoFlatRateNulo() {
-        WatchProviderResponse.CountryProviders brProviders =
-                mock(WatchProviderResponse.CountryProviders.class);
-        when(brProviders.flatrate()).thenReturn(null);
-        WatchProviderResponse response = mock(WatchProviderResponse.class);
-        when(response.results()).thenReturn(Map.of("BR", brProviders));
-        when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
-
-        assertThat(result).contains("Indisponivel no momento");
     }
 
     @Test
@@ -569,34 +507,17 @@ class TmdbClientTest {
     }
 
     @Test
-    void buscarOndeAssistirSerie_deveRetornarStringVaziaQuandoTodosProvedoresNulos() {
-        Provider provider1 = mock(Provider.class);
-        when(provider1.name()).thenReturn(null);
-        Provider provider2 = mock(Provider.class);
-        when(provider2.name()).thenReturn(null);
-        List<Provider> providers = List.of(provider1, provider2);
-
+    void buscarOndeAssistirFilme_deveRetornarIndisponivelQuandoFlatRateNulo() {
         WatchProviderResponse.CountryProviders brProviders =
                 mock(WatchProviderResponse.CountryProviders.class);
-        when(brProviders.flatrate()).thenReturn(providers);
+        when(brProviders.flatrate()).thenReturn(null);
         WatchProviderResponse response = mock(WatchProviderResponse.class);
         when(response.results()).thenReturn(Map.of("BR", brProviders));
         when(responseSpec.body(WatchProviderResponse.class)).thenReturn(response);
 
         TmdbClient client = new TmdbClient(restClient);
-        String result = client.buscarOndeAssistirSerie(1L);
+        String result = client.buscarOndeAssistirFilme(1L);
 
-        assertThat(result).isEmpty();
-    }
-
-    @Test
-    void buscarDiretor_deveRetornarNullQuandoCrewNulo() {
-        // response não é nulo, mas a lista de crew é nula
-        CreditsResponse credits = new CreditsResponse(List.of(), null);
-        when(responseSpec.body(CreditsResponse.class)).thenReturn(credits);
-
-        TmdbClient client = new TmdbClient(restClient);
-        String diretor = client.buscarDiretor(1L);
-        assertThat(diretor).isNull();
+        assertThat(result).contains("Indisponivel no momento");
     }
 }

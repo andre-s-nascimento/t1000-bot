@@ -46,9 +46,6 @@ public final class AdminUtils {
     // CONSTANTES
     // =========================================================================
 
-    /** Canal de showcase — usado como destino padrão em ações manuais. */
-    public static final long SHOWCASE_CHAT_ID = -1003703557250L;
-
     /** Timezone de negócio (Brasília). */
     public static final String BRAZIL_ZONE = "America/Sao_Paulo";
 
@@ -329,51 +326,6 @@ public final class AdminUtils {
     }
 
     /**
-     * Carrega um arquivo JSON apenas pelo nome, sem consultar propriedades do Spring.
-     *
-     * <p><b>Preferir a versão com {@code propertyKey}</b> — esta versão existe apenas por
-     * compatibilidade com chamadas legadas.
-     *
-     * <p>Ordem de busca:
-     *
-     * <ol>
-     *   <li>{@code classpath:<fileName>} (dentro do JAR)
-     *   <li>{@code file:/app/config/<fileName>} (container prod)
-     *   <li>{@code file:./config/<fileName>} (dev local)
-     * </ol>
-     *
-     * @param resourceLoader loader do Spring
-     * @param objectMapper mapper Jackson
-     * @param fileName nome do arquivo (ex.: {@code "easter-eggs.json"})
-     * @return conteúdo parseado como {@link Object}
-     * @throws IOException se o arquivo não for encontrado em nenhum local
-     * @deprecated usar {@link #loadConfigFile(ResourceLoader, Environment, ObjectMapper, String,
-     *     String, String)}
-     */
-    @Deprecated(since = "2.5.5")
-    public static Object loadConfigFile(
-            ResourceLoader resourceLoader, ObjectMapper objectMapper, String fileName)
-            throws IOException {
-
-        Object content = tryLoad(resourceLoader, objectMapper, "classpath:" + fileName);
-        if (content != null) {
-            return content;
-        }
-
-        content = tryLoad(resourceLoader, objectMapper, "file:/app/config/" + fileName);
-        if (content != null) {
-            return content;
-        }
-
-        content = tryLoad(resourceLoader, objectMapper, "file:./config/" + fileName);
-        if (content != null) {
-            return content;
-        }
-
-        throw new IOException("Arquivo não encontrado em nenhum local: " + fileName);
-    }
-
-    /**
      * Tenta carregar e parsear um recurso. Retorna {@code null} se:
      *
      * <ul>
@@ -383,7 +335,7 @@ public final class AdminUtils {
      * </ul>
      *
      * <p>Este método é a <b>única</b> fronteira segura para interagir com {@link ResourceLoader} —
-     * todo {@code loadConfigFile} passa por aqui. Isso evita NPE quando o loader é mal configurado
+     * to do {@code loadConfigFile} passa por aqui. Isso evita NPE quando o loader é mal configurado
      * (ex.: mock de teste que não cobre um path específico).
      *
      * @param resourceLoader loader do Spring
@@ -401,7 +353,7 @@ public final class AdminUtils {
         }
 
         Resource resource = resourceLoader.getResource(location);
-        if (resource == null || !resource.exists()) {
+        if (!resource.exists()) {
             return null;
         }
 

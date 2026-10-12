@@ -50,6 +50,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
@@ -66,10 +67,13 @@ import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -112,6 +116,9 @@ public class AdminController {
     private final MigrationService migrationService;
     private final FeatureFlagAdminService featureFlagAdminService;
     private final PromptRegistryService promptRegistryService;
+    private final WorldCupTeamsService teamsService;
+    private final TelegramExceptionHandler telegramExceptionHandler;
+    private final AdminConfigService adminConfigService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -188,7 +195,7 @@ public class AdminController {
     @PostMapping("/test-weekly-reminder-showcase")
     public ResponseEntity<String> testWeeklyReminderShowcase(
             @RequestParam(value = "chatId", required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
         weeklyReminderService.sendReminderToChat(targetChatId);
         return ResponseEntity.ok("Lembrete semanal enviado para o chat " + targetChatId);
     }
@@ -290,7 +297,7 @@ public class AdminController {
     @PostMapping("/test-worldcup-showcase")
     public ResponseEntity<String> testWorldCupShowcase(
             @RequestParam(value = "chatId", required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
@@ -301,7 +308,7 @@ public class AdminController {
     @PostMapping("/test-worldcup-noon-showcase")
     public ResponseEntity<String> testWorldCupNoonShowcase(
             @RequestParam(value = "chatId", required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
@@ -312,7 +319,7 @@ public class AdminController {
     @PostMapping("/test-worldcup-evening-showcase")
     public ResponseEntity<String> testWorldCupEveningShowcase(
             @RequestParam(value = "chatId", required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
@@ -324,7 +331,7 @@ public class AdminController {
     public ResponseEntity<String> reloadWorldCupShowcase(
             @RequestParam(value = "chatId", required = false) Long chatId) {
 
-        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
         staticWorldCupService.reload();
 
         String msg =
@@ -353,7 +360,7 @@ public class AdminController {
             @RequestParam(value = "dateParam", defaultValue = "ontem") String dateParam,
             @RequestParam(value = "chatId", required = false) Long chatId) {
 
-        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
         if (!worldcupEnabled) {
             return ResponseEntity.ok(WORLD_CUP_DISABLED);
         }
@@ -495,7 +502,7 @@ public class AdminController {
             return ResponseEntity.badRequest().body("Parâmetro 'message' é obrigatório.");
         }
 
-        long targetChatId = chatId != null ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
         LocalTime simulatedTime = AdminUtils.parseTime(time);
 
         Optional<AutoResponseOverride> responseOpt =
@@ -813,7 +820,7 @@ public class AdminController {
             @RequestParam(value = "end", required = false) String end,
             @RequestParam(value = "periodo", required = false) Integer periodo) {
 
-        long targetChatId = (chatId != null) ? chatId : AdminUtils.SHOWCASE_CHAT_ID;
+        long targetChatId = (chatId != null) ? chatId : adminConfigService.getShowcaseChatId();
 
         LocalDate today = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate endDate;
@@ -1052,5 +1059,32 @@ public class AdminController {
         promptRegistryService.reload();
         log.info("⚙️ Prompts e personas recarregados via endpoint REST admin.");
         return ResponseEntity.ok("Prompts e personas recarregados com sucesso");
+    }
+
+    private final TmdbClient tmdbClient;
+
+    @PostMapping("/reload-tmdb-aliases")
+    public ResponseEntity<String> reloadTmdbAliases() {
+        tmdbClient.reloadAliases();
+        log.info("🎬 Atalhos TMDB recarregados via endpoint REST admin.");
+        return ResponseEntity.ok("Atalhos TMDB recarregados com sucesso");
+    }
+
+    @PostMapping("/reload-worldcup-teams")
+    public ResponseEntity<String> reloadWorldCupTeams() {
+        teamsService.reload();
+        return ResponseEntity.ok("Times da Copa recarregados com sucesso");
+    }
+
+    @PostMapping("/reload-telegram-errors")
+    public ResponseEntity<String> reloadTelegramErrors() {
+        telegramExceptionHandler.reload();
+        return ResponseEntity.ok("Regras de erro do Telegram recarregadas");
+    }
+
+    @PostMapping("/reload-admin-config")
+    public ResponseEntity<String> reloadAdminConfig() {
+        adminConfigService.reload();
+        return ResponseEntity.ok("admin-config.json recarregado");
     }
 }

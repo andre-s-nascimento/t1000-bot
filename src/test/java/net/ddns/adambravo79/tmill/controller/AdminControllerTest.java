@@ -39,16 +39,20 @@ import org.springframework.web.client.ResourceAccessException;
 
 import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import tools.jackson.databind.ObjectMapper;
 
 class AdminControllerTest {
@@ -80,6 +84,10 @@ class AdminControllerTest {
     @Mock private MigrationService migrationService;
     @Mock private FeatureFlagAdminService featureFlagAdminService;
     @Mock private PromptRegistryService promptRegistryService;
+    @Mock private WorldCupTeamsService teamsService;
+    @Mock private TelegramExceptionHandler telegramExceptionHandler;
+    @Mock private AdminConfigService adminConfigService;
+    @Mock private TmdbClient tmdbClient;
 
     @BeforeEach
     @SneakyThrows
@@ -113,10 +121,19 @@ class AdminControllerTest {
                         birthdayRepository,
                         migrationService,
                         featureFlagAdminService,
-                        promptRegistryService);
+                        promptRegistryService,
+                        teamsService,
+                        telegramExceptionHandler,
+                        adminConfigService,
+                        tmdbClient);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
+
+        // 🔧 FIX: stub do showcase chat id — sem isso, adminConfigService.getShowcaseChatId()
+        // retorna 0L e todos os testes que dependem do showcase falham (auto-response,
+        // worldcup showcase, podcast, reload-worldcup-showcase).
+        lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
 
         // Stub padrão: NUNCA retorna null. Se o arquivo real não existe no classpath,
         // retorna mockResource(false). Isso garante que AdminUtils.loadConfigFile
@@ -728,8 +745,6 @@ class AdminControllerTest {
 
     @Test
     void getConfigFiles_deveRetornarConteudoDosJSONs() throws Exception {
-        // setUp já cobre: retorna ClassPathResource se existir, senão mock(false).
-        // Não importa o que retorne, desde que não seja null.
         mockMvc.perform(get("/admin/config-files"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.*").isNotEmpty());
@@ -750,7 +765,6 @@ class AdminControllerTest {
     void getConfigFiles_quandoJsonInvalido_deveRetornarMensagemErro() throws Exception {
         reset(resourceLoader);
 
-        // Resource existe e devolve JSON inválido
         Resource invalidJsonResource = mock(Resource.class);
         when(invalidJsonResource.exists()).thenReturn(true);
         when(invalidJsonResource.getInputStream())
@@ -758,7 +772,6 @@ class AdminControllerTest {
 
         when(resourceLoader.getResource(anyString())).thenReturn(invalidJsonResource);
 
-        // ObjectMapper real → vai lançar JsonProcessingException naturalmente
         ReflectionTestUtils.setField(adminController, "objectMapper", new ObjectMapper());
 
         mockMvc.perform(get("/admin/config-files"))
@@ -772,19 +785,13 @@ class AdminControllerTest {
     void getConfigFiles_quandoPropertyApontaParaFile_deveCarregar() throws Exception {
         reset(resourceLoader);
 
-        // fileResource responde com JSON válido
         Resource fileResource = mock(Resource.class);
         when(fileResource.exists()).thenReturn(true);
         when(fileResource.getInputStream())
                 .thenReturn(new ByteArrayInputStream("{\"ok\":true}".getBytes()));
 
-        // classpath retorna mock(false) → força AdminUtils a cair no file:
         when(resourceLoader.getResource(startsWith("classpath:"))).thenReturn(emptyResource);
-
-        // file:/app/config/ retorna fileResource (o JSON válido!)
         when(resourceLoader.getResource(startsWith("file:/app/config/"))).thenReturn(fileResource);
-
-        // file:./config/ retorna emptyResource
         when(resourceLoader.getResource(startsWith("file:./config/"))).thenReturn(emptyResource);
 
         when(environment.getProperty(eq("easter-egg.file"), anyString()))
@@ -1344,6 +1351,7 @@ class AdminControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("999")));
 
+        // 🔧 FIX: todos os args envolvidos com matchers (não misturar raw + matcher)
         verify(telegramFacade).enviarMensagemHtml(eq(999L), eq("olá mundo"));
     }
 
@@ -1356,6 +1364,7 @@ class AdminControllerTest {
         mockMvc.perform(post("/admin/fala-t1000").param("message", "oi"))
                 .andExpect(status().isOk());
 
+        // 🔧 FIX: todos os args envolvidos com matchers
         verify(telegramFacade).enviarMensagemHtml(eq(42L), eq("oi"));
     }
 
@@ -1371,6 +1380,7 @@ class AdminControllerTest {
                                 .param("parseMode", "TEXT"))
                 .andExpect(status().isOk());
 
+        // 🔧 FIX: todos os args envolvidos com matchers
         verify(telegramFacade).enviarMensagem(eq(100L), eq("texto"));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
@@ -1386,7 +1396,6 @@ class AdminControllerTest {
     @DisplayName("falaT1000 sem chatId e ownerId 0 retorna 400")
     void falaT1000_semChatIdNemOwner() throws Exception {
         ReflectionTestUtils.setField(adminController, "ownerId", 0L);
-        // Força digestChatIds vazio
         ReflectionTestUtils.setField(adminController, "digestChatIds", java.util.Set.of());
 
         mockMvc.perform(post("/admin/fala-t1000").param("message", "oi"))
@@ -1530,7 +1539,6 @@ class AdminControllerTest {
                                 .param("end", "2026-09-07"))
                 .andExpect(status().isAccepted());
 
-        // Aguarda o CompletableFuture.runAsync executar (até 2s)
         org.awaitility.Awaitility.await()
                 .atMost(java.time.Duration.ofSeconds(2))
                 .untilAsserted(
@@ -1714,7 +1722,7 @@ class AdminControllerTest {
 
     @Test
     @DisplayName("initChatIds com string em branco não adiciona nada")
-    void initChatIds_stringVazia() throws Exception {
+    void initChatIds_stringVazia() {
         ReflectionTestUtils.setField(adminController, "digestChatIds", new java.util.HashSet<>());
         ReflectionTestUtils.setField(adminController, "digestChatIdsStr", "");
 
@@ -1729,7 +1737,7 @@ class AdminControllerTest {
 
     @Test
     @DisplayName("initChatIds com string null não adiciona nada")
-    void initChatIds_stringNull() throws Exception {
+    void initChatIds_stringNull() {
         ReflectionTestUtils.setField(adminController, "digestChatIds", new java.util.HashSet<>());
         ReflectionTestUtils.setField(adminController, "digestChatIdsStr", null);
 

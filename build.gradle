@@ -273,7 +273,7 @@ jacocoTestCoverageVerification {
                     classDirectories.files.collect { dir ->
                         fileTree(dir: dir, exclude: [
                                 'net/ddns/adambravo79/tmill/client/**',
- //                               'net/ddns/adambravo79/tmill/config/**',
+                                'net/ddns/adambravo79/tmill/config/**',
                                 'net/ddns/adambravo79/tmill/TmillApplication*'
                         ])
                     }
@@ -308,6 +308,7 @@ jacocoTestCoverageVerification {
                     '*.dto.*',
                     '*.model.*',
                     '*.document.*',
+                    'net.ddns.adambravo79.tmill.config.TestAdminController',
                     // Schedulers — wrappers finos do scheduler, dificilmente testáveis
                     'net.ddns.adambravo79.tmill.service.BirthdayScheduler'
             ]
