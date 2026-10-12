@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -182,9 +183,10 @@ class TmdbClientTest {
         client.reloadAliases();
 
         @SuppressWarnings("unchecked")
-        Map<String, String> atalhos =
-                (Map<String, String>) ReflectionTestUtils.getField(client, "atalhos");
-        assertThat(atalhos)
+        AtomicReference<Map<String, String>> ref =
+                (AtomicReference<Map<String, String>>)
+                        ReflectionTestUtils.getField(client, "atalhosRef");
+        assertThat(ref.get())
                 .containsEntry("duna", "Dune 2021")
                 .containsEntry("batman", "The Batman 2022");
     }
@@ -214,9 +216,10 @@ class TmdbClientTest {
         client.reloadAliases();
 
         @SuppressWarnings("unchecked")
-        Map<String, String> atalhos =
-                (Map<String, String>) ReflectionTestUtils.getField(client, "atalhos");
-        assertThat(atalhos).containsEntry("duna", "Dune 2021");
+        AtomicReference<Map<String, String>> ref =
+                (AtomicReference<Map<String, String>>)
+                        ReflectionTestUtils.getField(client, "atalhosRef");
+        assertThat(ref.get()).containsEntry("duna", "Dune 2021");
     }
 
     @Test
@@ -244,9 +247,10 @@ class TmdbClientTest {
         client.reloadAliases();
 
         @SuppressWarnings("unchecked")
-        Map<String, String> atalhos =
-                (Map<String, String>) ReflectionTestUtils.getField(client, "atalhos");
-        assertThat(atalhos).containsEntry("duna", "Dune 2021");
+        AtomicReference<Map<String, String>> ref =
+                (AtomicReference<Map<String, String>>)
+                        ReflectionTestUtils.getField(client, "atalhosRef");
+        assertThat(ref.get()).containsEntry("duna", "Dune 2021");
     }
 
     // ===================== buscarDetalhes =====================

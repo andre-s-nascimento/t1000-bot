@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,8 +37,13 @@ public class TmdbClient {
     private final RestClient restClient;
     private final JsonConfigLoader jsonConfigLoader;
 
-    /** Atalhos carregados do JSON; recarregáveis via {@link #reloadAliases()}. */
-    private volatile Map<String, String> atalhos = Map.of();
+    /**
+     * Atalhos carregados do JSON. {@link AtomicReference} garante visibilidade e
+     * atomicidade das trocas — o SonarQube não reclama de {@code java:S3077} porque
+     * reconhece o tipo como thread-safe. O conteúdo interno é sempre um mapa imutável
+     * ({@link Map#copyOf}), portanto nunca é mutado após a publicação.
+     */
+    private final AtomicReference<Map<String, String>> atalhosRef = new AtomicReference<>(Map.of());
 
     /** Path do JSON de atalhos (override via property). */
     @Value("${tmdb.aliases.file:classpath:tmdb-aliases.json}")
@@ -79,10 +85,13 @@ public class TmdbClient {
     }
 
     /**
-     * Recarrega os atalhos do JSON. Pode ser chamado em runtime via endpoint admin.
-     * Mantém o valor anterior em caso de falha.
+     * Recarrega os atalhos do JSON. Pode ser chamado em runtime via endpoint admin. Mantém o
+     * valor anterior em caso de falha.
+     *
+     * <p>Não é mais {@code synchronized}: a troca do mapa é atômica via {@link
+     * AtomicReference#set}, e o cálculo local usa um {@link ConcurrentHashMap} próprio.
      */
-    public synchronized void reloadAliases() {
+    public void reloadAliases() {
         if (jsonConfigLoader == null) {
             return;
         }
@@ -107,8 +116,9 @@ public class TmdbClient {
                                 novo.put(k.toString().toLowerCase(), v.toString());
                             }
                         });
-                this.atalhos = Map.copyOf(novo);
-                log.info("✅ TMDB: {} atalhos carregados de {}", atalhos.size(), aliasesFile);
+                Map<String, String> imutavel = Map.copyOf(novo);
+                atalhosRef.set(imutavel);
+                log.info("✅ TMDB: {} atalhos carregados de {}", imutavel.size(), aliasesFile);
             } else {
                 log.warn("⚠️ Chave 'aliases' ausente ou inválida no JSON de atalhos.");
             }
@@ -129,6 +139,7 @@ public class TmdbClient {
             maxDelay = 5000)
     public MovieSearchResponse pesquisarFilme(String query) {
         String queryNormalizada = query.trim().toLowerCase();
+        Map<String, String> atalhos = atalhosRef.get();
         String queryFinal = atalhos.getOrDefault(queryNormalizada, query);
         if (!queryFinal.equals(query)) {
             log.info(
@@ -251,7 +262,6 @@ public class TmdbClient {
 
     // ------------------------------------------------------------------------
     // NOVOS MÉTODOS PARA DESCOBERTA DE LANÇAMENTOS (sem filtro de provedores)
-    // Conforme API Reference: /discover/movie e /discover/tv
     // ------------------------------------------------------------------------
 
     /**
@@ -307,7 +317,6 @@ public class TmdbClient {
 
     // ------------------------------------------------------------------------
     // MÉTODOS PARA OBTER WATCH PROVIDERS (com tratamento de 404)
-    // Conforme API Reference: /movie/{id}/watch/providers e /tv/{id}/watch/providers
     // ------------------------------------------------------------------------
 
     /**
@@ -337,7 +346,6 @@ public class TmdbClient {
                 return INDISPONIVEL_NO_MOMENTO;
             }
 
-            // Verifica se existe entry para o Brasil
             if (response.results().containsKey("BR")) {
                 var brProviders = response.results().get("BR").flatrate();
                 if (brProviders != null && !brProviders.isEmpty()) {
@@ -363,10 +371,6 @@ public class TmdbClient {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // MÉTODO OPCIONAL: LISTAR PROVEDORES DISPONÍVEIS NO BRASIL
-    // Útil para debug ou para obter IDs atualizados
-    // ------------------------------------------------------------------------
     public WatchProvidersResponse listarProvedoresFilmes() {
         return restClient
                 .get()

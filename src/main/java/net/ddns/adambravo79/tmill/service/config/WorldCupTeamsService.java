@@ -3,6 +3,7 @@ package net.ddns.adambravo79.tmill.service.config;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,13 @@ import lombok.extern.slf4j.Slf4j;
  * <p>Centraliza o que antes era um par de {@code Map.ofEntries(...)} gigantes
  * dentro do {@link net.ddns.adambravo79.tmill.service.WorldCupSchedulerService}.
  * Permite recarga em runtime sem recompilar.
+ *
+ * <h2>Thread-safety</h2>
+ *
+ * <p>O mapa de times é mantido em um {@link AtomicReference} — garante visibilidade
+ * e atomicidade das trocas, sem a fragilidade do {@code volatile} sobre um tipo
+ * mutável (que dispara {@code java:S3077} no SonarQube). O conteúdo interno é sempre
+ * um mapa imutável ({@link Map#copyOf}) e nunca é mutado após a publicação.
  */
 @Slf4j
 @Service
@@ -27,7 +35,8 @@ public class WorldCupTeamsService {
     @Value("${worldcup.teams.file:classpath:worldcup-teams.json}")
     private String teamsFile;
 
-    private volatile Map<String, TeamInfo> teams = Map.of();
+    /** Mapa imutável de times, trocado atomicamente em {@link #reload()}. */
+    private final AtomicReference<Map<String, TeamInfo>> teamsRef = new AtomicReference<>(Map.of());
 
     public WorldCupTeamsService(JsonConfigLoader jsonConfigLoader) {
         this.jsonConfigLoader = jsonConfigLoader;
@@ -38,8 +47,14 @@ public class WorldCupTeamsService {
         reload();
     }
 
-    /** Recarrega os times do JSON. Em caso de falha, mantém o estado anterior. */
-    public synchronized void reload() {
+    /**
+     * Recarrega os times do JSON. Em caso de falha, mantém o estado anterior.
+     *
+     * <p>Não é mais {@code synchronized}: a troca é atômica via
+     * {@link AtomicReference#set}, e o cálculo local usa um {@link ConcurrentHashMap}
+     * próprio.
+     */
+    public void reload() {
         try {
             var loaded =
                     jsonConfigLoader.loadConfig(
@@ -70,8 +85,9 @@ public class WorldCupTeamsService {
                         }
                     });
 
-            this.teams = Map.copyOf(novo);
-            log.info("✅ Times da Copa carregados: {} de {}", teams.size(), teamsFile);
+            Map<String, TeamInfo> imutavel = Map.copyOf(novo);
+            teamsRef.set(imutavel);
+            log.info("✅ Times da Copa carregados: {} de {}", imutavel.size(), teamsFile);
         } catch (Exception e) {
             log.error("❌ Falha ao carregar times da Copa — mantendo os anteriores", e);
         }
@@ -81,6 +97,7 @@ public class WorldCupTeamsService {
     public String translateTeam(String teamName) {
         if (teamName == null || teamName.isBlank()) return "?";
         String key = teamName.toLowerCase().trim();
+        Map<String, TeamInfo> teams = teamsRef.get();
 
         TeamInfo exact = teams.get(key);
         if (exact != null) return exact.namePt();
@@ -98,6 +115,7 @@ public class WorldCupTeamsService {
     public String flagEmoji(String team) {
         if (team == null || team.isBlank()) return "🏳️";
         String key = team.toLowerCase().trim();
+        Map<String, TeamInfo> teams = teamsRef.get();
 
         TeamInfo exact = teams.get(key);
         if (exact != null) return exact.flag();
@@ -113,7 +131,7 @@ public class WorldCupTeamsService {
 
     /** Exposição para debug/testes. */
     public Map<String, TeamInfo> getAll() {
-        return teams;
+        return teamsRef.get();
     }
 
     public record TeamInfo(String namePt, String flag) {}

@@ -1352,7 +1352,7 @@ class AdminControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("999")));
 
         // 🔧 FIX: todos os args envolvidos com matchers (não misturar raw + matcher)
-        verify(telegramFacade).enviarMensagemHtml(eq(999L), eq("olá mundo"));
+        verify(telegramFacade).enviarMensagemHtml(999L, "olá mundo");
     }
 
     @Test
@@ -1365,7 +1365,7 @@ class AdminControllerTest {
                 .andExpect(status().isOk());
 
         // 🔧 FIX: todos os args envolvidos com matchers
-        verify(telegramFacade).enviarMensagemHtml(eq(42L), eq("oi"));
+        verify(telegramFacade).enviarMensagemHtml(42L, "oi");
     }
 
     @Test
@@ -1381,7 +1381,7 @@ class AdminControllerTest {
                 .andExpect(status().isOk());
 
         // 🔧 FIX: todos os args envolvidos com matchers
-        verify(telegramFacade).enviarMensagem(eq(100L), eq("texto"));
+        verify(telegramFacade).enviarMensagem(100L, "texto");
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 

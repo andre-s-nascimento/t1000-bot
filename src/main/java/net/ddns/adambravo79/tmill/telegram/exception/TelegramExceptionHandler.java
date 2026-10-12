@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -27,8 +28,8 @@ public class TelegramExceptionHandler {
     @Value("${telegram.error-messages.file:classpath:telegram-error-messages.json}")
     private String errorMessagesFile;
 
-    /** Lista imutável carregada do JSON; recarregável via {@link #reload()}. */
-    private volatile List<ErrorRule> errorRules = List.of();
+    /** Referência atômica para a lista imutável de regras. Thread-safe por construção. */
+    private final AtomicReference<List<ErrorRule>> errorRulesRef = new AtomicReference<>(List.of());
 
     public TelegramExceptionHandler(JsonConfigLoader jsonConfigLoader) {
         this.jsonConfigLoader = jsonConfigLoader;
@@ -40,7 +41,6 @@ public class TelegramExceptionHandler {
     }
 
     /** Recarrega as regras de erro do JSON. Em caso de falha, mantém o estado anterior. */
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public synchronized void reload() {
         try {
             var loaded =
@@ -77,8 +77,8 @@ public class TelegramExceptionHandler {
                             .filter(Objects::nonNull)
                             .toList();
 
-            this.errorRules = novas;
-            log.info("✅ Telegram: {} regras de erro carregadas", errorRules.size());
+            errorRulesRef.set(novas);
+            log.info("✅ Telegram: {} regras de erro carregadas", errorRulesRef.get().size());
         } catch (Exception e) {
             log.error("❌ Falha ao carregar regras de erro do Telegram", e);
         }
@@ -123,7 +123,7 @@ public class TelegramExceptionHandler {
             return BotMessages.ERRO_GENERICO;
         }
         String lower = msg.toLowerCase();
-        for (ErrorRule rule : errorRules) {
+        for (ErrorRule rule : errorRulesRef.get()) {
             if (lower.contains(rule.contains())) {
                 return rule.message();
             }
@@ -144,16 +144,20 @@ public class TelegramExceptionHandler {
             return Optional.empty();
         }
         String lower = rawMessage.toLowerCase();
-        return errorRules.stream()
+        return errorRulesRef.get().stream()
                 .filter(r -> lower.contains(r.contains()))
-                .map(ErrorRule::message)
+                .map(TelegramExceptionHandler::extrairMensagem)
                 .findFirst();
     }
 
     /** Exposto para testes: retorna as regras atualmente carregadas. */
     List<ErrorRule> getErrorRules() {
-        return errorRules;
+        return errorRulesRef.get();
     }
 
     public record ErrorRule(String contains, String message) {}
+
+    private static String extrairMensagem(ErrorRule rule) {
+        return rule.message();
+    }
 }
