@@ -1,0 +1,4 @@
+{
+  "max-refinamento-reducao": 0.3,
+  "min-length-para-checar-truncamento": 200
+}

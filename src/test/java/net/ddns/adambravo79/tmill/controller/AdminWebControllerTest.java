@@ -64,10 +64,6 @@ import tools.jackson.databind.ObjectMapper;
 @ExtendWith(MockitoExtension.class)
 class AdminWebControllerTest {
 
-    // =========================================================================
-    // MOCKS — todas as dependências do controller
-    // =========================================================================
-
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
     @Mock private WeeklyReminderService weeklyReminderService;
@@ -99,10 +95,6 @@ class AdminWebControllerTest {
 
     private static final long SHOWCASE_CHAT_ID = -1003703557250L;
 
-    // =========================================================================
-    // SETUP
-    // =========================================================================
-
     @BeforeEach
     void setUp() {
         controller =
@@ -133,7 +125,6 @@ class AdminWebControllerTest {
                         tmdbClient,
                         adminConfigService);
 
-        // @Value fields — não injetados por ReflectionTestUtils
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
         ReflectionTestUtils.setField(controller, "ownerId", 999L);
         ReflectionTestUtils.setField(controller, "publishChatId", 555L);
@@ -141,7 +132,6 @@ class AdminWebControllerTest {
         ReflectionTestUtils.setField(controller, "digestChatIdsStr", "333,444");
         ReflectionTestUtils.setField(controller, "migrationSqlitePath", "./data/test.db");
 
-        // 🔧 FIX: mesmo problema do AdminControllerTest — sem isso, getShowcaseChatId() retorna 0L.
         lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
@@ -284,6 +274,8 @@ class AdminWebControllerTest {
 
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         try (var mockedFiles = mockStatic(Files.class)) {
             mockedFiles
@@ -350,6 +342,7 @@ class AdminWebControllerTest {
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         try (var mockedFiles = mockStatic(Files.class)) {
             mockedFiles
@@ -364,6 +357,44 @@ class AdminWebControllerTest {
             mockMvc.perform(post("/admin-web/fala-t1000-tts").param("message", "Test"))
                     .andExpect(status().isOk())
                     .andExpect(content().string(containsString("chat 999")));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 🆕 KI-001 (residual): AdminWebController ignora o boolean de enviarMidia
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("KI-001 residual: falaT1000Tts responde OK mesmo se enviarMidia retornar false")
+    void falaT1000Tts_midiaRetornaFalse_adminAindaRespondeOk() throws Exception {
+        byte[] audio = new byte[] {1, 2, 3};
+        Path tempPath = Paths.get("/tmp/tts_audio.mp3");
+        when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
+        when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        // Simula falha real do envio (ex.: timeout após retry interno)
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        try (var mockedFiles = mockStatic(Files.class)) {
+            mockedFiles
+                    .when(() -> Files.write(any(Path.class), any(byte[].class)))
+                    .thenReturn(tempPath);
+            mockedFiles
+                    .when(() -> Files.move(any(Path.class), any(Path.class)))
+                    .thenReturn(tempPath);
+            mockedFiles.when(() -> Files.deleteIfExists(any(Path.class))).thenReturn(true);
+            mockedFiles.when(() -> Files.exists(any(Path.class))).thenReturn(false);
+
+            mockMvc.perform(
+                            post("/admin-web/fala-t1000-tts")
+                                    .param("message", "Test")
+                                    .param("chatId", "123"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("Áudio enviado com sucesso")));
+
+            // Documenta o comportamento atual: mesmo com false, o controller responde OK.
+            // Se um dia o AdminWebController passar a checar o retorno, este teste quebra
+            // e deve ser atualizado (retornando 500).
+            verify(telegramFacade).enviarMidia(eq(123L), anyString(), anyString());
         }
     }
 
@@ -406,6 +437,7 @@ class AdminWebControllerTest {
         Path tempPath = Paths.get("/tmp/test_azure.mp3");
         when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         try (var mockedFiles = mockStatic(Files.class)) {
             mockedFiles
@@ -759,6 +791,8 @@ class AdminWebControllerTest {
                 new AutoResponseOverride("Olá!", "https://example.com/a.mp4");
         when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
                 .thenReturn(Optional.of(response));
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(
                         post("/admin-web/test-auto-response")
@@ -802,6 +836,32 @@ class AdminWebControllerTest {
                                 .param("chatId", "123"))
                 .andExpect(status().is5xxServerError())
                 .andExpect(content().string(containsString("Erro interno")));
+    }
+
+    // -------------------------------------------------------------------------
+    // 🆕 KI-001 (residual): AdminWebController ignora o boolean de enviarMidia
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName(
+            "KI-001 residual: testAutoResponse responde OK mesmo se enviarMidia retornar false")
+    void testAutoResponse_midiaRetornaFalse_adminAindaRespondeOk() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Olá!", "https://example.com/a.mp4");
+        when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
+                .thenReturn(Optional.of(response));
+        // Simula falha real do envio
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        mockMvc.perform(
+                        post("/admin-web/test-auto-response")
+                                .param("message", "oi")
+                                .param("chatId", "123"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta automática enviada")));
+
+        // Documenta o comportamento atual: mesmo com false, o controller responde OK.
+        verify(telegramFacade).enviarMidia(eq(123L), eq("https://example.com/a.mp4"), anyString());
     }
 
     @Test
@@ -960,7 +1020,6 @@ class AdminWebControllerTest {
 
         controller.testPodcast("2026-01-01", "2026-01-31", 123L, attrs);
 
-        // Async pode demorar; só verifica flash imediato
         assertThat(attrs.getFlashAttributes().get("success").toString())
                 .contains("Podcast agendado");
     }
@@ -1270,7 +1329,6 @@ class AdminWebControllerTest {
     @Test
     @DisplayName("configFiles: retorna mapa com 3 arquivos")
     void configFiles_sucesso() throws Exception {
-        // Resource que não existe → todos retornam "Arquivo não encontrado"
         Resource resource = mock(Resource.class);
         when(resource.exists()).thenReturn(false);
         when(resourceLoader.getResource(anyString())).thenReturn(resource);

@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -37,7 +36,7 @@ import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
-import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -51,7 +50,7 @@ class PodcastPublisherServiceTest {
     @Mock private TempDirService tempDirService;
     @Mock private MetricsService metricsService;
     @Mock private PromptRegistryService promptRegistryService;
-    @Mock private JsonConfigLoader jsonConfigLoader;
+    @Mock private AudioConfigService audioConfig;
 
     @InjectMocks private PodcastPublisherService service;
 
@@ -61,11 +60,32 @@ class PodcastPublisherServiceTest {
     private static final LocalDate START = LocalDate.of(2026, Month.JULY, 6);
     private static final LocalDate END = LocalDate.of(2026, Month.JULY, 12);
 
+    /** 5 MB — o mesmo default do PodcastAudioConfig. */
+    private static final long FIVE_MB = 5L * 1024 * 1024;
+
     @BeforeEach
     void setUp() throws Exception {
         ReflectionTestUtils.setField(service, "publishChatId", CHAT_ID);
         ReflectionTestUtils.setField(service, "maxRetryAttempts", 3);
         ReflectionTestUtils.setField(service, "retryDelayMs", 10L);
+
+        // 🔧 Onda 3.4: AudioConfigService precisa devolver PodcastAudioConfig e TtsConfig
+        lenient()
+                .when(audioConfig.getPodcast())
+                .thenReturn(
+                        new AudioConfigService.PodcastAudioConfig(
+                                /* maxAudioSizeBytes      */ FIVE_MB,
+                                /* compressTimeoutSeconds */ 5));
+
+        lenient()
+                .when(audioConfig.getTts())
+                .thenReturn(
+                        new AudioConfigService.TtsConfig(
+                                /* maxAudioSizeBytes      */ FIVE_MB,
+                                /* compressBitrate        */ "64k",
+                                /* compressChannels       */ 1,
+                                /* compressSampleRate     */ 22050,
+                                /* compressTimeoutSeconds */ 5));
 
         lenient()
                 .when(tempDirService.createTempFile(anyString(), anyString()))
@@ -139,7 +159,8 @@ class PodcastPublisherServiceTest {
     void sucesso_registraMetricas() {
         when(scriptService.generateScript(START, END)).thenReturn("roteiro do podcast");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
-        doNothing().when(telegramFacade).enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
@@ -159,12 +180,12 @@ class PodcastPublisherServiceTest {
     void falhaAposRetries_registraMetricas() {
         when(scriptService.generateScript(START, END)).thenReturn("roteiro de fallback");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
-        doThrow(new RuntimeException("Telegram fora do ar"))
-                .when(telegramFacade)
-                .enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        // 🔧 Onda 3.4: agora a falha é representada por retorno false (não exceção)
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(false);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
+        // sendWithRetry tenta 3x por causa do retorno false
         verify(telegramFacade, times(3)).enviarMidia(eq(CHAT_ID), anyString(), anyString());
         verify(metricsService).error("podcast_falha_envio");
         verify(metricsService).success("podcast_fallback_texto");
@@ -173,15 +194,33 @@ class PodcastPublisherServiceTest {
     }
 
     @Test
-    @DisplayName("Falha 1x mas sucesso 2x: 'podcast_publicado'")
+    @DisplayName("Falha 1x (retorno false) mas sucesso na 2ª: 'podcast_publicado'")
     void falhaDepoisSucesso() {
         when(scriptService.generateScript(START, END)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
 
-        doThrow(new RuntimeException("falha 1"))
-                .doNothing()
-                .when(telegramFacade)
-                .enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        // 🔧 Onda 3.4: primeiro retorno é false, segundo é true
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString()))
+                .thenReturn(false)
+                .thenReturn(true);
+
+        service.generateAndSendPodcast(START, END, CHAT_ID);
+
+        verify(telegramFacade, times(2)).enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        verify(metricsService).success("podcast_publicado");
+        verify(metricsService, never()).error("podcast_falha_envio");
+    }
+
+    @Test
+    @DisplayName("Falha 1x por exceção, sucesso na 2ª: 'podcast_publicado'")
+    void falhaPorExcecaoDepoisSucesso() {
+        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
+
+        // sendWithRetry também captura exceções do enviarMidia
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString()))
+                .thenThrow(new RuntimeException("falha 1"))
+                .thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
@@ -191,29 +230,28 @@ class PodcastPublisherServiceTest {
     }
 
     // ============================================================
-    // COMPRESSÃO — só chamada se > 5MB
+    // COMPRESSÃO — só chamada se > FIVE_MB
     // ============================================================
 
     @Test
-    @DisplayName("Áudio >5MB: tenta compressão (ok OU falha)")
+    @DisplayName("Áudio >5MB: tenta compressão; sem ffmpeg, registra 'podcast_compressao_falha'")
     void audioGrande_tentaCompressao() {
-        byte[] audioGrande = new byte[6 * 1024 * 1024]; // 6MB
+        byte[] audioGrande = new byte[6 * 1024 * 1024]; // 6 MB
         when(scriptService.generateScript(START, END)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn(audioGrande);
-        doNothing().when(telegramFacade).enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
-        // 🔧 FIX: no caminho de falha, o código registra ERROR("podcast_compressao_falha").
-        // No caminho de sucesso, registra SUCCESS("podcast_compressao_ok").
-        // Aceitamos ambos.
+        // Em ambiente de teste sem ffmpeg, o compressAudio retorna o original
+        // e registra "podcast_compressao_falha".
+        // Se ffmpeg estiver presente, registra "podcast_compressao_ok".
         verify(metricsService, times(1))
                 .success(
                         argThat(
                                 (String s) ->
                                         s.equals("podcast_compressao_ok")
                                                 || s.equals("podcast_publicado")));
-        // E garantimos que OU houve sucesso de compressão OU falha
         verify(metricsService, times(1))
                 .error(argThat((String s) -> s.equals("podcast_compressao_falha")));
         verify(metricsService).success("podcast_publicado");
@@ -286,7 +324,7 @@ class PodcastPublisherServiceTest {
     void tresSucessos() {
         when(scriptService.generateScript(START, END)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
-        doNothing().when(telegramFacade).enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
         service.generateAndSendPodcast(START, END, CHAT_ID);
@@ -305,7 +343,7 @@ class PodcastPublisherServiceTest {
                 .thenReturn("roteiro")
                 .thenReturn("");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
-        doNothing().when(telegramFacade).enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
         service.generateAndSendPodcast(START, END, CHAT_ID);
@@ -324,7 +362,7 @@ class PodcastPublisherServiceTest {
     void envioOkSemErros() {
         when(scriptService.generateScript(START, END)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio".getBytes());
-        doNothing().when(telegramFacade).enviarMidia(eq(CHAT_ID), anyString(), anyString());
+        when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
@@ -332,24 +370,23 @@ class PodcastPublisherServiceTest {
         verify(metricsService).success("podcast_publicado");
     }
 
+    // ============================================================
+    // CONFIGURE TASKS
+    // ============================================================
+
     @Test
     @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
     void configureTasks_deveRegistrarAsTasksECobrirLambda() {
-        // 🔧 FIX: Para o Podcast, precisamos mockar o PromptRegistryService,
-        // que é quem fornece o Cron!
         lenient().when(promptRegistryService.getPodcastCron()).thenReturn("0 0 12 * * *");
 
         ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
 
-        // Aciona o método que registra as tarefas
         service.configureTasks(taskRegistrar);
 
-        // Captura as triggers que foram adicionadas
         ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
         verify(taskRegistrar, atLeastOnce())
                 .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
 
-        // Aciona a lambda de cada trigger para cobrir o código do getCron()
         SimpleTriggerContext ctx = new SimpleTriggerContext();
         for (Trigger trigger : triggerCaptor.getAllValues()) {
             trigger.nextExecution(ctx);

@@ -96,7 +96,6 @@ class AdminControllerTest {
 
         objectMapperMock = mock(ObjectMapper.class);
 
-        // Mocks pré-criados — evita UnfinishedStubbingException
         emptyResource = mockResource(false);
 
         adminController =
@@ -130,14 +129,8 @@ class AdminControllerTest {
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
 
-        // 🔧 FIX: stub do showcase chat id — sem isso, adminConfigService.getShowcaseChatId()
-        // retorna 0L e todos os testes que dependem do showcase falham (auto-response,
-        // worldcup showcase, podcast, reload-worldcup-showcase).
         lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
 
-        // Stub padrão: NUNCA retorna null. Se o arquivo real não existe no classpath,
-        // retorna mockResource(false). Isso garante que AdminUtils.loadConfigFile
-        // caia nos fallbacks sem NPE.
         lenient()
                 .when(resourceLoader.getResource(anyString()))
                 .thenAnswer(
@@ -155,8 +148,6 @@ class AdminControllerTest {
 
         this.mockMvc = MockMvcBuilders.standaloneSetup(adminController).build();
     }
-
-    // ========================= HELPERS =========================
 
     private Resource mockResource(boolean exists) {
         Resource res = mock(Resource.class);
@@ -851,6 +842,8 @@ class AdminControllerTest {
                 new AutoResponseOverride("Resposta com animação", "https://example.com/video.mp4");
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.of(response));
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
                 .andExpect(status().isOk());
@@ -1351,7 +1344,6 @@ class AdminControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("999")));
 
-        // 🔧 FIX: todos os args envolvidos com matchers (não misturar raw + matcher)
         verify(telegramFacade).enviarMensagemHtml(999L, "olá mundo");
     }
 
@@ -1364,7 +1356,6 @@ class AdminControllerTest {
         mockMvc.perform(post("/admin/fala-t1000").param("message", "oi"))
                 .andExpect(status().isOk());
 
-        // 🔧 FIX: todos os args envolvidos com matchers
         verify(telegramFacade).enviarMensagemHtml(42L, "oi");
     }
 
@@ -1380,7 +1371,6 @@ class AdminControllerTest {
                                 .param("parseMode", "TEXT"))
                 .andExpect(status().isOk());
 
-        // 🔧 FIX: todos os args envolvidos com matchers
         verify(telegramFacade).enviarMensagem(100L, "texto");
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
@@ -1456,7 +1446,8 @@ class AdminControllerTest {
 
         var temp = java.nio.file.Files.createTempFile("test_azure_", ".mp3");
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
-        doNothing().when(telegramFacade).enviarMidia(anyLong(), anyString(), anyString());
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(get("/admin/test-azure-tts"))
                 .andExpect(status().isOk())
@@ -1476,7 +1467,8 @@ class AdminControllerTest {
         when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
         var temp = java.nio.file.Files.createTempFile("tts_", ".mp3");
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
-        doNothing().when(telegramFacade).enviarMidia(anyLong(), anyString(), anyString());
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(
                         post("/admin/fala-t1000-tts")
@@ -1523,6 +1515,59 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/admin/fala-t1000-tts").param("message", "oi").param("chatId", "100"))
                 .andExpect(status().isInternalServerError());
+    }
+
+    // -------------------------------------------------------------------------
+    // 🆕 KI-001 (residual): AdminController ignora o boolean de enviarMidia
+    // -------------------------------------------------------------------------
+
+    @Test
+    @DisplayName("KI-001 residual: falaT1000Tts responde OK mesmo se enviarMidia retornar false")
+    void falaT1000Tts_midiaRetornaFalse_adminAindaRespondeOk() throws Exception {
+        ReflectionTestUtils.setField(adminController, "ownerId", 42L);
+        when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
+        var temp = java.nio.file.Files.createTempFile("tts_", ".mp3");
+        when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
+
+        // Simula falha real do envio (ex.: timeout após retry do fallback interno)
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        mockMvc.perform(
+                        post("/admin/fala-t1000-tts")
+                                .param("message", "olá")
+                                .param("chatId", "100"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("sucesso")));
+
+        // Documenta o comportamento atual: mesmo com false, o controller responde OK.
+        // Se um dia o AdminController passar a checar o retorno, este teste quebra
+        // e deve ser atualizado (retornando 500).
+        verify(telegramFacade).enviarMidia(eq(100L), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName(
+            "KI-001 residual: testAutoResponse responde OK mesmo se enviarMidia retornar false")
+    void testAutoResponse_midiaRetornaFalse_adminAindaRespondeOk() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com animação", "https://example.com/video.mp4");
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+
+        // Simula falha real do envio
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        content()
+                                .string(
+                                        org.hamcrest.Matchers.containsString(
+                                                "Resposta enviada para o chat")));
+
+        verify(telegramFacade)
+                .enviarMidia(
+                        eq(SHOWCASE_CHAT_ID), eq("https://example.com/video.mp4"), anyString());
     }
 
     // -------------------------------------------------------------------------

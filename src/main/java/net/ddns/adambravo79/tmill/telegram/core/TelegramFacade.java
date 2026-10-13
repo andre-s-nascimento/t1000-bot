@@ -18,6 +18,7 @@ import io.ksilisk.telegrambot.core.executor.TelegramBotExecutor;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
@@ -33,6 +34,7 @@ public class TelegramFacade {
     private final TelegramBotExecutor executor;
     private final TelegramSafeExecutor safeExecutor;
     private final MetricsService metricsService;
+    private final AudioConfigService audioConfig;
 
     @Value("${telegram.bot.token}")
     private String botToken;
@@ -141,42 +143,76 @@ public class TelegramFacade {
                                         .showAlert(showAlert)));
     }
 
-    public void enviarMidia(long chatId, String filePathOrUrl, String caption) {
+    /**
+     * Envia mídia (URL ou arquivo local).
+     *
+     * <p><b>KI-001 (fix):</b> este método agora <b>retorna</b> {@code true} se o envio foi
+     * confirmado e {@code false} se tudo falhou (mídia + fallback de texto). Antes, engolia
+     * exceções silenciosamente, o que causava falsos "sucesso" em {@code PodcastPublisherService}.
+     *
+     * <p><b>Áudios grandes:</b> arquivos {@code .mp3/.wav/.oga} acima de
+     * {@code audioConfig.getTelegram().useDocumentWhenOverMb()} são enviados como
+     * {@link SendDocument} em vez de {@link SendAudio} — mais tolerante a timeouts de rede.
+     *
+     * @return {@code true} se a mídia foi enviada; {@code false} se mídia e fallback falharam
+     */
+    public boolean enviarMidia(long chatId, String filePathOrUrl, String caption) {
+        boolean[] sucesso = {false};
+
         safeExecutor.run(
                 chatId,
                 this::enviarMensagem,
                 () -> {
                     try {
-                        // 1. Verifica se é uma URL HTTP/HTTPS
+                        // 1. URL HTTP/HTTPS
                         if (filePathOrUrl.startsWith("http://")
                                 || filePathOrUrl.startsWith("https://")) {
                             sendMediaByUrl(chatId, filePathOrUrl, caption);
+                            sucesso[0] = true;
                             return;
                         }
 
-                        // 2. Tenta interpretar como arquivo local
+                        // 2. Arquivo local existente
                         java.io.File file = new java.io.File(filePathOrUrl);
                         if (file.exists()) {
                             sendMediaByFile(chatId, file, caption);
+                            sucesso[0] = true;
                             return;
                         }
 
-                        // 3. Fallback: assume que é um file_id ou URL inválida – trata como URL
+                        // 3. Fallback: assume file_id ou string genérica → tenta URL
                         log.debug("Tratando '{}' como file_id ou string genérica", filePathOrUrl);
                         sendMediaByUrl(chatId, filePathOrUrl, caption);
+                        sucesso[0] = true;
 
                     } catch (Exception e) {
                         log.warn(
-                                "⚠️ Falha ao enviar mídia para chatId {}: {}. Enviando apenas"
-                                        + " texto.",
+                                "⚠️ Falha ao enviar mídia para chatId {}: {}. Tentando fallback"
+                                        + " de texto.",
                                 LogSanitizer.sanitizeId(chatId),
                                 LogSanitizer.sanitize(e.getMessage()));
-                        enviarMensagem(chatId, caption);
+
+                        // Fallback: tenta enviar apenas a caption como texto.
+                        // Se o fallback também falhar, sucesso[0] permanece false.
+                        try {
+                            enviarMensagem(chatId, caption);
+                            sucesso[0] = true;
+                            log.info("✅ Fallback de texto enviado para chatId={}", chatId);
+                        } catch (Exception fallbackErr) {
+                            log.error(
+                                    "❌ Fallback de texto também falhou para chatId={}",
+                                    chatId,
+                                    fallbackErr);
+                        }
                     }
                 });
+
+        return sucesso[0];
     }
 
-    // Métodos auxiliares privados
+    // =========================================================================
+    // MÉTODOS AUXILIARES PRIVADOS — envio de mídia
+    // =========================================================================
 
     private void sendMediaByUrl(long chatId, String url, String caption) {
         String lower = url.toLowerCase();
@@ -195,6 +231,8 @@ public class TelegramFacade {
 
     private void sendMediaByFile(long chatId, java.io.File file, String caption) {
         String lower = file.getName().toLowerCase();
+        long sizeBytes = file.length();
+
         if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
             executor.execute(
                     new SendVideo(chatId, file).caption(caption).parseMode(ParseMode.HTML));
@@ -202,8 +240,7 @@ public class TelegramFacade {
             executor.execute(
                     new SendAnimation(chatId, file).caption(caption).parseMode(ParseMode.HTML));
         } else if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".oga")) {
-            executor.execute(
-                    new SendAudio(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+            sendAudioOrDocument(chatId, file, caption, sizeBytes);
         } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
             executor.execute(
                     new SendPhoto(chatId, file).caption(caption).parseMode(ParseMode.HTML));
@@ -214,7 +251,35 @@ public class TelegramFacade {
         }
     }
 
-    // Fallback simples (sem parse mode)
+    /**
+     * Decide entre {@link SendAudio} e {@link SendDocument} para arquivos de áudio.
+     *
+     * <p>Áudios acima de {@code audioConfig.getTelegram().useDocumentWhenOverMb()} MB são enviados
+     * como documento — o {@code SendAudio} tende a estourar timeout em redes mais lentas (ver
+     * KI-001).
+     */
+    private void sendAudioOrDocument(
+            long chatId, java.io.File file, String caption, long sizeBytes) {
+        long thresholdBytes = audioConfig.getTelegram().useDocumentWhenOverMb() * 1024L * 1024L;
+
+        if (sizeBytes > thresholdBytes) {
+            log.info(
+                    "📎 Áudio de {} MB acima do limite de {} MB — enviando como DOCUMENTO"
+                            + " (mais resiliente a timeout)",
+                    String.format("%.2f", sizeBytes / 1024.0 / 1024.0),
+                    audioConfig.getTelegram().useDocumentWhenOverMb());
+            executor.execute(
+                    new SendDocument(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        } else {
+            executor.execute(
+                    new SendAudio(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        }
+    }
+
+    // =========================================================================
+    // FALLBACK / UTILITÁRIOS
+    // =========================================================================
+
     private void enviarFallback(long chatId, String texto) {
         try {
             executor.execute(new SendMessage(chatId, texto));
@@ -223,7 +288,6 @@ public class TelegramFacade {
         }
     }
 
-    // Obtém metadados do arquivo
     public File getFile(String fileId) {
         GetFile getFile = new GetFile(fileId);
         GetFileResponse response = executor.execute(getFile);
@@ -233,9 +297,6 @@ public class TelegramFacade {
         throw new TelegramFileException("Falha ao obter arquivo: " + response.description(), null);
     }
 
-    /**
-     * Baixa o arquivo usando a URL pública do Telegram com o cliente OkHttp configurado.
-     */
     public byte[] downloadFile(File file) {
         String filePath = file.filePath();
         String url = "https://api.telegram.org/file/bot" + botToken + "/" + filePath;
@@ -256,7 +317,7 @@ public class TelegramFacade {
         }
     }
 
-    /** Mascara um token para exibição em logs. Exibe apenas os 4 primeiros e 4 últimos caracteres. */
+    /** Mascara um token para exibição em logs. */
     private static String maskToken(String token) {
         if (token == null) {
             return "***";

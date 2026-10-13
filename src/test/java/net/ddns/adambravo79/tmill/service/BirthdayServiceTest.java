@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -174,6 +173,9 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L, -200L));
 
+        // 🔧 Onda 3.4: enviarMidia retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
         int enviados = service.enviarParabensPara(5, 10);
 
         assertThat(enviados).isEqualTo(1);
@@ -194,6 +196,9 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of());
 
+        // 🔧 Onda 3.4: enviarMidia retorna boolean (sem stub, retorna false → teste falha)
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
         int enviados = service.enviarParabensPara(5, 10);
 
         assertThat(enviados).isEqualTo(1);
@@ -208,12 +213,14 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
 
+        // Privado falha com Forbidden; grupo tem sucesso
         doThrow(
                         HttpClientErrorException.create(
                                 HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
                 .when(telegramFacade)
                 .enviarMidia(eq(100L), anyString(), anyString());
-        doNothing().when(telegramFacade).enviarMidia(eq(-100L), anyString(), anyString());
+        // 🔧 Onda 3.4: grupo retorna true
+        when(telegramFacade.enviarMidia(eq(-100L), anyString(), anyString())).thenReturn(true);
 
         int enviados = service.enviarParabensPara(5, 10);
 
@@ -230,11 +237,11 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L, -200L));
 
-        doNothing().when(telegramFacade).enviarMidia(eq(100L), anyString(), anyString());
-        doNothing().when(telegramFacade).enviarMidia(eq(-200L), anyString(), anyString());
-        doThrow(new RuntimeException("boom"))
-                .when(telegramFacade)
-                .enviarMidia(eq(-100L), anyString(), anyString());
+        // Privado + grupo -200: sucesso
+        when(telegramFacade.enviarMidia(eq(100L), anyString(), anyString())).thenReturn(true);
+        when(telegramFacade.enviarMidia(eq(-200L), anyString(), anyString())).thenReturn(true);
+        // Grupo -100: falha (retorna false)
+        when(telegramFacade.enviarMidia(eq(-100L), anyString(), anyString())).thenReturn(false);
 
         int enviados = service.enviarParabensPara(5, 10);
 
@@ -254,9 +261,8 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
 
-        doThrow(new RuntimeException("boom"))
-                .when(telegramFacade)
-                .enviarMidia(anyLong(), anyString(), anyString());
+        // Ambos retornam false
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
 
         assertThatCode(() -> service.enviarParabensPara(5, 10)).doesNotThrowAnyException();
 
@@ -327,6 +333,7 @@ class BirthdayServiceTest {
         Birthday b2 = new Birthday(2L, 200L, "Beltrano", 5, 10, null);
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b1, b2));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         int enviados = service.enviarParabensPara(5, 10);
 
@@ -345,10 +352,8 @@ class BirthdayServiceTest {
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of());
 
         // Fulano: sucesso; Beltrano: falha
-        doNothing().when(telegramFacade).enviarMidia(eq(100L), anyString(), anyString());
-        doThrow(new RuntimeException("boom"))
-                .when(telegramFacade)
-                .enviarMidia(eq(200L), anyString(), anyString());
+        when(telegramFacade.enviarMidia(eq(100L), anyString(), anyString())).thenReturn(true);
+        when(telegramFacade.enviarMidia(eq(200L), anyString(), anyString())).thenReturn(false);
 
         service.enviarParabensPara(5, 10);
 

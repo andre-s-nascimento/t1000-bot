@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -34,6 +35,7 @@ public class PodcastPublisherService implements SchedulingConfigurer {
     private final TempDirService tempDirService;
     private final MetricsService metricsService;
     private final PromptRegistryService promptRegistryService;
+    private final AudioConfigService audioConfig;
 
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
@@ -43,12 +45,6 @@ public class PodcastPublisherService implements SchedulingConfigurer {
 
     @Value("${podcast.retry.delay-ms:5000}")
     private long retryDelayMs;
-
-    @Value("${podcast.compress.timeout-seconds:180}")
-    private long compressTimeoutSeconds;
-
-    // Tamanho máximo do áudio antes de comprimir (5MB)
-    private static final long MAX_AUDIO_SIZE_BYTES = 5L * 1024 * 1024;
 
     // Constante para formatação de data
     private static final DateTimeFormatter DATE_FORMATTER =
@@ -139,18 +135,25 @@ public class PodcastPublisherService implements SchedulingConfigurer {
     }
 
     private byte[] checkAndCompressAudio(byte[] audioData) {
+        AudioConfigService.PodcastAudioConfig cfg = audioConfig.getPodcast();
+        long maxBytes = cfg.maxAudioSizeBytes();
+
         double audioSizeMb = audioData.length / 1024.0 / 1024.0;
         log.info(
                 "🔊 Áudio sintetizado: {} bytes ({} MB)",
                 audioData.length,
                 String.format("%.2f", audioSizeMb));
 
-        if (audioData.length <= MAX_AUDIO_SIZE_BYTES) {
+        if (audioData.length <= maxBytes) {
             metricsService.success("podcast_compressao_pulada");
             return audioData;
         }
 
-        log.info("🔊 Áudio grande ({} MB), comprimindo...", String.format("%.2f", audioSizeMb));
+        log.info(
+                "🔊 Áudio grande ({} MB > {} MB), comprimindo...",
+                String.format("%.2f", audioSizeMb),
+                String.format("%.2f", maxBytes / 1024.0 / 1024.0));
+
         long originalSize = audioData.length;
         byte[] compressedData = compressAudio(audioData);
 
@@ -238,17 +241,19 @@ public class PodcastPublisherService implements SchedulingConfigurer {
 
             outputFile = tempDirService.createTempFile("compress_output_", ".mp3");
 
+            AudioConfigService.TtsConfig ttsCfg = audioConfig.getTts();
+
             String[] cmd = {
                 "ffmpeg",
                 "-y",
                 "-i",
                 inputFile.toString(),
                 "-b:a",
-                "64k",
+                ttsCfg.compressBitrate(),
                 "-ac",
-                "1",
+                String.valueOf(ttsCfg.compressChannels()),
                 "-ar",
-                "22050",
+                String.valueOf(ttsCfg.compressSampleRate()),
                 outputFile.toString()
             };
 
@@ -258,7 +263,8 @@ public class PodcastPublisherService implements SchedulingConfigurer {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            boolean finished = process.waitFor(compressTimeoutSeconds, TimeUnit.SECONDS);
+            long timeoutSeconds = audioConfig.getPodcast().compressTimeoutSeconds();
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
             int exitCode = finished ? process.exitValue() : 1;
 
             if (exitCode == 0 && Files.exists(outputFile) && Files.size(outputFile) > 0) {
@@ -268,10 +274,10 @@ public class PodcastPublisherService implements SchedulingConfigurer {
                         "✅ Compressão concluída: {} -> {} bytes ({}% redução)",
                         audioData.length, compressed.length, String.format("%.1f", reduction));
                 return compressed;
-            } else {
-                log.warn("⚠️ FFmpeg falhou com código {}, mantendo áudio original", exitCode);
-                return audioData;
             }
+
+            log.warn("⚠️ FFmpeg falhou com código {}, mantendo áudio original", exitCode);
+            return audioData;
 
         } catch (InterruptedException e) { // Captura específica de interrupção (SonarQube)
             log.warn("⚠️ Compressão interrompida. Mantendo áudio original.");
@@ -290,23 +296,36 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         }
     }
 
+    /**
+     * Tenta enviar o áudio até {@code maxRetryAttempts} vezes.
+     *
+     * <p><b>KI-001:</b> só faz retry se {@link TelegramFacade#enviarMidia} retornar
+     * {@code false} ou lançar exceção. Depende do 3/5 (TelegramFacade mudando a
+     * assinatura para {@code boolean}).
+     */
     private boolean sendWithRetry(long chatId, Path file, String caption) {
         for (int attempt = 1; attempt <= maxRetryAttempts; attempt++) {
+            log.info("📤 Tentativa {}/{} de enviar áudio", attempt, maxRetryAttempts);
             try {
-                log.info("📤 Tentativa {}/{} de enviar áudio", attempt, maxRetryAttempts);
-                telegramFacade.enviarMidia(chatId, file.toAbsolutePath().toString(), caption);
-                log.info("✅ Áudio enviado na tentativa {}", attempt);
-                return true;
+                boolean enviado =
+                        telegramFacade.enviarMidia(
+                                chatId, file.toAbsolutePath().toString(), caption);
+                if (enviado) {
+                    log.info("✅ Áudio enviado na tentativa {}", attempt);
+                    return true;
+                }
+                log.warn("⚠️ Tentativa {} retornou false (envio falhou silenciosamente)", attempt);
             } catch (Exception e) {
-                log.warn("⚠️ Tentativa {} falhou: {}", attempt, e.getMessage());
-                if (attempt < maxRetryAttempts) {
-                    try {
-                        log.info("⏳ Aguardando {}ms antes da próxima tentativa...", retryDelayMs);
-                        Thread.sleep(retryDelayMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        return false;
-                    }
+                log.warn("⚠️ Tentativa {} lançou exceção: {}", attempt, e.getMessage());
+            }
+
+            if (attempt < maxRetryAttempts) {
+                try {
+                    log.info("⏳ Aguardando {}ms antes da próxima tentativa...", retryDelayMs);
+                    Thread.sleep(retryDelayMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return false;
                 }
             }
         }

@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -158,18 +159,31 @@ public class BirthdayService {
     }
 
     /**
-     * Envia a mensagem no privado do usuário. Se o usuário não iniciou o bot (Forbidden 403), loga
-     * warn e retorna false — o envio nos grupos continua normalmente.
+     * Envia a mensagem no privado do usuário.
+     *
+     * <p><b>KI-001 (fix):</b> consome o {@code boolean} retornado por {@link
+     * TelegramFacade#enviarMidia}. Antes, o método retornava {@code true} sempre que não houvesse
+     * exceção, mesmo que o envio tenha falhado silenciosamente (ex.: timeout com fallback interno
+     * também falho).
+     *
+     * @return {@code true} se o envio foi confirmado, {@code false} caso contrário
      */
     private boolean enviarPrivado(Birthday b, String mensagem) {
         try {
-            telegramFacade.enviarMidia(b.userId(), gifUrl, mensagem);
-            log.info(
-                    "🎉 Parabéns enviados (privado) para userId={} name={}",
-                    b.userId(),
-                    b.userName());
-            return true;
-        } catch (org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            boolean enviado = telegramFacade.enviarMidia(b.userId(), gifUrl, mensagem);
+            if (enviado) {
+                log.info(
+                        "🎉 Parabéns enviados (privado) para userId={} name={}",
+                        b.userId(),
+                        b.userName());
+            } else {
+                log.warn(
+                        "⚠️ envio (privado) retornou false para userId={} name={}",
+                        b.userId(),
+                        b.userName());
+            }
+            return enviado;
+        } catch (HttpClientErrorException.Forbidden e) {
             log.warn(
                     "⚠️ Usuário {} não iniciou o bot no privado (Forbidden). Pulando privado,"
                             + " enviando apenas nos grupos.",
@@ -203,13 +217,17 @@ public class BirthdayService {
 
     private boolean enviarParaGrupo(long groupId, Birthday b, String mensagem) {
         try {
-            telegramFacade.enviarMidia(groupId, gifUrl, mensagem);
-            log.info(
-                    "🎉 Parabéns enviados (grupo {}) para userId={} name={}",
-                    groupId,
-                    b.userId(),
-                    b.userName());
-            return true;
+            boolean enviado = telegramFacade.enviarMidia(groupId, gifUrl, mensagem);
+            if (enviado) {
+                log.info(
+                        "🎉 Parabéns enviados (grupo {}) para userId={} name={}",
+                        groupId,
+                        b.userId(),
+                        b.userName());
+            } else {
+                log.warn("⚠️ envio (grupo {}) retornou false para userId={}", groupId, b.userId());
+            }
+            return enviado;
         } catch (Exception e) {
             log.error(
                     "❌ Falha ao enviar parabéns no grupo {} para userId={}",

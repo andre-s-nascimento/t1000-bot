@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -43,6 +44,7 @@ import com.pengrad.telegrambot.request.SendVideo;
 import com.pengrad.telegrambot.response.GetFileResponse;
 
 import io.ksilisk.telegrambot.core.executor.TelegramBotExecutor;
+import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramFileException;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
@@ -53,6 +55,8 @@ class TelegramFacadeTest {
     @Mock private TelegramBotExecutor executor;
     @Mock private TelegramSafeExecutor safeExecutor;
     @Mock private MetricsService metricsService;
+    // 🔧 Onda 3.4: novo mock obrigatório para o construtor do TelegramFacade
+    @Mock private AudioConfigService audioConfig;
 
     @InjectMocks private TelegramFacade facade;
 
@@ -62,6 +66,11 @@ class TelegramFacadeTest {
         ReflectionTestUtils.setField(facade, "connectTimeout", 60);
         ReflectionTestUtils.setField(facade, "readTimeout", 120);
         ReflectionTestUtils.setField(facade, "writeTimeout", 120);
+
+        // 🔧 Onda 3.4: default — áudio > 5 MB vira Document
+        lenient()
+                .when(audioConfig.getTelegram())
+                .thenReturn(new AudioConfigService.TelegramAudioConfig(20, 5));
     }
 
     // =========================
@@ -108,7 +117,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("enviarMensagem: registra métrica de sucesso")
-    void deveEnviarMensagem() throws Exception {
+    void deveEnviarMensagem() {
         mockSafeExecutorToRunAction();
 
         facade.enviarMensagem(123L, "texto simples");
@@ -126,7 +135,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("enviarMensagemHtml: registra métrica de sucesso")
-    void deveEnviarMensagemHtml() throws Exception {
+    void deveEnviarMensagemHtml() {
         mockSafeExecutorToRunAction();
 
         facade.enviarMensagemHtml(123L, "texto <b>HTML</b>");
@@ -140,7 +149,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("enviarFotoHtml: registra métrica de sucesso")
-    void deveEnviarFotoHtml() throws Exception {
+    void deveEnviarFotoHtml() {
         mockSafeExecutorToRunAction();
 
         facade.enviarFotoHtml(123L, "http://foto.jpg", "legenda");
@@ -156,7 +165,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("enviarComBotoesHtml: registra métrica de sucesso")
-    void deveEnviarComBotoesHtml() throws Exception {
+    void deveEnviarComBotoesHtml() {
         mockSafeExecutorToRunAction();
         InlineKeyboardMarkup markup = mock(InlineKeyboardMarkup.class);
 
@@ -177,7 +186,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("editarMensagem: NÃO registra métrica (não é instrumentado)")
-    void editarMensagem_naoRegistraMetrica() throws Exception {
+    void editarMensagem_naoRegistraMetrica() {
         mockSafeExecutorToRunAction();
 
         facade.editarMensagem(123L, 456, "texto simples");
@@ -193,7 +202,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("editarMensagemHtml: registra métrica com chave própria (não compartilhada)")
-    void editarMensagemHtml_registraMetrica() throws Exception {
+    void editarMensagemHtml_registraMetrica() {
         mockSafeExecutorToRunAction();
 
         facade.editarMensagemHtml(123L, 456, "novo texto HTML");
@@ -204,7 +213,6 @@ class TelegramFacadeTest {
                 .containsEntry("message_id", 456)
                 .containsEntry("parse_mode", "HTML");
 
-        // 👇 chave corrigida — NÃO é mais telegram_enviar_mensagem_html
         verify(metricsService).success("telegram_editar_mensagem_html");
         verify(metricsService, never()).success("telegram_enviar_mensagem_html");
     }
@@ -215,7 +223,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("answerCallbackQuery: NÃO registra métrica")
-    void answerCallbackQuery_naoRegistraMetrica() throws Exception {
+    void answerCallbackQuery_naoRegistraMetrica() {
         mockSafeExecutorToRunAction();
 
         facade.answerCallbackQuery("cb123", "processando", true);
@@ -231,70 +239,88 @@ class TelegramFacadeTest {
     }
 
     // =========================
-    // MÍDIA
+    // MÍDIA — enviarMidia agora retorna boolean
     // =========================
 
     @Test
-    @DisplayName("enviarMidia: vídeo, NÃO registra métrica")
-    void enviarMidia_video_naoRegistraMetrica() throws Exception {
+    @DisplayName("enviarMidia: vídeo, NÃO registra métrica e retorna true")
+    void enviarMidia_video_naoRegistraMetrica() {
         mockSafeExecutorToRunAction();
 
-        facade.enviarMidia(123L, "video.mp4", "legenda");
+        boolean ok = facade.enviarMidia(123L, "video.mp4", "legenda");
 
         verify(executor).execute(any(SendVideo.class));
         verifyNoInteractions(metricsService);
+        assertThat(ok).isTrue();
     }
 
     @Test
-    @DisplayName("enviarMidia: gif, NÃO registra métrica")
-    void enviarMidia_gif_naoRegistraMetrica() throws Exception {
+    @DisplayName("enviarMidia: gif, NÃO registra métrica e retorna true")
+    void enviarMidia_gif_naoRegistraMetrica() {
         mockSafeExecutorToRunAction();
 
-        facade.enviarMidia(123L, "animacao.gif", "legenda");
+        boolean ok = facade.enviarMidia(123L, "animacao.gif", "legenda");
 
         verify(executor).execute(any(SendAnimation.class));
         verifyNoInteractions(metricsService);
+        assertThat(ok).isTrue();
     }
 
     @Test
-    @DisplayName("enviarMidia: imagem, NÃO registra métrica")
-    void enviarMidia_imagem_naoRegistraMetrica() throws Exception {
+    @DisplayName("enviarMidia: imagem, NÃO registra métrica e retorna true")
+    void enviarMidia_imagem_naoRegistraMetrica() {
         mockSafeExecutorToRunAction();
 
-        facade.enviarMidia(123L, "foto.jpg", "legenda");
+        boolean ok = facade.enviarMidia(123L, "foto.jpg", "legenda");
 
         verify(executor).execute(any(SendPhoto.class));
         verifyNoInteractions(metricsService);
+        assertThat(ok).isTrue();
     }
 
     @Test
-    @DisplayName("enviarMidia: tipo desconhecido cai no fallback de foto")
-    void enviarMidia_tipoDesconhecido_usaFallbackFoto() throws Exception {
+    @DisplayName("enviarMidia: tipo desconhecido cai no fallback de foto e retorna true")
+    void enviarMidia_tipoDesconhecido_usaFallbackFoto() {
         mockSafeExecutorToRunAction();
 
-        facade.enviarMidia(123L, "arquivo.xyz", "texto");
+        boolean ok = facade.enviarMidia(123L, "arquivo.xyz", "texto");
 
         verify(executor).execute(any(SendPhoto.class));
         verifyNoInteractions(metricsService);
+        assertThat(ok).isTrue();
     }
 
     @Test
-    @DisplayName("enviarMidia: exceção no envio → tenta enviar caption como texto")
-    void enviarMidia_excecao_generica_enviaTexto() throws Exception {
+    @DisplayName("enviarMidia: exceção no envio → tenta enviar caption como texto → retorna true")
+    void enviarMidia_excecao_generica_enviaTexto() {
         mockSafeExecutorToRunAction();
         doThrow(new RuntimeException("falha")).when(executor).execute(any(SendPhoto.class));
 
-        facade.enviarMidia(123L, "foto.jpg", "legenda");
+        boolean ok = facade.enviarMidia(123L, "foto.jpg", "legenda");
 
         // enviou a foto (que falhou) e depois o texto
         verify(executor, times(1)).execute(any(SendPhoto.class));
         verify(executor, times(1)).execute(any(SendMessage.class));
 
-        // 🔧 FIX: o fallback chamou enviarMensagem, que registra métrica.
-        // Portanto NÃO podemos usar verifyNoInteractions(metricsService).
+        // 🔧 Onda 3.4: fallback funcionou → retorno é true
+        assertThat(ok).isTrue();
+
+        // Fallback chamou enviarMensagem → métrica de mensagem registrada
         verify(metricsService).success("telegram_enviar_mensagem");
-        // E não deve ter registrado a métrica de envio de foto
         verify(metricsService, never()).success("telegram_enviar_foto");
+    }
+
+    @Test
+    @DisplayName("enviarMidia: mídia E fallback falham → retorna false")
+    void enviarMidia_midiaEFallbackFalham_retornaFalse() {
+        mockSafeExecutorToRunAction();
+        // Qualquer chamada ao executor lança exceção → nem foto nem texto funcionam
+        doThrow(new RuntimeException("falha total")).when(executor).execute(any());
+
+        boolean ok = facade.enviarMidia(123L, "foto.jpg", "legenda");
+
+        // 🔧 Onda 3.4: nem mídia nem fallback funcionaram → retorno é false
+        assertThat(ok).isFalse();
     }
 
     // =========================
@@ -335,7 +361,7 @@ class TelegramFacadeTest {
 
     @Test
     @DisplayName("safeExecutor com fallback: mensagem original falha e fallback é chamado")
-    void safeExecutorFallback_deveSerChamadoEmErro() throws Exception {
+    void safeExecutorFallback_deveSerChamadoEmErro() {
         mockSafeExecutorWithFallback();
         doThrow(new RuntimeException("erro")).when(executor).execute(any(SendMessage.class));
 
@@ -405,12 +431,12 @@ class TelegramFacadeTest {
     }
 
     // =========================================================================
-    // 🧪 COBERTURA ADICIONAL — ONDA 3b
+    // COBERTURA ADICIONAL
     // =========================================================================
 
     @Test
-    @DisplayName("enviarMidia com .mp4 usa SendVideo")
-    void enviarMidia_mp4_usesSendVideo() throws Exception {
+    @DisplayName("enviarMidia com .mp4 (URL) usa SendVideo")
+    void enviarMidia_mp4_usesSendVideo() {
         mockSafeExecutorToRunAction();
 
         facade.enviarMidia(123L, "http://exemplo.com/video.mp4", "legenda");
@@ -419,8 +445,8 @@ class TelegramFacadeTest {
     }
 
     @Test
-    @DisplayName("enviarMidia com .gif usa SendAnimation")
-    void enviarMidia_gif_usesSendAnimation() throws Exception {
+    @DisplayName("enviarMidia com .gif (URL) usa SendAnimation")
+    void enviarMidia_gif_usesSendAnimation() {
         mockSafeExecutorToRunAction();
 
         facade.enviarMidia(123L, "http://exemplo.com/anim.gif", "legenda");
@@ -429,8 +455,8 @@ class TelegramFacadeTest {
     }
 
     @Test
-    @DisplayName("enviarMidia com .jpg usa SendPhoto")
-    void enviarMidia_jpg_usesSendPhoto() throws Exception {
+    @DisplayName("enviarMidia com .jpg (URL) usa SendPhoto")
+    void enviarMidia_jpg_usesSendPhoto() {
         mockSafeExecutorToRunAction();
 
         facade.enviarMidia(123L, "http://exemplo.com/foto.jpg", "legenda");
@@ -439,8 +465,8 @@ class TelegramFacadeTest {
     }
 
     @Test
-    @DisplayName("enviarMidia com extensão desconhecida usa SendPhoto como fallback")
-    void enviarMidia_unknown_fallsBackToPhoto() throws Exception {
+    @DisplayName("enviarMidia com extensão desconhecida (URL) usa SendPhoto como fallback")
+    void enviarMidia_unknown_fallsBackToPhoto() {
         mockSafeExecutorToRunAction();
 
         facade.enviarMidia(123L, "http://exemplo.com/arquivo.xyz", "legenda");
@@ -449,7 +475,7 @@ class TelegramFacadeTest {
     }
 
     @Test
-    @DisplayName("enviarMidia com caminho de arquivo local .mp3 usa SendAudio")
+    @DisplayName("enviarMidia com arquivo local .mp3 pequeno usa SendAudio")
     void enviarMidia_localMp3_usesSendAudio() throws Exception {
         mockSafeExecutorToRunAction();
 
@@ -459,6 +485,7 @@ class TelegramFacadeTest {
         try {
             facade.enviarMidia(123L, temp.toString(), "legenda");
             verify(executor).execute(any(SendAudio.class));
+            verify(executor, never()).execute(any(SendDocument.class));
         } finally {
             java.nio.file.Files.deleteIfExists(temp);
         }
@@ -475,6 +502,35 @@ class TelegramFacadeTest {
         try {
             facade.enviarMidia(123L, temp.toString(), "legenda");
             verify(executor).execute(any(SendDocument.class));
+        } finally {
+            java.nio.file.Files.deleteIfExists(temp);
+        }
+    }
+
+    // =========================================================================
+    // ONDA 3.4: useDocumentWhenOverMb
+    // =========================================================================
+
+    @Test
+    @DisplayName("enviarMidia com .mp3 grande (> useDocumentWhenOverMb) usa SendDocument")
+    void enviarMidia_mp3Grande_usaSendDocument() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        // Configura limite muito baixo: arquivos > 1 KB viram documento
+        when(audioConfig.getTelegram())
+                .thenReturn(new AudioConfigService.TelegramAudioConfig(20, 0));
+        // 0 MB → qualquer arquivo > 0 bytes vira Document
+
+        java.nio.file.Path temp = java.nio.file.Files.createTempFile("test-big-", ".mp3");
+        // Escreve 2 KB para garantir que seja > 0
+        java.nio.file.Files.write(temp, new byte[2048]);
+
+        try {
+            boolean ok = facade.enviarMidia(123L, temp.toString(), "legenda");
+
+            verify(executor).execute(any(SendDocument.class));
+            verify(executor, never()).execute(any(SendAudio.class));
+            assertThat(ok).isTrue();
         } finally {
             java.nio.file.Files.deleteIfExists(temp);
         }

@@ -37,9 +37,11 @@ import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.kafka.AudioEventPublisher;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
 /**
@@ -66,6 +68,10 @@ public class AudioHandler {
     private static final long TOKEN_EXPIRATION_MS = 604800000L; // 7 dias
     private static final int TOKEN_MAX_LENGTH = 20;
 
+    // 🔧 FIX (KI-001): chaves de métrica centralizadas
+    private static final String METRIC_TRANSCRICAO_ENTREGUE = "transcricao_entregue";
+    private static final String METRIC_TRANSCRICAO_FALHA = "transcricao_falha";
+
     private final TelegramFileService fileService;
     private final AudioPipelineService audioService;
     private final FileTranscriptionCacheService cacheService;
@@ -73,9 +79,8 @@ public class AudioHandler {
     private final TelegramUtils utils;
     private final AudioEventPublisher audioEventPublisher;
     private final FeatureFlagAdminService featureFlags;
-
-    @Value("${t1000.audio.max-size-mb:20}")
-    private int maxSizeMb;
+    private final AudioConfigService audioConfig;
+    private final MetricsService metricsService;
 
     @Value("${telegram.message.limit:4000}")
     private int telegramMessageLimit;
@@ -118,6 +123,8 @@ public class AudioHandler {
             return;
         }
 
+        // 🔧 FIX (Onda 3.4): lê o limite do AudioConfigService em vez de @Value
+        int maxSizeMb = audioConfig.getTelegram().audioMaxSizeMb();
         if (fileSize > maxSizeMb * 1024L * 1024L) {
             log.warn(
                     "⚠️ Áudio muito grande chatId={} size={} bytes (limite {} MB)",
@@ -145,7 +152,6 @@ public class AudioHandler {
 
         log.info("🎙️ Enfileirando áudio privado chatId={} fileId={}", chatId, fileId);
 
-        // Publica o evento no Kafka
         AudioReceivedEvent event =
                 new AudioReceivedEvent(fileId, chatId, userId, userName, 0L, "AMBOS", duration);
         audioEventPublisher.publish(event);
@@ -164,7 +170,6 @@ public class AudioHandler {
 
         log.info("🎙️ Enfileirando áudio de grupo chatId={} fileId={}", chatId, fileId);
 
-        // Publica o evento no Kafka para o worker processar em segundo plano
         AudioReceivedEvent event =
                 new AudioReceivedEvent(
                         fileId,
@@ -189,7 +194,6 @@ public class AudioHandler {
 
         log.info("✅ Bot recebeu confirmação de processamento: fileId={}", event.fileId());
 
-        // Gera o token de acesso que expira em 7 dias (como já existia)
         String token = gerarToken(event.fileId());
 
         pendingRequests.put(
@@ -200,7 +204,6 @@ public class AudioHandler {
                         System.currentTimeMillis(),
                         event.senderId(),
                         event.senderName()));
-        // Envia os botões de transcrição para o chat
         safeSendButtons(event.chatId(), event.senderName(), event.duration(), token);
     }
 
@@ -268,7 +271,6 @@ public class AudioHandler {
                     tipo,
                     userId);
 
-            // Se o pedido era refinado mas está vazio, tenta o bruto
             if (tipo.equals(TRANS_REFINADO)) {
                 String brutoFallback = cached.textoBruto();
                 if (brutoFallback != null && !brutoFallback.isBlank()) {
@@ -278,35 +280,56 @@ public class AudioHandler {
                             ⚠️ _Não consegui refinar esta transcrição. Enviando a versão bruta:_
 
                             """;
-                    safeSendTranscription(userId, aviso + "🎙️ " + brutoFallback, groupId);
+                    boolean entregue =
+                            safeSendTranscription(userId, aviso + "🎙️ " + brutoFallback, groupId);
+                    // 🔧 FIX (KI-001): métrica real
+                    if (entregue) {
+                        metricsService.success(METRIC_TRANSCRICAO_ENTREGUE);
+                    } else {
+                        metricsService.error(METRIC_TRANSCRICAO_FALHA);
+                    }
                     return;
                 }
             }
 
-            // Ambos vazios — não tem o que enviar
             log.error("❌ Ambos bruto e refinado estão vazios para userId={}", userId);
             safeSendMessage(
                     userId, "❌ Não consegui obter o texto da transcrição. Tente novamente.");
+            metricsService.error(METRIC_TRANSCRICAO_FALHA);
             return;
         }
 
-        safeSendTranscription(userId, prefixo + texto, groupId);
-        log.info(
-                "✅ Transcrição entregue via cache para userId={} tipo={} ({} chars)",
-                userId,
-                tipo,
-                texto.length());
+        boolean entregue = safeSendTranscription(userId, prefixo + texto, groupId);
+        // 🔧 FIX (KI-001): métrica real
+        if (entregue) {
+            metricsService.success(METRIC_TRANSCRICAO_ENTREGUE);
+            log.info(
+                    "✅ Transcrição entregue via cache para userId={} tipo={} ({} chars)",
+                    userId,
+                    tipo,
+                    texto.length());
+        } else {
+            metricsService.error(METRIC_TRANSCRICAO_FALHA);
+        }
     }
 
     private void processarAudioCallback(
             long userId, String tipo, String fileId, AudioRequest request, long groupId) {
         try {
             String mensagem = transcreverAudio(fileId, tipo, request);
-            safeSendTranscription(userId, mensagem, groupId);
-            log.info("✅ Transcrição enviada para userId={} tipo={}", userId, tipo);
+            boolean entregue = safeSendTranscription(userId, mensagem, groupId);
+            // 🔧 FIX (KI-001): métrica real
+            if (entregue) {
+                metricsService.success(METRIC_TRANSCRICAO_ENTREGUE);
+                log.info("✅ Transcrição enviada para userId={} tipo={}", userId, tipo);
+            } else {
+                metricsService.error(METRIC_TRANSCRICAO_FALHA);
+                log.warn("⚠️ Transcrição NÃO entregue para userId={} tipo={}", userId, tipo);
+            }
         } catch (AudioProcessingException e) {
             log.error("Erro no pipeline de áudio para userId={} fileId={}", userId, fileId, e);
             tratarErroTranscricao(e, userId, groupId);
+            metricsService.error(METRIC_TRANSCRICAO_FALHA);
         } catch (HttpClientErrorException e) {
             log.error(
                     "Erro HTTP do Telegram para userId={} fileId={}: {}",
@@ -315,9 +338,11 @@ public class AudioHandler {
                     e.getStatusCode(),
                     e);
             tratarErroTranscricao(e, userId, groupId);
+            metricsService.error(METRIC_TRANSCRICAO_FALHA);
         } catch (ResourceAccessException e) {
             log.error("Falha de conectividade para userId={} fileId={}", userId, fileId, e);
             safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Falha de conectividade.");
+            metricsService.error(METRIC_TRANSCRICAO_FALHA);
         } catch (RuntimeException e) {
             log.error(
                     "Erro inesperado ao processar áudio para userId={} fileId={}",
@@ -325,6 +350,7 @@ public class AudioHandler {
                     fileId,
                     e);
             tratarErroTranscricao(e, userId, groupId);
+            metricsService.error(METRIC_TRANSCRICAO_FALHA);
         } finally {
             pendingRequests.entrySet().removeIf(entry -> entry.getValue().fileId().equals(fileId));
         }
@@ -380,8 +406,11 @@ public class AudioHandler {
     /**
      * Envia transcrição para o usuário, com tratamento específico de Forbidden (usuário não iniciou
      * bot).
+     *
+     * <p><b>KI-001 (fix):</b> retorna {@code true} se a mensagem foi entregue, {@code false} caso
+     * contrário. Permite que o chamador emita métricas de sucesso/falha baseadas no resultado real.
      */
-    private void safeSendTranscription(long userId, String mensagem, long groupId) {
+    private boolean safeSendTranscription(long userId, String mensagem, long groupId) {
         try {
             if (mensagem.length() > telegramMessageLimit) {
                 utils.splitMessage(mensagem, telegramMessageLimit)
@@ -390,6 +419,7 @@ public class AudioHandler {
                 telegramFacade.enviarMensagem(userId, mensagem);
             }
             log.info("📤 Transcrição enviada para userId={}", userId);
+            return true;
         } catch (HttpClientErrorException.Forbidden e) {
             log.warn(
                     "Usuário {} não iniciou o bot (Forbidden), notificando no grupo {}",
@@ -398,6 +428,7 @@ public class AudioHandler {
             if (groupId != 0) {
                 safeSendMessage(groupId, USUARIO_PRECISA_INICIAR_BOT);
             }
+            return false;
         } catch (HttpClientErrorException e) {
             log.error(
                     "Erro HTTP {} ao enviar transcrição para userId={}",
@@ -405,9 +436,11 @@ public class AudioHandler {
                     userId,
                     e);
             safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Erro de comunicação.");
+            return false;
         } catch (ResourceAccessException e) {
             log.error("Falha de conectividade ao enviar transcrição para userId={}", userId);
             safeSendMessage(userId, ERRO_PROCESSAR_AUDIO_CALLBACK + "Falha de conectividade.");
+            return false;
         }
     }
 

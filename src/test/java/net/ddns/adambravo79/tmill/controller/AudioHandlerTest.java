@@ -41,11 +41,12 @@ import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
 import net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry;
 import net.ddns.adambravo79.tmill.service.AudioPipelineService;
 import net.ddns.adambravo79.tmill.service.TelegramFileService;
-import net.ddns.adambravo79.tmill.service.TranscriptStoreService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.kafka.AudioEventPublisher;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -55,11 +56,13 @@ class AudioHandlerTest {
     @Mock private TelegramFileService fileService;
     @Mock private AudioPipelineService audioService;
     @Mock private FileTranscriptionCacheService cacheService;
-    @Mock private TranscriptStoreService transcriptStore;
     @Mock private TelegramFacade telegramFacade;
     @Mock private TelegramUtils utils;
     @Mock private AudioEventPublisher audioEventPublisher;
     @Mock private FeatureFlagAdminService featureFlags;
+    // 🔧 Onda 3.4: novos mocks obrigatórios para o construtor do AudioHandler
+    @Mock private AudioConfigService audioConfig;
+    @Mock private MetricsService metricsService;
 
     @InjectMocks private AudioHandler audioHandler;
 
@@ -77,7 +80,11 @@ class AudioHandlerTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(audioHandler, "maxSizeMb", 20);
+        // 🔧 Onda 3.4: maxSizeMb agora vem do AudioConfigService
+        lenient()
+                .when(audioConfig.getTelegram())
+                .thenReturn(new AudioConfigService.TelegramAudioConfig(20, 5));
+
         ReflectionTestUtils.setField(audioHandler, "telegramMessageLimit", 4000);
 
         update = mock(Update.class);
@@ -129,6 +136,23 @@ class AudioHandlerTest {
         verifyNoInteractions(fileService, audioService);
     }
 
+    @Test
+    @DisplayName("AudioConfigService customizado: limite de 5 MB rejeita áudio de 10 MB")
+    void deveRespeitarLimiteCustomizadoDoAudioConfig() {
+        when(audioConfig.getTelegram())
+                .thenReturn(new AudioConfigService.TelegramAudioConfig(5, 2));
+
+        when(chat.id()).thenReturn(CHAT_ID);
+        when(message.audio()).thenReturn(audio);
+        when(audio.fileId()).thenReturn(FILE_ID);
+        when(audio.fileSize()).thenReturn(10L * 1024 * 1024); // 10 MB > 5 MB
+
+        audioHandler.handleAudioUpdate(update);
+
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("excede 5 MB"));
+        verifyNoInteractions(fileService, audioService);
+    }
+
     // =========================
     // 🧪 ÁUDIO EM PRIVADO
     // =========================
@@ -144,7 +168,6 @@ class AudioHandlerTest {
 
         audioHandler.handleAudioUpdate(update);
 
-        // Verifica que publicou no Kafka com o tipo "AMBOS"
         verify(audioEventPublisher)
                 .publish(
                         argThat(
@@ -159,20 +182,11 @@ class AudioHandlerTest {
                 .processarFluxoAudio(any(), anyLong(), anyLong(), anyString(), any());
     }
 
-    // ============================================================
-    // Teste 35 (novo): enviar botões ao receber AudioProcessedEvent
-    // ============================================================
     @Test
     void deveEnviarBotoesAoReceberAudioProcessedEvent() {
         AudioProcessedEvent processed =
                 new AudioProcessedEvent(
-                        FILE_ID,
-                        GROUP_CHAT_ID,
-                        USER_ID,
-                        "Testador Silva",
-                        true, // sucesso
-                        null,
-                        400);
+                        FILE_ID, GROUP_CHAT_ID, USER_ID, "Testador Silva", true, null, 400);
 
         audioHandler.onAudioProcessed(processed);
 
@@ -181,9 +195,6 @@ class AudioHandlerTest {
         assertThat(captor.getValue()).contains("Testador Silva");
     }
 
-    // ============================================================
-    // Teste novo: capturar HttpClientErrorException no enviarComBotoesHtml
-    // ============================================================
     @Test
     void deveCapturarHttpClientErrorExceptionNoSafeSendButtons() {
         AudioProcessedEvent processed =
@@ -201,9 +212,6 @@ class AudioHandlerTest {
         verify(telegramFacade).enviarComBotoesHtml(eq(GROUP_CHAT_ID), anyString(), any());
     }
 
-    // ============================================================
-    // Teste novo: capturar ResourceAccessException no enviarComBotoesHtml
-    // ============================================================
     @Test
     void deveCapturarResourceAccessExceptionNoSafeSendButtons() {
         AudioProcessedEvent processed =
@@ -360,7 +368,6 @@ class AudioHandlerTest {
                 new TranscriptionCacheEntry("bruto", "refinado", System.currentTimeMillis());
         when(cacheService.get(FILE_ID)).thenReturn(entry);
 
-        // Lança a exceção correta (subclasse Forbidden)
         doThrow(
                         HttpClientErrorException.create(
                                 HttpStatus.FORBIDDEN,
@@ -373,7 +380,6 @@ class AudioHandlerTest {
 
         audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token789");
 
-        // Verifica que a mensagem de aviso foi enviada para o grupo
         verify(telegramFacade)
                 .enviarMensagem(
                         eq(GROUP_CHAT_ID),
@@ -384,7 +390,6 @@ class AudioHandlerTest {
 
     // ========================= TESTES ADICIONAIS PARA COBERTURA =========================
 
-    // 1. Update sem áudio e sem voice
     @Test
     void deveIgnorarUpdateSemAudioNemVoice() {
         when(chat.id()).thenReturn(CHAT_ID);
@@ -396,7 +401,6 @@ class AudioHandlerTest {
         verifyNoInteractions(fileService, audioService, telegramFacade);
     }
 
-    // 5. Callback malformado (menos de 2 partes)
     @Test
     void deveIgnorarCallbackMalformado() {
         CallbackQuery callback = mock(CallbackQuery.class);
@@ -407,7 +411,6 @@ class AudioHandlerTest {
         verifyNoInteractions(cacheService, fileService, audioService, telegramFacade);
     }
 
-    // 6. Callback com mensagem inacessível
     @Test
     void deveIgnorarCallbackComMensagemInacessivel() {
         CallbackQuery callback = mock(CallbackQuery.class);
@@ -418,13 +421,11 @@ class AudioHandlerTest {
 
         audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token123");
 
-        // 👇 Removido o eq(true) e passado true diretamente
         verify(telegramFacade)
                 .answerCallbackQuery("cb123", "Mensagem original não disponível", true);
         verifyNoInteractions(cacheService, fileService, audioService);
     }
 
-    // 7. processarAudioCallback com AudioProcessingException
     @Test
     void deveTratarErroAudioProcessingExceptionNoProcessamentoCallback() {
         CallbackQuery callback = mock(CallbackQuery.class);
@@ -456,7 +457,6 @@ class AudioHandlerTest {
                 .when(audioService)
                 .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
 
-        // Executa e espera a thread assíncrona (usando sleep para garantir execução)
         audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
         await().atMost(2, TimeUnit.SECONDS)
                 .untilAsserted(
@@ -466,7 +466,6 @@ class AudioHandlerTest {
                         });
     }
 
-    // 8. processarAudioCallback com HttpClientErrorException (não-403)
     @Test
     void deveTratarErroHttpClientExceptionNoProcessamentoCallback() {
         CallbackQuery callback = mock(CallbackQuery.class);
@@ -509,7 +508,6 @@ class AudioHandlerTest {
                         });
     }
 
-    // 9. processarAudioCallback com ResourceAccessException
     @Test
     void deveTratarErroResourceAccessExceptionNoProcessamentoCallback() {
         CallbackQuery callback = mock(CallbackQuery.class);
@@ -551,7 +549,6 @@ class AudioHandlerTest {
                         });
     }
 
-    // 10. processarAudioCallback com RuntimeException
     @Test
     void deveTratarErroRuntimeExceptionNoProcessamentoCallback() {
         CallbackQuery callback = mock(CallbackQuery.class);
@@ -592,10 +589,8 @@ class AudioHandlerTest {
                         });
     }
 
-    // 11. safeSendMessage com HttpClientErrorException genérico
     @Test
     void deveCapturarHttpClientErrorExceptionNoSafeSendMessage() {
-        // Provoca exceção no envio da mensagem
         when(chat.id()).thenReturn(CHAT_ID);
         when(message.audio()).thenReturn(audio);
         when(audio.fileId()).thenReturn(FILE_ID);
@@ -623,11 +618,9 @@ class AudioHandlerTest {
 
         audioHandler.handleAudioUpdate(update);
 
-        // Não deve propagar exceção, apenas logar
         verify(telegramFacade).enviarMensagem(eq(CHAT_ID), anyString());
     }
 
-    // 12. safeSendMessage com ResourceAccessException
     @Test
     void deveCapturarResourceAccessExceptionNoSafeSendMessage() {
         when(chat.id()).thenReturn(CHAT_ID);
@@ -658,7 +651,6 @@ class AudioHandlerTest {
         verify(telegramFacade).enviarMensagem(eq(CHAT_ID), anyString());
     }
 
-    // 13. safeSendTranscription com HttpClientErrorException (não-403)
     @Test
     @SneakyThrows
     void deveCapturarHttpClientErrorExceptionNoSafeSendTranscription() {
@@ -688,7 +680,6 @@ class AudioHandlerTest {
                 new TranscriptionCacheEntry("bruto", "refinado", System.currentTimeMillis());
         when(cacheService.get(FILE_ID)).thenReturn(entry);
 
-        // A primeira tentativa falha, e o fallback também pode enviar uma mensagem
         doThrow(
                         HttpClientErrorException.create(
                                 HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
@@ -699,13 +690,11 @@ class AudioHandlerTest {
         await().atMost(2, TimeUnit.SECONDS)
                 .untilAsserted(
                         () -> {
-                            // Verifica que a mensagem de erro foi enviada
                             verify(telegramFacade, atLeastOnce())
                                     .enviarMensagem(eq(USER_ID), contains("Erro de comunicação"));
                         });
     }
 
-    // 14. safeSendTranscription com ResourceAccessException
     @Test
     void deveCapturarResourceAccessExceptionNoSafeSendTranscription() {
         CallbackQuery callback = mock(CallbackQuery.class);
@@ -747,12 +736,8 @@ class AudioHandlerTest {
                 .anyMatch(msg -> msg.contains("Falha de conectividade"));
     }
 
-    // 15. safeSendButtons com HttpClientErrorException
-
-    // 17. tratarErroTranscricao com isForbidden = true
     @Test
     void deveTratarErroTranscricaoComForbiddenTrue() throws Exception {
-        // Usa reflexão para chamar o método privado
         java.lang.reflect.Method method =
                 AudioHandler.class.getDeclaredMethod(
                         "tratarErroTranscricao", Exception.class, long.class, long.class);
@@ -768,7 +753,6 @@ class AudioHandlerTest {
         verify(telegramFacade, never()).enviarMensagem(eq(USER_ID), anyString());
     }
 
-    // 18. tratarErroTranscricao com isForbidden = false
     @Test
     void deveTratarErroTranscricaoComForbiddenFalse() throws Exception {
         java.lang.reflect.Method method =
@@ -783,7 +767,6 @@ class AudioHandlerTest {
         verify(telegramFacade, never()).enviarMensagem(eq(GROUP_CHAT_ID), anyString());
     }
 
-    // 19. gerarToken
     @Test
     void deveGerarTokenCorretamente() throws Exception {
         java.lang.reflect.Method method =
@@ -795,14 +778,12 @@ class AudioHandlerTest {
         assertThat(token.length()).isLessThanOrEqualTo(20);
     }
 
-    // 20. cleanExpiredTokens
     @Test
     void deveLimparTokensExpirados() throws Exception {
         java.lang.reflect.Method method =
                 AudioHandler.class.getDeclaredMethod("cleanExpiredTokens");
         method.setAccessible(true);
 
-        // Cria um token expirado
         java.util.Map<String, AudioRequest> pendingMap =
                 new java.util.concurrent.ConcurrentHashMap<>();
         AudioRequest request =
@@ -821,13 +802,11 @@ class AudioHandlerTest {
 
         method.invoke(audioHandler);
 
-        // Deve remover apenas o token antigo
         assertThat(pendingMap).containsKey("token_novo").doesNotContainKey("token_antigo");
     }
 
     @Test
     void deveDividirMensagemLongaNaSafeSendTranscription() {
-        // Configura callback com cache hit
         CallbackQuery callback = mock(CallbackQuery.class);
         when(callback.from()).thenReturn(user);
         when(callback.id()).thenReturn("cb123");
@@ -857,7 +836,6 @@ class AudioHandlerTest {
                         System.currentTimeMillis());
         when(cacheService.get(FILE_ID)).thenReturn(entry);
 
-        // Stub do split
         when(utils.splitMessage(anyString(), anyInt())).thenReturn(List.of("Parte 1", "Parte 2"));
 
         audioHandler.handleTranscriptionCallback(callback, "trans_refinado|token456");
@@ -868,17 +846,9 @@ class AudioHandlerTest {
 
     @Test
     void deveEnviarMensagemSilasCastParaDuracaoLonga() {
-        // O AudioHandler agora só envia botões ao receber o AudioProcessedEvent
-        // A duração vem no evento (ou fica 0 por padrão)
         AudioProcessedEvent processed =
                 new AudioProcessedEvent(
-                        FILE_ID,
-                        GROUP_CHAT_ID,
-                        USER_ID,
-                        "Testador Silva",
-                        true, // sucesso
-                        null,
-                        400);
+                        FILE_ID, GROUP_CHAT_ID, USER_ID, "Testador Silva", true, null, 400);
 
         audioHandler.onAudioProcessed(processed);
 
@@ -887,14 +857,10 @@ class AudioHandlerTest {
 
         String mensagem = captor.getValue();
         assertThat(mensagem).contains("Testador Silva");
-        // ⚠️ NÃO contém "SilasCast" porque a duração não vem no evento.
-        // Se você quiser manter a dica "SilasCast" para áudios longos,
-        // precisa adicionar o campo `duration` no AudioProcessedEvent.
     }
 
     @Test
     void transcreverAudio_semResultado_deveLancarIllegalStateException() {
-        // Configura callback com cache miss
         CallbackQuery callback = mock(CallbackQuery.class);
         when(callback.from()).thenReturn(user);
         when(callback.id()).thenReturn("cb123");
@@ -922,7 +888,6 @@ class AudioHandlerTest {
         File mockFile = new File("audio.oga");
         when(fileService.baixarArquivo(FILE_ID)).thenReturn(mockFile);
 
-        // O pipeline nunca chama o callback → resultado[0] permanece null
         doAnswer(inv -> null)
                 .when(audioService)
                 .processarFluxoAudio(any(File.class), anyLong(), anyLong(), anyString(), any());
@@ -931,17 +896,11 @@ class AudioHandlerTest {
         await().atMost(2, TimeUnit.SECONDS)
                 .untilAsserted(
                         () -> {
-                            // Deve enviar mensagem de erro para o usuário
                             verify(telegramFacade)
                                     .enviarMensagem(eq(USER_ID), contains("Erro no processamento"));
-                            // E remover o token
                             assertThat(pendingMap).doesNotContainKey("token456");
                         });
     }
-
-    // ========================================================================
-    // TESTES PARA SAFEANSWER CALLBACK (BRANCHES FALTANTES)
-    // ========================================================================
 
     @Test
     void deveCapturarHttpClientErrorExceptionNoSafeAnswerCallback() {
@@ -955,14 +914,12 @@ class AudioHandlerTest {
         when(callbackMessage.chat()).thenReturn(chat);
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
 
-        // Força exceção ao responder o callback
         doThrow(
                         HttpClientErrorException.create(
                                 HttpStatus.BAD_REQUEST, "Bad Request", null, null, null))
                 .when(telegramFacade)
                 .answerCallbackQuery(eq("cb123"), anyString(), anyBoolean());
 
-        // Não deve lançar exceção
         assertThatCode(
                         () ->
                                 audioHandler.handleTranscriptionCallback(
@@ -999,10 +956,6 @@ class AudioHandlerTest {
                 .answerCallbackQuery("cb123", "Pedido expirado. Envie o audio novamente.", true);
     }
 
-    // ============================================================
-    // Teste 3 (novo): Falha no pipeline agora é tratada pelo WORKER,
-    // não pelo AudioHandler. O AudioHandler só publica e segue.
-    // ============================================================
     @Test
     void deveProcessarAudioGrupoPublicandoNoKafka() {
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
@@ -1028,10 +981,6 @@ class AudioHandlerTest {
         verify(audioService, never()).processarEArmazenar(any(), anyLong(), anyLong(), anyString());
     }
 
-    // ============================================================
-    // Teste 4 (antigo) - deve ser REMOVIDO ou reescrito
-    // O AudioHandler não processa mais o pipeline. Só publica.
-    // ============================================================
     @Test
     void naoDeveChamarProcessarEArmazenarNoHandler() {
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
@@ -1045,10 +994,6 @@ class AudioHandlerTest {
         verify(audioService, never()).processarEArmazenar(any(), anyLong(), anyLong(), anyString());
         verify(audioEventPublisher).publish(any());
     }
-
-    // =========================================================================
-    // 🧪 COBERTURA ADICIONAL — ONDA 3b
-    // =========================================================================
 
     @Test
     @DisplayName("onAudioProcessed com sucesso envia botões")
@@ -1090,7 +1035,6 @@ class AudioHandlerTest {
         when(callbackMessage.chat()).thenReturn(chat);
         when(chat.id()).thenReturn(GROUP_CHAT_ID);
 
-        // Registra um pedido pendente
         String token = "token-abc";
         AudioRequest request =
                 new AudioRequest(
@@ -1101,7 +1045,6 @@ class AudioHandlerTest {
                         ReflectionTestUtils.getField(audioHandler, "pendingRequests");
         pending.put(token, request);
 
-        // Cache HIT
         var entry =
                 new net.ddns.adambravo79.tmill.model.TranscriptionCacheEntry(
                         "bruto", "refinado", System.currentTimeMillis());
