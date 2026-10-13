@@ -119,6 +119,7 @@ public class AdminController {
     private final WorldCupTeamsService teamsService;
     private final TelegramExceptionHandler telegramExceptionHandler;
     private final AdminConfigService adminConfigService;
+    private final TmdbClient tmdbClient;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -516,7 +517,16 @@ public class AdminController {
         AutoResponseOverride response = responseOpt.get();
         String finalMsg = buildTestResponseMessage(userId, message, simulatedTime, response);
 
-        sendTestResponse(targetChatId, response, finalMsg);
+        // 🔧 KI-001 fix: propaga o resultado real do envio
+        boolean enviado = sendTestResponse(targetChatId, response, finalMsg);
+
+        if (!enviado) {
+            log.error(
+                    "❌ KI-001: envio de auto-response falhou para chatId={} (mídia e fallback)",
+                    targetChatId);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Falha ao enviar resposta para o chat " + targetChatId);
+        }
 
         return ResponseEntity.ok("✅ Resposta enviada para o chat " + targetChatId);
     }
@@ -569,14 +579,9 @@ public class AdminController {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
         }
 
-        long targetChatId;
-        if (chatId != null) {
-            targetChatId = chatId;
-        } else if (ownerId != 0) {
-            targetChatId = ownerId;
-        } else if (!digestChatIds.isEmpty()) {
-            targetChatId = digestChatIds.iterator().next();
-        } else {
+        long targetChatId = resolveAdminTargetChatId(chatId, false);
+
+        if (targetChatId == 0) {
             return ResponseEntity.badRequest()
                     .body(
                             "❌ Nenhum chatId informado e nenhum chat padrão configurado (ownerId ou"
@@ -602,6 +607,12 @@ public class AdminController {
         }
     }
 
+    /**
+     * Testa Azure TTS com mensagem fixa.
+     *
+     * <p><b>KI-001 fix:</b> agora retorna HTTP 500 se {@code enviarMidia} retornar {@code false}
+     * (mídia e fallback falharam), em vez de reportar falso sucesso.
+     */
     @GetMapping("/test-azure-tts")
     public ResponseEntity<String> testAzureTts() {
         if (publishChatId == 0) {
@@ -611,21 +622,52 @@ public class AdminController {
                 "Bem vindos ao espetacular... ah deixa de papo furado. Dadinho é o cara leo, meu"
                         + " nome agora é Zé Pequeno.";
         byte[] audio = azureTtsClient.synthesizeFullText(text);
-        if (audio.length > 0) {
-            try {
-                Path temp = tempDirService.createTempFile("test_azure_", ".mp3");
-                Files.write(temp, audio);
-                telegramFacade.enviarMidia(
-                        publishChatId, temp.toAbsolutePath().toString(), "Teste Azure TTS");
-                Files.deleteIfExists(temp);
-                return ResponseEntity.ok("Áudio enviado com sucesso para chat " + publishChatId);
-            } catch (Exception e) {
-                return ResponseEntity.status(500).body("Erro ao salvar áudio: " + e.getMessage());
+
+        if (audio == null || audio.length == 0) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Falha na síntese (áudio vazio).");
+        }
+
+        Path temp = null;
+        try {
+            temp = tempDirService.createTempFile("test_azure_", ".mp3");
+            Files.write(temp, audio);
+
+            boolean enviado =
+                    telegramFacade.enviarMidia(
+                            publishChatId, temp.toAbsolutePath().toString(), "Teste Azure TTS");
+
+            if (!enviado) {
+                log.error(
+                        "❌ KI-001: enviarMidia retornou false para chatId={} (testAzureTts)",
+                        publishChatId);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("❌ Falha ao enviar áudio para o chat " + publishChatId);
+            }
+
+            return ResponseEntity.ok("✅ Áudio enviado com sucesso para chat " + publishChatId);
+
+        } catch (Exception e) {
+            log.error("❌ Erro ao salvar/enviar áudio de teste", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Erro ao salvar áudio: " + e.getMessage());
+
+        } finally {
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ignored) {
+                    log.debug("Não foi possível deletar arquivo temporário: {}", temp);
+                }
             }
         }
-        return ResponseEntity.status(500).body("Falha na síntese (áudio vazio).");
     }
 
+    /**
+     * Sintetiza e envia áudio para um chat.
+     *
+     * <p><b>KI-001 fix:</b> agora retorna HTTP 500 se {@code enviarMidia} retornar {@code false}.
+     */
     @PostMapping("/fala-t1000-tts")
     public ResponseEntity<String> falaT1000Tts(
             @RequestParam(value = "message") String message,
@@ -635,14 +677,9 @@ public class AdminController {
             return ResponseEntity.badRequest().body("❌ Parâmetro 'message' é obrigatório.");
         }
 
-        long targetChatId;
-        if (chatId != null) {
-            targetChatId = chatId;
-        } else if (ownerId != 0) {
-            targetChatId = ownerId;
-        } else if (!digestChatIds.isEmpty()) {
-            targetChatId = digestChatIds.iterator().next();
-        } else {
+        long targetChatId = resolveAdminTargetChatId(chatId, false);
+
+        if (targetChatId == 0) {
             return ResponseEntity.badRequest()
                     .body("❌ Nenhum chatId informado e nenhum chat padrão configurado.");
         }
@@ -667,34 +704,40 @@ public class AdminController {
         }
 
         Path tempFile = null;
+        Path finalFile = null;
         try {
             String fileName =
                     String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
             tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
-            Path finalFile = tempFile.resolveSibling(fileName);
+            finalFile = tempFile.resolveSibling(fileName);
             Files.write(tempFile, audio);
             Files.move(tempFile, finalFile);
+            tempFile = null; // já foi movido; evita double-delete no finally
 
-            telegramFacade.enviarMidia(
-                    targetChatId,
-                    finalFile.toAbsolutePath().toString(),
-                    "🔊 Áudios para a futura Skynet");
+            boolean enviado =
+                    telegramFacade.enviarMidia(
+                            targetChatId,
+                            finalFile.toAbsolutePath().toString(),
+                            "🔊 Áudios para a futura Skynet");
 
-            Files.deleteIfExists(finalFile);
+            if (!enviado) {
+                log.error(
+                        "❌ KI-001: enviarMidia retornou false para chatId={} (falaT1000Tts)",
+                        targetChatId);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("❌ Falha ao enviar áudio para o chat " + targetChatId);
+            }
+
             return ResponseEntity.ok("✅ Áudio enviado com sucesso para o chat " + targetChatId);
 
         } catch (Exception e) {
             log.error("❌ Erro ao salvar ou enviar áudio", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ Erro ao salvar áudio: " + e.getMessage());
+
         } finally {
-            if (tempFile != null && Files.exists(tempFile)) {
-                try {
-                    Files.deleteIfExists(tempFile);
-                } catch (IOException ignored) {
-                    log.debug("Não foi possível deletar arquivo: {}", tempFile);
-                }
-            }
+            deleteQuietly(tempFile);
+            deleteQuietly(finalFile);
         }
     }
 
@@ -746,6 +789,43 @@ public class AdminController {
 
     // ========================= AUXILIARES =========================
 
+    /**
+     * Resolve o chat alvo dos endpoints admin.
+     *
+     * @param chatIdParam chatId informado explicitamente na request (pode ser {@code null})
+     * @param allowShowcaseFallback se {@code true}, cai no showcase quando não houver ownerId nem
+     *     digestChatId. Se {@code false}, retorna {@code 0} nesse caso (chamador deve responder
+     *     400)
+     * @return chatId alvo, ou {@code 0} se nada estiver disponível
+     */
+    private long resolveAdminTargetChatId(Long chatIdParam, boolean allowShowcaseFallback) {
+        if (chatIdParam != null) {
+            return chatIdParam;
+        }
+        if (ownerId != 0) {
+            return ownerId;
+        }
+        if (!digestChatIds.isEmpty()) {
+            return digestChatIds.iterator().next();
+        }
+        if (allowShowcaseFallback) {
+            return adminConfigService.getShowcaseChatId();
+        }
+        return 0;
+    }
+
+    /** Deleta arquivo temporário, ignorando falhas. */
+    private void deleteQuietly(Path file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException ignored) {
+            log.debug("Não foi possível deletar arquivo temporário: {}", file);
+        }
+    }
+
     private String buildTestResponseMessage(
             Long userId, String message, LocalTime simulatedTime, AutoResponseOverride response) {
         return "🧪 *Teste de Auto-Response*\n\n"
@@ -762,38 +842,73 @@ public class AdminController {
                 + response.response();
     }
 
-    private void sendTestResponse(
+    /**
+     * Envia mídia ou texto para o chat alvo.
+     *
+     * <p><b>KI-001 fix:</b> retorna {@code true} apenas quando a entrega foi confirmada.
+     *
+     * <ul>
+     *   <li>Mídia (URL) → delega para {@code enviarMidia}. Se ele retornar {@code true}, sucesso.
+     *   <li>Se {@code enviarMidia} retornar {@code false} OU lançar exceção, tenta fallback de
+     *       texto. Se o texto for entregue, ainda conta como sucesso (o usuário recebeu algo).
+     *   <li>Sem animação válida → envia texto direto; se o texto for entregue, sucesso.
+     * </ul>
+     *
+     * <p>Só retorna {@code false} quando <b>nenhum</b> canal conseguiu entregar.
+     */
+    private boolean sendTestResponse(
             long targetChatId, AutoResponseOverride response, String finalMsg) {
-        if (response.animation() != null
-                && !response.animation().isBlank()
-                && AdminUtils.isValidUrl(response.animation())) {
-            try {
-                telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
-            } catch (HttpClientErrorException e) {
-                log.warn(
-                        "Erro HTTP ao enviar mídia para chatId={}: {}",
-                        targetChatId,
-                        e.getStatusCode());
-                fallbackToText(targetChatId, finalMsg);
-            } catch (ResourceAccessException e) {
-                log.warn("Falha de conectividade ao enviar mídia para chatId={}", targetChatId);
-                fallbackToText(targetChatId, finalMsg);
+
+        boolean isAnimation =
+                response.animation() != null
+                        && !response.animation().isBlank()
+                        && AdminUtils.isValidUrl(response.animation());
+
+        if (!isAnimation) {
+            // Sem mídia: envio de texto puro.
+            return fallbackToText(targetChatId, finalMsg);
+        }
+
+        try {
+            boolean enviado =
+                    telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
+            if (enviado) {
+                return true;
             }
-        } else {
-            fallbackToText(targetChatId, finalMsg);
+            log.warn(
+                    "⚠️ KI-001: enviarMidia retornou false para chatId={} (testAutoResponse)."
+                            + " Tentando fallback de texto.",
+                    targetChatId);
+            return fallbackToText(targetChatId, finalMsg);
+        } catch (HttpClientErrorException e) {
+            log.warn(
+                    "Erro HTTP ao enviar mídia para chatId={}: {}",
+                    targetChatId,
+                    e.getStatusCode());
+            return fallbackToText(targetChatId, finalMsg);
+        } catch (ResourceAccessException e) {
+            log.warn("Falha de conectividade ao enviar mídia para chatId={}", targetChatId);
+            return fallbackToText(targetChatId, finalMsg);
         }
     }
 
-    private void fallbackToText(long chatId, String message) {
+    /**
+     * Envia texto puro como fallback. Retorna {@code true} se a entrega foi confirmada (sem
+     * exceção do Telegram), {@code false} caso contrário.
+     */
+    private boolean fallbackToText(long chatId, String message) {
         try {
             telegramFacade.enviarMensagemHtml(chatId, message);
+            return true;
         } catch (HttpClientErrorException e) {
             log.warn(
                     "Erro HTTP ao enviar mensagem de fallback para chatId={}: {}",
                     chatId,
                     e.getStatusCode());
+            return false;
         } catch (ResourceAccessException e) {
             log.warn("Falha de conectividade ao enviar fallback para chatId={}", chatId);
+            return false;
         }
     }
 
@@ -882,6 +997,83 @@ public class AdminController {
         return ResponseEntity.accepted().body(responseMsg);
     }
 
+    /**
+     * Reenvia o podcast de uma semana completa (sexta 12:00 → sexta 11:59) escolhendo a
+     * sexta-alvo.
+     *
+     * <p>Exemplos:
+     *
+     * <ul>
+     *   <li>{@code POST /admin/podcast/resend} → usa a última sexta-feira a partir de hoje
+     *   <li>{@code POST /admin/podcast/resend?friday=2026-10-09} → usa exatamente 09/10/2026
+     *   <li>{@code POST /admin/podcast/resend?friday=2026-10-09&chatId=-100123} → envia só para
+     *       esse chat
+     * </ul>
+     *
+     * <p>O período gerado é: {@code friday - 7 dias @ 12:00} até {@code friday @ 11:59}.
+     *
+     * <p>Caso de uso típico: a publicação de sexta falhou e você quer reenviar na segunda-feira
+     * seguinte.
+     */
+    @PostMapping("/podcast/resend")
+    public ResponseEntity<String> resendPodcast(
+            @RequestParam(value = "friday", required = false) String fridayParam,
+            @RequestParam(value = "chatId", required = false) Long chatId) {
+
+        LocalDate friday;
+        if (fridayParam == null || fridayParam.isBlank()) {
+            friday = AdminUtils.ultimaSexta(LocalDate.now(ZoneId.of(BRAZIL_ZONE)));
+        } else {
+            try {
+                friday = LocalDate.parse(fridayParam);
+            } catch (DateTimeParseException e) {
+                return ResponseEntity.badRequest()
+                        .body("❌ Data inválida. Use o formato yyyy-MM-dd (ex.: 2026-10-09).");
+            }
+        }
+
+        if (!friday.getDayOfWeek().equals(DayOfWeek.FRIDAY)) {
+            return ResponseEntity.badRequest()
+                    .body(
+                            "❌ A data informada ("
+                                    + friday
+                                    + ") não é uma sexta-feira. Escolha uma sexta.");
+        }
+
+        long targetChatId = resolveAdminTargetChatId(chatId, true);
+        if (targetChatId == 0) {
+            return ResponseEntity.badRequest()
+                    .body("❌ Nenhum chatId informado e nenhum chat padrão configurado.");
+        }
+
+        LocalDateTime[] periodo = AdminUtils.calcularPeriodoPodcast(friday);
+        LocalDateTime from = periodo[0];
+        LocalDateTime to = periodo[1];
+
+        log.info(
+                "🎙️ [admin] Reenvio de podcast solicitado: sexta={} período=[{} → {}] chat={}",
+                friday,
+                from,
+                to,
+                targetChatId);
+
+        triggerAsyncPodcastResend(targetChatId, from, to, friday);
+
+        String msg =
+                String.format(
+                        """
+                        ✅ Reenvio de podcast agendado.
+
+                        📅 Sexta de referência: %s
+                        🗓️ Período: %s 12:00 → %s 11:59
+                        💬 Chat: %d
+                        ⏳ O áudio será enviado em alguns minutos.
+                        """,
+                        friday, from.toLocalDate(), to.toLocalDate(), targetChatId);
+
+        return ResponseEntity.accepted().body(msg);
+    }
+
     private void triggerAsyncPodcast(long finalChatId, LocalDate finalStart, LocalDate finalEnd) {
         CompletableFuture.runAsync(
                 () -> {
@@ -901,6 +1093,31 @@ public class AdminController {
                         try {
                             telegramFacade.enviarMensagem(
                                     finalChatId, "❌ Erro ao gerar podcast: " + e.getMessage());
+                        } catch (Exception ignored) {
+                            log.debug("Não foi possível enviar mensagem de erro");
+                        }
+                    }
+                });
+    }
+
+    private void triggerAsyncPodcastResend(
+            long chatId, LocalDateTime from, LocalDateTime to, LocalDate friday) {
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        log.info("📥 [async] Gerando podcast de reenvio para chat {}", chatId);
+                        podcastPublisherService.generateAndSendPodcast(
+                                from.toLocalDate(), to.toLocalDate(), chatId);
+                        log.info("✅ [async] Podcast de reenvio finalizado para chat {}", chatId);
+                    } catch (Exception e) {
+                        log.error(
+                                "❌ [async] Erro ao reenviar podcast para chat {} (sexta={})",
+                                chatId,
+                                friday,
+                                e);
+                        try {
+                            telegramFacade.enviarMensagem(
+                                    chatId, "❌ Erro ao reenviar podcast. Verifique os logs.");
                         } catch (Exception ignored) {
                             log.debug("Não foi possível enviar mensagem de erro");
                         }
@@ -1060,8 +1277,6 @@ public class AdminController {
         log.info("⚙️ Prompts e personas recarregados via endpoint REST admin.");
         return ResponseEntity.ok("Prompts e personas recarregados com sucesso");
     }
-
-    private final TmdbClient tmdbClient;
 
     @PostMapping("/reload-tmdb-aliases")
     public ResponseEntity<String> reloadTmdbAliases() {

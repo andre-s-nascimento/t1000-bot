@@ -16,8 +16,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -30,6 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.ui.Model;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
@@ -274,7 +277,6 @@ class AdminWebControllerTest {
 
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
-        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         try (var mockedFiles = mockStatic(Files.class)) {
@@ -361,17 +363,19 @@ class AdminWebControllerTest {
     }
 
     // -------------------------------------------------------------------------
-    // 🆕 KI-001 (residual): AdminWebController ignora o boolean de enviarMidia
+    // KI-001 residual: enviarMidia=false E fallback falha → 500
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName("KI-001 residual: falaT1000Tts responde OK mesmo se enviarMidia retornar false")
-    void falaT1000Tts_midiaRetornaFalse_adminAindaRespondeOk() throws Exception {
+    @DisplayName("KI-001 residual: falaT1000Tts responde OK se fallback suceder")
+    void falaT1000Tts_midiaRetornaFalse_retorna500() throws Exception {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
-        // Simula falha real do envio (ex.: timeout após retry interno)
+
+        // enviarMidia retorna false; fallback de texto NÃO é chamado pelo controller
+        // (falaT1000Tts não tem fallback interno — só propaga o boolean)
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
 
         try (var mockedFiles = mockStatic(Files.class)) {
@@ -388,12 +392,9 @@ class AdminWebControllerTest {
                             post("/admin-web/fala-t1000-tts")
                                     .param("message", "Test")
                                     .param("chatId", "123"))
-                    .andExpect(status().isOk())
-                    .andExpect(content().string(containsString("Áudio enviado com sucesso")));
+                    .andExpect(status().is5xxServerError())
+                    .andExpect(content().string(containsString("Falha ao enviar áudio")));
 
-            // Documenta o comportamento atual: mesmo com false, o controller responde OK.
-            // Se um dia o AdminWebController passar a checar o retorno, este teste quebra
-            // e deve ser atualizado (retornando 500).
             verify(telegramFacade).enviarMidia(eq(123L), anyString(), anyString());
         }
     }
@@ -452,6 +453,32 @@ class AdminWebControllerTest {
             assertThat(view).isEqualTo("redirect:/admin-web");
             assertThat(attrs.getFlashAttributes().get("success").toString())
                     .contains("Áudio de teste enviado");
+        }
+    }
+
+    @Test
+    @SneakyThrows
+    @DisplayName("KI-001 residual: testAzureTts responde flash error se enviarMidia retornar false")
+    void testAzureTts_midiaRetornaFalse_flashError() {
+        byte[] audio = new byte[] {1, 2, 3};
+        Path tempPath = Paths.get("/tmp/test_azure.mp3");
+        when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(audio);
+        when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        try (var mockedFiles = mockStatic(Files.class)) {
+            mockedFiles
+                    .when(() -> Files.write(any(Path.class), any(byte[].class)))
+                    .thenReturn(tempPath);
+            mockedFiles.when(() -> Files.deleteIfExists(any(Path.class))).thenReturn(true);
+            mockedFiles.when(() -> Files.exists(any(Path.class))).thenReturn(false);
+
+            RedirectAttributes attrs = newRedirectAttributes();
+            String view = controller.testAzureTts(attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("error").toString())
+                    .contains("Falha ao enviar áudio");
         }
     }
 
@@ -622,9 +649,7 @@ class AdminWebControllerTest {
     @Test
     @DisplayName("reloadWorldCupShowcase: HttpClientErrorException é silenciada")
     void reloadWorldCupShowcase_erroHttp() {
-        doThrow(
-                        new org.springframework.web.client.HttpClientErrorException(
-                                org.springframework.http.HttpStatus.FORBIDDEN))
+        doThrow(new HttpClientErrorException(org.springframework.http.HttpStatus.FORBIDDEN))
                 .when(telegramFacade)
                 .enviarMensagemHtml(anyLong(), anyString());
 
@@ -773,6 +798,7 @@ class AdminWebControllerTest {
         AutoResponseOverride response = new AutoResponseOverride("Olá!", null);
         when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
                 .thenReturn(Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(
                         post("/admin-web/test-auto-response")
@@ -791,7 +817,6 @@ class AdminWebControllerTest {
                 new AutoResponseOverride("Olá!", "https://example.com/a.mp4");
         when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
                 .thenReturn(Optional.of(response));
-        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(
@@ -839,28 +864,26 @@ class AdminWebControllerTest {
     }
 
     // -------------------------------------------------------------------------
-    // 🆕 KI-001 (residual): AdminWebController ignora o boolean de enviarMidia
+    // KI-001 residual: enviarMidia=false E fallback falha → 500
     // -------------------------------------------------------------------------
 
     @Test
-    @DisplayName(
-            "KI-001 residual: testAutoResponse responde OK mesmo se enviarMidia retornar false")
-    void testAutoResponse_midiaRetornaFalse_adminAindaRespondeOk() throws Exception {
+    @DisplayName("KI-001 residual: testAutoResponse responde 500 se enviarMidia retornar false")
+    void testAutoResponse_midiaRetornaFalse_retorna500() throws Exception {
         AutoResponseOverride response =
                 new AutoResponseOverride("Olá!", "https://example.com/a.mp4");
         when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
                 .thenReturn(Optional.of(response));
-        // Simula falha real do envio
+        // enviarMidia=false → controller Web NÃO tem fallback explícito → 500 direto
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
 
         mockMvc.perform(
                         post("/admin-web/test-auto-response")
                                 .param("message", "oi")
                                 .param("chatId", "123"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Resposta automática enviada")));
+                .andExpect(status().is5xxServerError())
+                .andExpect(content().string(containsString("Falha ao enviar")));
 
-        // Documenta o comportamento atual: mesmo com false, o controller responde OK.
         verify(telegramFacade).enviarMidia(eq(123L), eq("https://example.com/a.mp4"), anyString());
     }
 
@@ -1082,6 +1105,134 @@ class AdminWebControllerTest {
         controller.testPodcastDays(7, 123L, attrs);
 
         assertThat(attrs.getFlashAttributes().get("success")).isNotNull();
+    }
+
+    // =========================================================================
+    // 🆕 PODCAST — REENVIO POR SEXTA-FEIRA
+    // =========================================================================
+
+    @Nested
+    @DisplayName("POST /admin-web/podcast/resend")
+    class ResendPodcast {
+
+        @Test
+        @DisplayName("sem friday: usa última sexta e flash success")
+        void semFriday_usaUltimaSexta() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast(null, 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("success").toString())
+                    .contains("Reenvio agendado")
+                    .contains("Chat: 123");
+        }
+
+        @Test
+        @DisplayName("sem friday e sem chatId: usa ownerId")
+        void semFriday_semChatId_usaOwner() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast(null, null, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("success").toString()).contains("999");
+        }
+
+        @Test
+        @DisplayName("friday inválida: flash error")
+        void fridayInvalida_flashError() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast("nao-e-data", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("error").toString())
+                    .contains("Data inválida");
+        }
+
+        @Test
+        @DisplayName("dia que não é sexta: flash error")
+        void diaNaoSexta_flashError() {
+            // 2026-10-13 é uma terça
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast("2026-10-13", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("error").toString())
+                    .contains("não é uma sexta-feira");
+        }
+
+        @Test
+        @DisplayName("sexta 09/10/2026: flash success com período correto")
+        void sextaValida_flashSuccess() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            String flash = attrs.getFlashAttributes().get("success").toString();
+            assertThat(flash).contains("2026-10-09").contains("2026-10-02").contains("Chat: 123");
+        }
+
+        @Test
+        @DisplayName("sexta válida: dispara async e chama podcastPublisherService")
+        void sextaValida_disparaAsync() throws Exception {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            org.awaitility.Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(podcastPublisherService, atLeastOnce())
+                                            .generateAndSendPodcast(any(), any(), eq(123L)));
+        }
+
+        @Test
+        @DisplayName("erro no async: envia mensagem de erro no chat")
+        void erroAsync_enviaMensagem() throws Exception {
+            doThrow(new RuntimeException("boom"))
+                    .when(podcastPublisherService)
+                    .generateAndSendPodcast(any(), any(), anyLong());
+
+            RedirectAttributes attrs = newRedirectAttributes();
+            controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            org.awaitility.Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(telegramFacade, atLeastOnce())
+                                            .enviarMensagem(eq(123L), contains("Erro")));
+        }
+
+        @Test
+        @DisplayName("erro no async + erro ao enviar mensagem: não propaga")
+        void erroAsync_erroEnvioMensagem_naoLanca() throws Exception {
+            doThrow(new RuntimeException("boom"))
+                    .when(podcastPublisherService)
+                    .generateAndSendPodcast(any(), any(), anyLong());
+            doThrow(new RuntimeException("falha"))
+                    .when(telegramFacade)
+                    .enviarMensagem(anyLong(), anyString());
+
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+
+            // 🔧 Aguarda o async terminar antes do Mockito validar os stubs
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(telegramFacade, atLeastOnce())
+                                            .enviarMensagem(eq(123L), anyString()));
+        }
     }
 
     // =========================================================================

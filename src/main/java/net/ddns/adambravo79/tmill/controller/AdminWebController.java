@@ -7,6 +7,7 @@ import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM_SS;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -285,6 +286,12 @@ public class AdminWebController {
         }
     }
 
+    /**
+     * Sintetiza e envia áudio para um chat.
+     *
+     * <p><b>KI-001 fix:</b> agora retorna HTTP 500 se {@code enviarMidia} retornar {@code false}
+     * (mídia e fallback falharam), em vez de reportar falso sucesso.
+     */
     @PostMapping("/fala-t1000-tts")
     @ResponseBody
     public ResponseEntity<String> falaT1000Tts(
@@ -321,28 +328,40 @@ public class AdminWebController {
         }
 
         Path tempFile = null;
+        Path finalFile = null;
         try {
             String fileName =
                     String.format("Cronicas-do-T1000-Audio-%d.mp3", System.currentTimeMillis());
             tempFile = tempDirService.createTempFile("tts_audio_", ".mp3");
-            Path finalFile = tempFile.resolveSibling(fileName);
+            finalFile = tempFile.resolveSibling(fileName);
             Files.write(tempFile, audio);
             Files.move(tempFile, finalFile);
+            tempFile = null; // já foi movido; evita double-delete no finally
 
-            telegramFacade.enviarMidia(
-                    targetChatId,
-                    finalFile.toAbsolutePath().toString(),
-                    "🔊 Áudios para a futura Skynet");
+            boolean enviado =
+                    telegramFacade.enviarMidia(
+                            targetChatId,
+                            finalFile.toAbsolutePath().toString(),
+                            "🔊 Áudios para a futura Skynet");
 
-            Files.deleteIfExists(finalFile);
+            if (!enviado) {
+                log.error(
+                        "❌ KI-001: enviarMidia retornou false para chatId={} (falaT1000Tts web)",
+                        targetChatId);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("❌ Falha ao enviar áudio para o chat " + targetChatId);
+            }
+
             return ResponseEntity.ok("✅ Áudio enviado com sucesso para o chat " + targetChatId);
 
         } catch (Exception e) {
             log.error("❌ Erro ao salvar ou enviar áudio", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("❌ " + MSG_ERRO_INTERNO);
+
         } finally {
             deleteSilently(tempFile);
+            deleteSilently(finalFile);
         }
     }
 
@@ -370,8 +389,23 @@ public class AdminWebController {
             Path tempFile = tempDirService.createTempFile("test_azure_", ".mp3");
             try {
                 Files.write(tempFile, audio);
-                telegramFacade.enviarMidia(
-                        publishChatId, tempFile.toAbsolutePath().toString(), "Teste Azure TTS");
+
+                boolean enviado =
+                        telegramFacade.enviarMidia(
+                                publishChatId,
+                                tempFile.toAbsolutePath().toString(),
+                                "Teste Azure TTS");
+
+                if (!enviado) {
+                    log.error(
+                            "❌ KI-001: enviarMidia retornou false para chatId={} (testAzureTts"
+                                    + " web)",
+                            publishChatId);
+                    redirectAttrs.addFlashAttribute(
+                            ERROR, "❌ Falha ao enviar áudio para o chat " + publishChatId);
+                    return REDIRECT_ADMIN_WEB;
+                }
+
                 redirectAttrs.addFlashAttribute(
                         SUCCESS, "Áudio de teste enviado para " + publishChatId);
             } finally {
@@ -598,6 +632,12 @@ public class AdminWebController {
     // AUTO-RESPONSE
     // =========================================================================
 
+    /**
+     * Testa uma resposta automática com horário simulado.
+     *
+     * <p><b>KI-001 fix:</b> agora retorna HTTP 500 se {@code enviarMidia} retornar {@code false} e
+     * o fallback de texto também falhar.
+     */
     @PostMapping("/test-auto-response")
     @ResponseBody
     public ResponseEntity<String> testAutoResponse(
@@ -637,13 +677,24 @@ public class AdminWebController {
                             + "✅ Resposta: "
                             + response.response();
 
+            boolean enviado;
             if (response.animation() != null
                     && !response.animation().isBlank()
                     && AdminUtils.isValidUrl(response.animation())) {
-                telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
+                enviado = telegramFacade.enviarMidia(targetChatId, response.animation(), finalMsg);
             } else {
                 telegramFacade.enviarMensagemHtml(targetChatId, finalMsg);
+                enviado = true;
             }
+
+            if (!enviado) {
+                log.error(
+                        "❌ KI-001: envio de auto-response falhou para chatId={} (mídia e fallback)",
+                        targetChatId);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("❌ Falha ao enviar resposta para o chat " + targetChatId);
+            }
+
             return ResponseEntity.ok("✅ Resposta automática enviada para o chat " + targetChatId);
 
         } catch (Exception e) {
@@ -828,6 +879,90 @@ public class AdminWebController {
         LocalDate endDate = LocalDate.now(ZoneId.of(BRAZIL_ZONE));
         LocalDate startDate = endDate.minusDays(days);
         return testPodcast(startDate.toString(), endDate.toString(), chatId, redirectAttrs);
+    }
+
+    /**
+     * Reenvia o podcast de uma semana completa (sexta 12:00 → sexta 11:59) escolhendo a
+     * sexta-alvo.
+     *
+     * <p>Exemplos:
+     *
+     * <ul>
+     *   <li>{@code POST /admin-web/podcast/resend} → usa a última sexta-feira a partir de hoje
+     *   <li>{@code POST /admin-web/podcast/resend?friday=2026-10-09} → usa exatamente 09/10/2026
+     *   <li>{@code POST /admin-web/podcast/resend?friday=2026-10-09&chatId=-100123} → envia só
+     *       para esse chat
+     * </ul>
+     *
+     * <p>O período gerado é: {@code friday - 7 dias @ 12:00} até {@code friday @ 11:59}.
+     */
+    @PostMapping("/podcast/resend")
+    public String resendPodcast(
+            @RequestParam(value = "friday", required = false) String fridayParam,
+            @RequestParam(value = "chatId", required = false) Long chatId,
+            RedirectAttributes redirectAttrs) {
+
+        LocalDate friday;
+        if (fridayParam == null || fridayParam.isBlank()) {
+            friday = AdminUtils.ultimaSexta(LocalDate.now(ZoneId.of(BRAZIL_ZONE)));
+        } else {
+            try {
+                friday = LocalDate.parse(fridayParam);
+            } catch (DateTimeParseException e) {
+                redirectAttrs.addFlashAttribute(
+                        ERROR, "Data inválida. Use o formato yyyy-MM-dd (ex.: 2026-10-09).");
+                return REDIRECT_ADMIN_WEB;
+            }
+        }
+
+        if (!friday.getDayOfWeek().equals(DayOfWeek.FRIDAY)) {
+            redirectAttrs.addFlashAttribute(
+                    ERROR, "A data informada (" + friday + ") não é uma sexta-feira.");
+            return REDIRECT_ADMIN_WEB;
+        }
+
+        long targetChatId = resolveTargetChatId(chatId);
+
+        LocalDateTime[] periodo = AdminUtils.calcularPeriodoPodcast(friday);
+        final LocalDate finalFriday = friday;
+        final long finalChatId = targetChatId;
+        final LocalDateTime finalFrom = periodo[0];
+        final LocalDateTime finalTo = periodo[1];
+
+        CompletableFuture.runAsync(
+                () -> {
+                    try {
+                        log.info(
+                                "📥 [web/async] Reenvio de podcast: sexta={} chat={}",
+                                finalFriday,
+                                finalChatId);
+                        podcastPublisherService.generateAndSendPodcast(
+                                finalFrom.toLocalDate(), finalTo.toLocalDate(), finalChatId);
+                        log.info(
+                                "✅ [web/async] Reenvio de podcast finalizado para chat {}",
+                                finalChatId);
+                    } catch (Exception e) {
+                        log.error(
+                                "❌ [web/async] Erro ao reenviar podcast para chat {} (sexta={})",
+                                finalChatId,
+                                finalFriday,
+                                e);
+                        try {
+                            telegramFacade.enviarMensagem(
+                                    finalChatId, "❌ Erro ao reenviar podcast. Verifique os logs.");
+                        } catch (Exception ignored) {
+                            log.debug("Não foi possível enviar mensagem de erro");
+                        }
+                    }
+                });
+
+        redirectAttrs.addFlashAttribute(
+                SUCCESS,
+                String.format(
+                        "✅ Reenvio agendado. Sexta: %s | Período: %s → %s | Chat: %d",
+                        friday, finalFrom.toLocalDate(), finalTo.toLocalDate(), targetChatId));
+
+        return REDIRECT_ADMIN_WEB;
     }
 
     // =========================================================================
@@ -1123,17 +1258,12 @@ public class AdminWebController {
      * Carrega os arquivos de configuração (easter-eggs, auto-responses, worldcup) usando o {@code
      * ResourceLoader} e respeitando as propriedades do {@code application.properties} (ex.: {@code
      * easter-egg.file}, {@code auto.response.file}, {@code worldcup.data.file}).
-     *
-     * <p>Isso garante que o painel leia os mesmos arquivos que os services usam (ex.: {@code
-     * EasterEggService}), tanto em dev ({@code file:./config/...}) quanto em prod ({@code
-     * file:/app/config/...}).
      */
     @GetMapping("/config-files")
     @ResponseBody
     public Map<String, Object> configFiles() {
         Map<String, Object> result = new LinkedHashMap<>();
 
-        // Definição: nome do arquivo → (chave da propriedade, default)
         record ConfigFile(String name, String propertyKey, String defaultLocation) {}
 
         List<ConfigFile> files =
@@ -1183,6 +1313,9 @@ public class AdminWebController {
     /**
      * Resolve o chat alvo da ação seguindo a ordem: parâmetro explícito → ownerId → primeiro
      * digestChatId → showcase. Retorna {@code 0} se nada estiver disponível.
+     *
+     * <p>Nota: este método cai no showcase como último recurso. Para os endpoints que exigem
+     * chatId explícito, o caller deve validar retorno {@code 0}.
      */
     private long resolveTargetChatId(Long chatIdParam) {
         if (chatIdParam != null) return chatIdParam;
