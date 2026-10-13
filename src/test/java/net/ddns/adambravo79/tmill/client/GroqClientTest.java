@@ -413,9 +413,9 @@ class GroqClientTest {
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
         verify(bodySpec).body(captor.capture());
 
+        // 🔧 FIX S5838: asserts individuais em vez de encadeamento
         Map<String, Object> payload = captor.getValue();
-        assertThat(payload.get("temperature")).isEqualTo(0.42);
-        assertThat(payload.get("max_tokens")).isEqualTo(7777);
+        assertThat(payload).containsEntry("temperature", 0.42).containsEntry("max_tokens", 7777);
     }
 
     @Test
@@ -436,9 +436,9 @@ class GroqClientTest {
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
         verify(bodySpec).body(captor.capture());
 
+        // 🔧 FIX S5838: asserts individuais em vez de encadeamento
         Map<String, Object> payload = captor.getValue();
-        assertThat(payload.get("temperature")).isEqualTo(0.77);
-        assertThat(payload.get("max_tokens")).isEqualTo(1234);
+        assertThat(payload).containsEntry("temperature", 0.77).containsEntry("max_tokens", 1234);
     }
 
     @Test

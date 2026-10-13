@@ -1,6 +1,7 @@
 /* (c) 2026 | 12/10/2026 */
 package net.ddns.adambravo79.tmill.service.config;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -11,14 +12,14 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Externaliza os parâmetros de retry do {@code @Retryable} (GroqClient, TmdbClient).
+ * Externaliza os parâmetros de retry dos clients (GroqClient, TmdbClient).
  *
- * <p>Antes os valores eram hardcoded nas annotations — agora vêm de
+ * <p>Antes os valores eram hardcoded nas annotations {@code @Retryable} — agora vêm de
  * {@code groq-config.json} e podem ser ajustados sem recompilar.
  *
- * <p><b>Nota:</b> as annotations {@code @Retryable} do Spring não permitem valores
- * dinâmicos. Portanto, este serviço expõe os parâmetros para uso em retry manual
- * (implementado no {@link net.ddns.adambravo79.tmill.util.RetryUtils}).
+ * <p><b>Nota:</b> as annotations {@code @Retryable} do Spring não permitem valores dinâmicos.
+ * Portanto, este serviço expõe os parâmetros para uso em retry manual (implementado no
+ * {@link net.ddns.adambravo79.tmill.util.RetryUtils}).
  */
 @Slf4j
 @Service
@@ -53,17 +54,17 @@ public class RetryConfigService {
                                     : null);
 
             if (loaded.isEmpty()) {
-                log.warn("⚠️ groq-config.json não encontrado — mantendo anteriores.");
+                log.warn("⚠️ groq-config.json não encontrado — mantendo retry specs anteriores.");
                 return;
             }
 
             Object retryNode = loaded.get().get("retry");
             if (!(retryNode instanceof Map<?, ?> rawMap)) {
-                log.warn("⚠️ Chave 'retry' ausente — mantendo anteriores.");
+                log.warn("⚠️ Chave 'retry' ausente — mantendo retry specs anteriores.");
                 return;
             }
 
-            java.util.Map<String, RetrySpec> novo = new java.util.LinkedHashMap<>();
+            Map<String, RetrySpec> novo = new LinkedHashMap<>();
             rawMap.forEach(
                     (k, v) -> {
                         if (k == null || !(v instanceof Map<?, ?> m)) return;
@@ -77,7 +78,6 @@ public class RetryConfigService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static RetrySpec parseSpec(Map<?, ?> m) {
         int maxRetries = getInt(m, "max-retries", 3);
         long delay = getLong(m, "delay-ms", 1000);
@@ -86,23 +86,14 @@ public class RetryConfigService {
         return new RetrySpec(maxRetries, delay, multiplier, maxDelay);
     }
 
-    private static Map<String, RetrySpec> defaultSpecs() {
-        return Map.of(
-                "transcription", new RetrySpec(2, 1000, 2, 5000),
-                "refinement", new RetrySpec(3, 2000, 3, 30000),
-                "chat-completion", new RetrySpec(4, 2000, 3, 60000),
-                "tmdb-search", new RetrySpec(2, 1000, 2, 5000),
-                "tmdb-details", new RetrySpec(2, 1000, 2, 5000),
-                "tmdb-credits", new RetrySpec(1, 500, 2, 5000));
-    }
-
     private static int getInt(Map<?, ?> m, String k, int fb) {
         Object v = m.get(k);
         if (v instanceof Number n) return n.intValue();
         if (v != null) {
             try {
                 return Integer.parseInt(v.toString());
-            } catch (Exception ignored) {
+            } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fb;
@@ -114,7 +105,8 @@ public class RetryConfigService {
         if (v != null) {
             try {
                 return Long.parseLong(v.toString());
-            } catch (Exception ignored) {
+            } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fb;

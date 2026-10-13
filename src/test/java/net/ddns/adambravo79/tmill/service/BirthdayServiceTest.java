@@ -22,6 +22,9 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -88,26 +91,13 @@ class BirthdayServiceTest {
         verify(repository).upsert(1L, "Fulano", 5, 10);
     }
 
-    @Test
-    @DisplayName("registrar: texto vazio retorna formato inválido")
-    void registrar_textoVazio_retornaFormatoInvalido() {
-        String resp = service.registrar(1L, "Fulano", "");
-        assertThat(resp).isEqualTo(BotMessages.ANIVERSARIO_FORMATO_INVALIDO);
-        verifyNoInteractions(repository, metricsService);
-    }
+    @ParameterizedTest(name = "registrar: entrada inválida [{index}] → formato inválido")
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "qualquer coisa", "abc123"})
+    @DisplayName("registrar: entradas sem data válida retornam formato inválido")
+    void registrar_entradaInvalida_retornaFormatoInvalido(String dataTexto) {
+        String resp = service.registrar(1L, "Fulano", dataTexto);
 
-    @Test
-    @DisplayName("registrar: texto nulo retorna formato inválido")
-    void registrar_textoNulo_retornaFormatoInvalido() {
-        String resp = service.registrar(1L, "Fulano", null);
-        assertThat(resp).isEqualTo(BotMessages.ANIVERSARIO_FORMATO_INVALIDO);
-        verifyNoInteractions(repository, metricsService);
-    }
-
-    @Test
-    @DisplayName("registrar: texto sem data retorna formato inválido")
-    void registrar_textoSemData_retornaFormatoInvalido() {
-        String resp = service.registrar(1L, "Fulano", "qualquer coisa");
         assertThat(resp).isEqualTo(BotMessages.ANIVERSARIO_FORMATO_INVALIDO);
         verifyNoInteractions(repository, metricsService);
     }

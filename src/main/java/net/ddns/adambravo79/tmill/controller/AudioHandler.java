@@ -106,42 +106,64 @@ public class AudioHandler {
         Message message = update.message();
         long chatId = message.chat().id();
 
-        String fileId;
-        long fileSize;
-        int duration = 0;
-
-        if (message.audio() != null) {
-            fileId = message.audio().fileId();
-            fileSize = message.audio().fileSize();
-            duration = message.audio().duration();
-        } else if (message.voice() != null) {
-            fileId = message.voice().fileId();
-            fileSize = message.voice().fileSize();
-            duration = message.voice().duration();
-        } else {
+        AudioMetadata meta = extractAudioMetadata(message);
+        if (meta == null) {
             log.warn("handleAudioUpdate chamado sem áudio ou voz no update.");
             return;
         }
 
-        // 🔧 FIX (Onda 3.4): lê o limite do AudioConfigService em vez de @Value
-        int maxSizeMb = audioConfig.getTelegram().audioMaxSizeMb();
-        if (fileSize > maxSizeMb * 1024L * 1024L) {
-            log.warn(
-                    "⚠️ Áudio muito grande chatId={} size={} bytes (limite {} MB)",
-                    chatId,
-                    fileSize,
-                    maxSizeMb);
-            safeSendMessage(chatId, String.format(AUDIO_TOO_LARGE, maxSizeMb));
+        if (isAudioTooLarge(chatId, meta.fileSize())) {
             return;
         }
 
-        boolean isGroup = isGroupChat(message);
-
-        if (isGroup) {
-            processGroupAudio(message, chatId, fileId, duration);
+        if (isGroupChat(message)) {
+            processGroupAudio(message, chatId, meta.fileId(), meta.duration());
         } else {
-            processPrivateAudio(message, chatId, fileId, duration);
+            processPrivateAudio(message, chatId, meta.fileId(), meta.duration());
         }
+    }
+
+    /** Metadados extraídos de um áudio ou voz do Telegram. */
+    private record AudioMetadata(String fileId, long fileSize, int duration) {}
+
+    /**
+     * Extrai fileId, fileSize e duration de um {@link Message}, seja áudio ou voz.
+     *
+     * @return os metadados, ou {@code null} se a mensagem não contiver áudio/voz.
+     */
+    private AudioMetadata extractAudioMetadata(Message message) {
+        if (message.audio() != null) {
+            return new AudioMetadata(
+                    message.audio().fileId(),
+                    message.audio().fileSize(),
+                    message.audio().duration());
+        }
+        if (message.voice() != null) {
+            return new AudioMetadata(
+                    message.voice().fileId(),
+                    message.voice().fileSize(),
+                    message.voice().duration());
+        }
+        return null;
+    }
+
+    /**
+     * Verifica se o áudio excede o limite configurado e, em caso afirmativo, notifica o usuário.
+     *
+     * @return {@code true} se o áudio for grande demais (e o usuário já foi notificado).
+     */
+    private boolean isAudioTooLarge(long chatId, long fileSize) {
+        int maxSizeMb = audioConfig.getTelegram().audioMaxSizeMb();
+        if (fileSize <= maxSizeMb * 1024L * 1024L) {
+            return false;
+        }
+        log.warn(
+                "⚠️ Áudio muito grande chatId={} size={} bytes (limite {} MB)",
+                chatId,
+                fileSize,
+                maxSizeMb);
+        safeSendMessage(chatId, String.format(AUDIO_TOO_LARGE, maxSizeMb));
+        return true;
     }
 
     // ========================= PRIVADO =========================
@@ -260,47 +282,35 @@ public class AudioHandler {
     private void entregarTranscricaoCache(
             long userId, String tipo, TranscriptionCacheEntry cached, long groupId) {
 
-        String texto = tipo.equals(TRANS_BRUTO) ? cached.textoBruto() : cached.textoRefinado();
-        String prefixo =
-                tipo.equals(TRANS_BRUTO) ? "🎙️ Transcrição Bruta:\n" : "✨ Transcrição Refinada:\n";
+        String texto = selecionarTexto(tipo, cached);
 
-        // 🔧 FIX (PRD): se o texto estiver vazio, tenta o outro tipo como fallback
         if (texto == null || texto.isBlank()) {
-            log.warn(
-                    "⚠️ Transcrição {} VAZIA no cache para userId={}. Tentando fallback.",
-                    tipo,
-                    userId);
-
-            if (tipo.equals(TRANS_REFINADO)) {
-                String brutoFallback = cached.textoBruto();
-                if (brutoFallback != null && !brutoFallback.isBlank()) {
-                    log.info("🔄 Fallback: usando transcrição BRUTA no lugar da refinada.");
-                    String aviso =
-                            """
-                            ⚠️ _Não consegui refinar esta transcrição. Enviando a versão bruta:_
-
-                            """;
-                    boolean entregue =
-                            safeSendTranscription(userId, aviso + "🎙️ " + brutoFallback, groupId);
-                    // 🔧 FIX (KI-001): métrica real
-                    if (entregue) {
-                        metricsService.success(METRIC_TRANSCRICAO_ENTREGUE);
-                    } else {
-                        metricsService.error(METRIC_TRANSCRICAO_FALHA);
-                    }
-                    return;
-                }
-            }
-
-            log.error("❌ Ambos bruto e refinado estão vazios para userId={}", userId);
-            safeSendMessage(
-                    userId, "❌ Não consegui obter o texto da transcrição. Tente novamente.");
-            metricsService.error(METRIC_TRANSCRICAO_FALHA);
+            entregarFallbackOuErro(userId, tipo, cached, groupId);
             return;
         }
 
+        entregarTextoNormal(userId, tipo, texto, groupId);
+    }
+
+    /**
+     * Seleciona o texto do cache de acordo com o tipo solicitado.
+     *
+     * @return o texto correspondente ao {@code tipo}, possivelmente {@code null} ou em branco.
+     */
+    private String selecionarTexto(String tipo, TranscriptionCacheEntry cached) {
+        return tipo.equals(TRANS_BRUTO) ? cached.textoBruto() : cached.textoRefinado();
+    }
+
+    /**
+     * Entrega a transcrição quando o texto está presente e não vazio, emitindo a métrica
+     * correspondente ao resultado real do envio.
+     */
+    private void entregarTextoNormal(long userId, String tipo, String texto, long groupId) {
+
+        String prefixo =
+                tipo.equals(TRANS_BRUTO) ? "🎙️ Transcrição Bruta:\n" : "✨ Transcrição Refinada:\n";
+
         boolean entregue = safeSendTranscription(userId, prefixo + texto, groupId);
-        // 🔧 FIX (KI-001): métrica real
         if (entregue) {
             metricsService.success(METRIC_TRANSCRICAO_ENTREGUE);
             log.info(
@@ -311,6 +321,56 @@ public class AudioHandler {
         } else {
             metricsService.error(METRIC_TRANSCRICAO_FALHA);
         }
+    }
+
+    /**
+     * Trata o caso em que o texto solicitado está vazio: tenta o fallback bruto (quando o
+     * solicitado era o refinado) ou reporta erro ao usuário.
+     */
+    private void entregarFallbackOuErro(
+            long userId, String tipo, TranscriptionCacheEntry cached, long groupId) {
+
+        log.warn(
+                "⚠️ Transcrição {} VAZIA no cache para userId={}. Tentando fallback.",
+                tipo,
+                userId);
+
+        if (tipo.equals(TRANS_REFINADO) && tentarFallbackBruto(userId, cached, groupId)) {
+            return;
+        }
+
+        log.error("❌ Ambos bruto e refinado estão vazios para userId={}", userId);
+        safeSendMessage(userId, "❌ Não consegui obter o texto da transcrição. Tente novamente.");
+        metricsService.error(METRIC_TRANSCRICAO_FALHA);
+    }
+
+    /**
+     * Tenta entregar a versão bruta como fallback quando a refinada está vazia.
+     *
+     * @return {@code true} se o fallback foi enviado (com sucesso ou falha), {@code false} se não
+     *     havia texto bruto disponível.
+     */
+    private boolean tentarFallbackBruto(long userId, TranscriptionCacheEntry cached, long groupId) {
+
+        String brutoFallback = cached.textoBruto();
+        if (brutoFallback == null || brutoFallback.isBlank()) {
+            return false;
+        }
+
+        log.info("🔄 Fallback: usando transcrição BRUTA no lugar da refinada.");
+        String aviso =
+                """
+                ⚠️ _Não consegui refinar esta transcrição. Enviando a versão bruta:_
+
+                """;
+        boolean entregue = safeSendTranscription(userId, aviso + "🎙️ " + brutoFallback, groupId);
+
+        if (entregue) {
+            metricsService.success(METRIC_TRANSCRICAO_ENTREGUE);
+        } else {
+            metricsService.error(METRIC_TRANSCRICAO_FALHA);
+        }
+        return true;
     }
 
     private void processarAudioCallback(

@@ -82,33 +82,22 @@ public class BirthdayService {
     boolean isDataValida(int day, int month) {
         if (month < 1 || month > 12) return false;
         if (day < 1) return false;
-        // Usa 2024 (bissexto) para permitir 29/02
+        // Usa 2024 (bissexto) para permitir 29/02.
+        // O valor retornado por LocalDate.of é usado em log.trace para satisfazer java:S2201.
         try {
-            LocalDate.of(2024, month, day);
+            LocalDate dataReferencia = LocalDate.of(2024, month, day);
+            log.trace("Data de referência válida: {}", dataReferencia);
             return true;
         } catch (DateTimeException e) {
             return false;
         }
     }
 
-    /**
-     * Dispara mensagens de parabéns para todos os aniversariantes de hoje. Executado pelo scheduler
-     * às 00:01 (BRT).
-     */
     public void enviarParabensDoDia() {
         LocalDate hoje = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         enviarParabensPara(hoje.getDayOfMonth(), hoje.getMonthValue());
     }
 
-    /**
-     * Variante testável: envia parabéns para aniversariantes de um dia/mês específico. Ignora
-     * usuários que já receberam parabéns no ano corrente.
-     *
-     * <p>Envia primeiro no privado; se falhar com Forbidden (403), apenas loga e segue. Em seguida,
-     * envia em todos os grupos autorizados (menção por ID).
-     *
-     * @return número de usuários que receberam pelo menos uma mensagem (privado ou grupo)
-     */
     public int enviarParabensPara(int day, int month) {
         List<Birthday> aniversariantes = repository.findByDayAndMonth(day, month);
 
@@ -142,32 +131,16 @@ public class BirthdayService {
         return enviados;
     }
 
-    /**
-     * Envia a mensagem de parabéns no privado e nos grupos. Retorna true se pelo menos um envio
-     * ocorreu (privado OU algum grupo).
-     */
     private boolean enviarParabensIndividuais(Birthday b) {
         String mensagem = buildMensagemParabens(buildMencaoHtml(b));
 
-        // 1. Privado primeiro
         boolean enviadoPrivado = enviarPrivado(b, mensagem);
 
-        // 2. Grupos depois
         boolean enviadoGrupo = enviarGrupos(b, mensagem);
 
         return enviadoPrivado || enviadoGrupo;
     }
 
-    /**
-     * Envia a mensagem no privado do usuário.
-     *
-     * <p><b>KI-001 (fix):</b> consome o {@code boolean} retornado por {@link
-     * TelegramFacade#enviarMidia}. Antes, o método retornava {@code true} sempre que não houvesse
-     * exceção, mesmo que o envio tenha falhado silenciosamente (ex.: timeout com fallback interno
-     * também falho).
-     *
-     * @return {@code true} se o envio foi confirmado, {@code false} caso contrário
-     */
     private boolean enviarPrivado(Birthday b, String mensagem) {
         try {
             boolean enviado = telegramFacade.enviarMidia(b.userId(), gifUrl, mensagem);
@@ -195,10 +168,6 @@ public class BirthdayService {
         }
     }
 
-    /**
-     * Envia a mensagem de parabéns em todos os grupos autorizados. Continua mesmo se algum grupo
-     * falhar.
-     */
     private boolean enviarGrupos(Birthday b, String mensagem) {
         Set<Long> grupos = groupAuthorizationService.getAllowedGroups();
         if (grupos.isEmpty()) {
@@ -238,10 +207,6 @@ public class BirthdayService {
         }
     }
 
-    /**
-     * Constrói a menção HTML por ID do Telegram — funciona mesmo se o usuário não tiver username
-     * público. O Telegram renderiza como o nome em azul, clicável.
-     */
     String buildMencaoHtml(Birthday b) {
         String nome = b.userName() == null || b.userName().isBlank() ? "amigo(a)" : b.userName();
         String nomeEscapado = escapeHtml(nome);
@@ -257,10 +222,6 @@ public class BirthdayService {
                 .replace("'", "&#39;");
     }
 
-    /**
-     * Monta a mensagem de parabéns com temática cinematográfica (Marilyn Monroe / Happy Birthday Mr.
-     * President).
-     */
     String buildMensagemParabens(String nomeMencionado) {
         return """
         🎬 <b>HAPPY BIRTHDAY, %s!</b> 🎂
@@ -279,7 +240,6 @@ public class BirthdayService {
                 .formatted(nomeMencionado, nomeMencionado);
     }
 
-    /** Exposto para uso em admin/diagnóstico. */
     public String getGifUrl() {
         return gifUrl;
     }

@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Configurações do Groq: modelos, temperature e maxTokens por tipo de chamada.
+ *
+ * <p>Carrega de {@code groq-config.json} e mantém o valor anterior em caso de falha.
  */
 @Slf4j
 @Service
@@ -50,7 +52,7 @@ public class GroqConfigService {
                                     : null);
 
             if (loaded.isEmpty()) {
-                log.warn("⚠️ groq-config.json não encontrado — usando defaults.");
+                log.warn("⚠️ groq-config.json não encontrado — mantendo valores atuais.");
                 return;
             }
 
@@ -64,7 +66,6 @@ public class GroqConfigService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private void applyDigest(Object node) {
         if (!(node instanceof Map<?, ?> m)) return;
         double temp = getDouble(m, "temperature", DEFAULT_DIGEST.temperature());
@@ -72,7 +73,6 @@ public class GroqConfigService {
         digestRef.set(new DigestSpec(temp, maxTokens));
     }
 
-    @SuppressWarnings("unchecked")
     private void applyRefinement(Object node) {
         if (!(node instanceof Map<?, ?> m)) return;
         double temp = getDouble(m, "temperature", DEFAULT_REFINEMENT.temperature());
@@ -86,7 +86,8 @@ public class GroqConfigService {
         if (v != null) {
             try {
                 return Integer.parseInt(v.toString());
-            } catch (Exception ignored) {
+            } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fb;
@@ -98,7 +99,8 @@ public class GroqConfigService {
         if (v != null) {
             try {
                 return Double.parseDouble(v.toString());
-            } catch (Exception ignored) {
+            } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fb;

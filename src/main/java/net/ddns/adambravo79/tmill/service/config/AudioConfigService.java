@@ -25,6 +25,7 @@ public class AudioConfigService {
             new TtsConfig(5L * 1024 * 1024, "64k", 1, 22050, 120);
 
     private static final TelegramAudioConfig DEFAULT_TELEGRAM = new TelegramAudioConfig(20, 5);
+
     private static final PodcastAudioConfig DEFAULT_PODCAST =
             new PodcastAudioConfig(5L * 1024 * 1024, 180);
 
@@ -60,7 +61,7 @@ public class AudioConfigService {
                                     : null);
 
             if (loaded.isEmpty()) {
-                log.warn("⚠️ audio-config.json não encontrado — usando defaults.");
+                log.warn("⚠️ audio-config.json não encontrado — mantendo valores atuais.");
                 return;
             }
 
@@ -78,7 +79,6 @@ public class AudioConfigService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private void applyTts(Object node) {
         if (!(node instanceof Map<?, ?> m)) return;
         long maxBytes = getLong(m, "max-audio-size-bytes", DEFAULT_TTS.maxAudioSizeBytes());
@@ -89,7 +89,6 @@ public class AudioConfigService {
         ttsRef.set(new TtsConfig(maxBytes, bitrate, channels, sampleRate, timeout));
     }
 
-    @SuppressWarnings("unchecked")
     private void applyTelegram(Object node) {
         if (!(node instanceof Map<?, ?> m)) return;
         int maxMb = getInt(m, "audio-max-size-mb", DEFAULT_TELEGRAM.audioMaxSizeMb());
@@ -98,7 +97,6 @@ public class AudioConfigService {
         telegramRef.set(new TelegramAudioConfig(maxMb, docOver));
     }
 
-    @SuppressWarnings("unchecked")
     private void applyPodcast(Object node) {
         if (!(node instanceof Map<?, ?> m)) return;
         long maxBytes = getLong(m, "max-audio-size-bytes", DEFAULT_PODCAST.maxAudioSizeBytes());
@@ -114,6 +112,7 @@ public class AudioConfigService {
             try {
                 return Long.parseLong(v.toString());
             } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fallback;
@@ -126,6 +125,7 @@ public class AudioConfigService {
             try {
                 return Integer.parseInt(v.toString());
             } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fallback;

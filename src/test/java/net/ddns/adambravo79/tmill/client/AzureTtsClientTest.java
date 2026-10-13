@@ -136,8 +136,7 @@ class AzureTtsClientTest {
 
         byte[] result = azureTtsClient.synthesizeFullText("Texto curto.");
 
-        assertThat(result).isEqualTo(smallAudio);
-        assertThat(result.length).isEqualTo(1024);
+        assertThat(result).isEqualTo(smallAudio).hasSize(1024);
     }
 
     @Test
@@ -153,8 +152,7 @@ class AzureTtsClientTest {
 
         // Independentemente de ter ffmpeg ou não, o método deve retornar algo não-nulo
         // e o tamanho deve ser <= ao original (nunca maior).
-        assertThat(result).isNotNull();
-        assertThat(result.length).isLessThanOrEqualTo(bigAudio.length);
+        assertThat(result).isNotNull().hasSizeLessThanOrEqualTo(bigAudio.length);
     }
 
     @Test
@@ -179,7 +177,6 @@ class AzureTtsClientTest {
 
         // Sem ffmpeg, retorna o original; com ffmpeg, retorna comprimido.
         // Em ambos os casos: não lança exceção e retorna algo.
-        assertThat(result).isNotNull();
-        assertThat(result.length).isLessThanOrEqualTo(smallAudio.length);
+        assertThat(result).isNotNull().hasSizeLessThanOrEqualTo(smallAudio.length);
     }
 }

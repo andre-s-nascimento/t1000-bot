@@ -1025,15 +1025,15 @@ class AudioHandlerTest {
     void callback_cacheMiss_deliversTranscription() {
         CallbackQuery callback = mock(CallbackQuery.class);
         Message callbackMessage = mock(Message.class);
-        Chat chat = mock(Chat.class);
+        Chat callbackChat = mock(Chat.class); // 🔧 FIX S1117: rename chat → callbackChat
         User callbackUser = mock(User.class);
 
         when(callback.from()).thenReturn(callbackUser);
         when(callbackUser.id()).thenReturn(USER_ID);
         when(callback.id()).thenReturn("cb-123");
         when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
-        when(callbackMessage.chat()).thenReturn(chat);
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(callbackMessage.chat()).thenReturn(callbackChat);
+        when(callbackChat.id()).thenReturn(GROUP_CHAT_ID);
 
         String token = "token-abc";
         AudioRequest request =
@@ -1061,15 +1061,15 @@ class AudioHandlerTest {
     void callback_invalidToken() {
         CallbackQuery callback = mock(CallbackQuery.class);
         Message callbackMessage = mock(Message.class);
-        Chat chat = mock(Chat.class);
+        Chat callbackChat = mock(Chat.class); // 🔧 FIX S1117: rename chat → callbackChat
         User callbackUser = mock(User.class);
 
         when(callback.from()).thenReturn(callbackUser);
         when(callbackUser.id()).thenReturn(USER_ID);
         when(callback.id()).thenReturn("cb-123");
         when(callback.maybeInaccessibleMessage()).thenReturn(callbackMessage);
-        when(callbackMessage.chat()).thenReturn(chat);
-        when(chat.id()).thenReturn(GROUP_CHAT_ID);
+        when(callbackMessage.chat()).thenReturn(callbackChat);
+        when(callbackChat.id()).thenReturn(GROUP_CHAT_ID);
 
         ReflectionTestUtils.setField(audioHandler, "pendingRequests", new ConcurrentHashMap<>());
 

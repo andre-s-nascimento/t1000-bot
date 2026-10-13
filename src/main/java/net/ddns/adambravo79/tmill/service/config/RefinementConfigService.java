@@ -10,6 +10,12 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Configurações de pipeline do refinamento (regras de negócio, não parâmetros de LLM).
+ *
+ * <p>Carrega de {@code refinement-config.json} e mantém o valor anterior em caso de falha.
+ * Parâmetros de LLM (temperature, maxTokens) ficam no {@link GroqConfigService}.
+ */
 @Slf4j
 @Service
 public class RefinementConfigService {
@@ -44,7 +50,7 @@ public class RefinementConfigService {
                                     : null);
 
             if (loaded.isEmpty()) {
-                log.warn("⚠️ refinement-config.json não encontrado — usando defaults.");
+                log.warn("⚠️ refinement-config.json não encontrado — mantendo valores atuais.");
                 return;
             }
 
@@ -84,7 +90,8 @@ public class RefinementConfigService {
         if (v != null) {
             try {
                 return Integer.parseInt(v.toString());
-            } catch (Exception ignored) {
+            } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fb;
@@ -96,7 +103,8 @@ public class RefinementConfigService {
         if (v != null) {
             try {
                 return Double.parseDouble(v.toString());
-            } catch (Exception ignored) {
+            } catch (NumberFormatException ignored) {
+                // valor malformado no JSON: usa o fallback
             }
         }
         return fb;
