@@ -1501,21 +1501,21 @@ class AdminControllerTest {
         @Test
         @DisplayName("sexta 09/10/2026: retorna 02/10T12:00 → 09/10T11:59:59")
         void sexta_09_10_2026() {
-            LocalDate friday = LocalDate.of(2026, 10, 9);
+            LocalDate friday = LocalDate.of(2026, Month.OCTOBER, 9);
             LocalDateTime[] p = AdminUtils.calcularPeriodoPodcast(friday);
 
-            assertThat(p[0]).isEqualTo(LocalDateTime.of(2026, 10, 2, 12, 0, 0));
-            assertThat(p[1]).isEqualTo(LocalDateTime.of(2026, 10, 9, 11, 59, 59));
+            assertThat(p[0]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 2, 12, 0, 0));
+            assertThat(p[1]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 9, 11, 59, 59));
         }
 
         @Test
         @DisplayName("sexta 16/10/2026: retorna 09/10T12:00 → 16/10T11:59:59")
         void sexta_16_10_2026() {
-            LocalDate friday = LocalDate.of(2026, 10, 16);
+            LocalDate friday = LocalDate.of(2026, Month.OCTOBER, 16);
             LocalDateTime[] p = AdminUtils.calcularPeriodoPodcast(friday);
 
-            assertThat(p[0]).isEqualTo(LocalDateTime.of(2026, 10, 9, 12, 0, 0));
-            assertThat(p[1]).isEqualTo(LocalDateTime.of(2026, 10, 16, 11, 59, 59));
+            assertThat(p[0]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 9, 12, 0, 0));
+            assertThat(p[1]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 16, 11, 59, 59));
         }
 
         @Test
@@ -1529,7 +1529,7 @@ class AdminControllerTest {
         @Test
         @DisplayName("terça 13/10: lança IllegalArgumentException")
         void terca_lanca() {
-            LocalDate terca = LocalDate.of(2026, 10, 13);
+            LocalDate terca = LocalDate.of(2026, Month.OCTOBER, 13);
 
             assertThatThrownBy(() -> AdminUtils.calcularPeriodoPodcast(terca))
                     .isInstanceOf(IllegalArgumentException.class)
@@ -1539,7 +1539,7 @@ class AdminControllerTest {
         @Test
         @DisplayName("domingo: lança IllegalArgumentException")
         void domingo_lanca() {
-            LocalDate domingo = LocalDate.of(2026, 10, 11);
+            LocalDate domingo = LocalDate.of(2026, Month.OCTOBER, 11);
 
             assertThatThrownBy(() -> AdminUtils.calcularPeriodoPodcast(domingo))
                     .isInstanceOf(IllegalArgumentException.class);
@@ -1553,43 +1553,43 @@ class AdminControllerTest {
         @Test
         @DisplayName("terça 13/10/2026: retorna sexta 09/10")
         void terca_retornaSextaAnterior() {
-            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, 10, 13)))
-                    .isEqualTo(LocalDate.of(2026, 10, 9));
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 13)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
         }
 
         @Test
         @DisplayName("sexta 09/10/2026: retorna ela mesma")
         void sexta_retornaElaMesma() {
-            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, 10, 9)))
-                    .isEqualTo(LocalDate.of(2026, 10, 9));
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 9)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
         }
 
         @Test
         @DisplayName("sábado 10/10/2026: retorna sexta 09/10")
         void sabado_retornaSextaAnterior() {
-            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, 10, 10)))
-                    .isEqualTo(LocalDate.of(2026, 10, 9));
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 10)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
         }
 
         @Test
         @DisplayName("domingo 11/10/2026: retorna sexta 09/10")
         void domingo_retornaSextaAnterior() {
-            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, 10, 11)))
-                    .isEqualTo(LocalDate.of(2026, 10, 9));
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 11)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
         }
 
         @Test
         @DisplayName("segunda 12/10/2026: retorna sexta 09/10")
         void segunda_retornaSextaAnterior() {
-            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, 10, 12)))
-                    .isEqualTo(LocalDate.of(2026, 10, 9));
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 12)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
         }
 
         @Test
         @DisplayName("quinta 08/10/2026: retorna sexta 02/10")
         void quinta_retornaSextaAnterior() {
-            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, 10, 8)))
-                    .isEqualTo(LocalDate.of(2026, 10, 2));
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 8)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 2));
         }
 
         @Test
