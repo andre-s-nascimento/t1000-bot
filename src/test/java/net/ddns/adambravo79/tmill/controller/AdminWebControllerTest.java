@@ -269,8 +269,9 @@ class AdminWebControllerTest {
     // =========================================================================
 
     @Test
+    @SneakyThrows
     @DisplayName("falaT1000Tts: texto válido retorna OK")
-    void falaT1000Tts_textoValido() throws Exception {
+    void falaT1000Tts_textoValido() {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         Path finalPath = Paths.get("/tmp/Cronicas-do-T1000-Audio-1.mp3");
@@ -338,8 +339,9 @@ class AdminWebControllerTest {
     }
 
     @Test
+    @SneakyThrows
     @DisplayName("falaT1000Tts: sem chatId usa ownerId")
-    void falaT1000Tts_semChatIdUsaOwner() throws Exception {
+    void falaT1000Tts_semChatIdUsaOwner() {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
@@ -362,20 +364,15 @@ class AdminWebControllerTest {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // KI-001 residual: enviarMidia=false E fallback falha → 500
-    // -------------------------------------------------------------------------
-
     @Test
-    @DisplayName("KI-001 residual: falaT1000Tts responde OK se fallback suceder")
-    void falaT1000Tts_midiaRetornaFalse_retorna500() throws Exception {
+    @SneakyThrows
+    @DisplayName("KI-001 residual: falaT1000Tts responde 500 se enviarMidia retornar false")
+    void falaT1000Tts_midiaRetornaFalse_retorna500() {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
-
-        // enviarMidia retorna false; fallback de texto NÃO é chamado pelo controller
-        // (falaT1000Tts não tem fallback interno — só propaga o boolean)
+        // enviarMidia=false → o WebController NÃO tem fallback explícito → 500 direto
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
 
         try (var mockedFiles = mockStatic(Files.class)) {
@@ -431,8 +428,8 @@ class AdminWebControllerTest {
     }
 
     @Test
-    @DisplayName("testAzureTts: sucesso → flash success")
     @SneakyThrows
+    @DisplayName("testAzureTts: sucesso → flash success")
     void testAzureTts_sucesso() {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/test_azure.mp3");
@@ -863,10 +860,6 @@ class AdminWebControllerTest {
                 .andExpect(content().string(containsString("Erro interno")));
     }
 
-    // -------------------------------------------------------------------------
-    // KI-001 residual: enviarMidia=false E fallback falha → 500
-    // -------------------------------------------------------------------------
-
     @Test
     @DisplayName("KI-001 residual: testAutoResponse responde 500 se enviarMidia retornar false")
     void testAutoResponse_midiaRetornaFalse_retorna500() throws Exception {
@@ -1177,31 +1170,56 @@ class AdminWebControllerTest {
         }
 
         @Test
-        @DisplayName("sexta válida: dispara async e chama podcastPublisherService")
-        void sextaValida_disparaAsync() throws Exception {
+        @DisplayName("sexta válida: dispara async com from/to corretos")
+        void sextaValida_disparaAsync() {
             RedirectAttributes attrs = newRedirectAttributes();
 
             controller.resendPodcast("2026-10-09", 123L, attrs);
 
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(java.time.Duration.ofSeconds(2))
                     .untilAsserted(
                             () ->
                                     verify(podcastPublisherService, atLeastOnce())
-                                            .generateAndSendPodcast(any(), any(), eq(123L)));
+                                            .generateAndSendPodcast(
+                                                    eq(java.time.LocalDate.of(2026, 10, 2)),
+                                                    eq(java.time.LocalDate.of(2026, 10, 9)),
+                                                    eq(123L),
+                                                    eq(
+                                                            java.time.LocalDateTime.of(
+                                                                    2026, 10, 2, 12, 0, 0)),
+                                                    eq(
+                                                            java.time.LocalDateTime.of(
+                                                                    2026, 10, 9, 11, 59, 59))));
+        }
+
+        @Test
+        @DisplayName("sexta válida sem chatId: usa ownerId no async")
+        void sextaValida_semChatId_usaOwner() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            controller.resendPodcast("2026-10-09", null, attrs);
+
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(podcastPublisherService, atLeastOnce())
+                                            .generateAndSendPodcast(
+                                                    any(), any(), eq(999L), any(), any()));
         }
 
         @Test
         @DisplayName("erro no async: envia mensagem de erro no chat")
-        void erroAsync_enviaMensagem() throws Exception {
+        void erroAsync_enviaMensagem() {
             doThrow(new RuntimeException("boom"))
                     .when(podcastPublisherService)
-                    .generateAndSendPodcast(any(), any(), anyLong());
+                    .generateAndSendPodcast(any(), any(), anyLong(), any(), any());
 
             RedirectAttributes attrs = newRedirectAttributes();
             controller.resendPodcast("2026-10-09", 123L, attrs);
 
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(java.time.Duration.ofSeconds(2))
                     .untilAsserted(
                             () ->
@@ -1211,21 +1229,22 @@ class AdminWebControllerTest {
 
         @Test
         @DisplayName("erro no async + erro ao enviar mensagem: não propaga")
-        void erroAsync_erroEnvioMensagem_naoLanca() throws Exception {
+        void erroAsync_erroEnvioMensagem_naoLanca() {
             doThrow(new RuntimeException("boom"))
                     .when(podcastPublisherService)
-                    .generateAndSendPodcast(any(), any(), anyLong());
+                    .generateAndSendPodcast(any(), any(), anyLong(), any(), any());
             doThrow(new RuntimeException("falha"))
                     .when(telegramFacade)
                     .enviarMensagem(anyLong(), anyString());
 
             RedirectAttributes attrs = newRedirectAttributes();
 
+            // Não deve lançar
             String view = controller.resendPodcast("2026-10-09", 123L, attrs);
 
             assertThat(view).isEqualTo("redirect:/admin-web");
 
-            // 🔧 Aguarda o async terminar antes do Mockito validar os stubs
+            // Aguarda o async terminar antes de validar os stubs
             Awaitility.await()
                     .atMost(java.time.Duration.ofSeconds(2))
                     .untilAsserted(

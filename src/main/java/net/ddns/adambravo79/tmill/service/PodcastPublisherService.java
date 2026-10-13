@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
@@ -72,16 +73,32 @@ public class PodcastPublisherService implements SchedulingConfigurer {
     }
 
     public void generateAndSendPodcast(LocalDate startDate, LocalDate endDate, long chatId) {
+        generateAndSendPodcast(startDate, endDate, chatId, null, null);
+    }
+
+    /**
+     * Gera e envia o podcast respeitando um intervalo preciso de {@link LocalDateTime}.
+     *
+     * <p>Se {@code from} e {@code to} forem nulos, cai no comportamento antigo (dia inteiro).
+     * Usado pelo endpoint de reenvio por sexta-feira.
+     */
+    public void generateAndSendPodcast(
+            LocalDate startDate,
+            LocalDate endDate,
+            long chatId,
+            LocalDateTime from,
+            LocalDateTime to) {
+
         log.info(
-                "🎧 Gerando podcast para período de {} a {}, chatId={}",
-                startDate,
-                endDate,
+                "🎧 Gerando podcast para período de {} a {} (chatId={})",
+                (from != null ? from : startDate),
+                (to != null ? to : endDate),
                 chatId);
         long start = System.currentTimeMillis();
 
         // 1. Gera roteiro
         log.info("📝 Iniciando geração do roteiro...");
-        String script = scriptService.generateScript(startDate, endDate);
+        String script = scriptService.generateScript(startDate, endDate, from, to);
         if (script == null || script.isBlank()) {
             log.warn("Nenhuma transcrição encontrada.");
             telegramFacade.enviarMensagem(chatId, "📭 Nenhuma transcrição para o período.");
@@ -93,9 +110,8 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         // 2. Sintetiza e avalia necessidade de compressão do áudio
         byte[] audioData = generateAndProcessAudio(script, chatId, startDate, endDate);
 
-        // Verifica retorno vazio em vez de nulo (SonarQube)
         if (audioData.length == 0) {
-            return; // O fluxo foi encerrado (com fallback disparado) nos sub-métodos
+            return;
         }
 
         // 3 e 4. Prepara arquivo, salva e envia

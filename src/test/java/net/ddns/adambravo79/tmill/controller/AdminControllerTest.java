@@ -15,6 +15,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Month;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -1406,21 +1407,27 @@ class AdminControllerTest {
         }
 
         @Test
-        @DisplayName("sexta válida: dispara async e chama podcastPublisherService")
-        void sextaValida_disparaAsync() throws Exception {
+        @SneakyThrows
+        @DisplayName("sexta válida: dispara async com from/to corretos")
+        void sextaValida_disparaAsync() {
             mockMvc.perform(
                             post("/admin/podcast/resend")
                                     .param("friday", "2026-10-09")
                                     .param("chatId", "999"))
                     .andExpect(status().isAccepted());
 
-            // O processamento é async, então usamos Awaitility
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(java.time.Duration.ofSeconds(2))
                     .untilAsserted(
                             () ->
                                     verify(podcastPublisherService, atLeastOnce())
-                                            .generateAndSendPodcast(any(), any(), eq(999L)));
+                                            .generateAndSendPodcast(
+                                                    LocalDate.of(2026, Month.OCTOBER, 2),
+                                                    LocalDate.of(2026, Month.OCTOBER, 9),
+                                                    999L,
+                                                    LocalDateTime.of(2026, Month.OCTOBER, 2, 12, 0),
+                                                    LocalDateTime.of(
+                                                            2026, Month.OCTOBER, 9, 11, 59, 59)));
         }
 
         @Test
@@ -1430,13 +1437,17 @@ class AdminControllerTest {
                     .andExpect(status().isAccepted())
                     .andExpect(content().string(containsString("-1003703557250")));
 
-            org.awaitility.Awaitility.await()
+            Awaitility.await()
                     .atMost(java.time.Duration.ofSeconds(2))
                     .untilAsserted(
                             () ->
                                     verify(podcastPublisherService, atLeastOnce())
                                             .generateAndSendPodcast(
-                                                    any(), any(), eq(SHOWCASE_CHAT_ID)));
+                                                    any(),
+                                                    any(),
+                                                    eq(SHOWCASE_CHAT_ID),
+                                                    any(),
+                                                    any()));
         }
 
         @Test
@@ -1444,7 +1455,7 @@ class AdminControllerTest {
         void erroAsync_enviaMensagem() throws Exception {
             doThrow(new RuntimeException("boom"))
                     .when(podcastPublisherService)
-                    .generateAndSendPodcast(any(), any(), anyLong());
+                    .generateAndSendPodcast(any(), any(), anyLong(), any(), any());
 
             mockMvc.perform(
                             post("/admin/podcast/resend")

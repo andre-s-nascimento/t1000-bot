@@ -2,6 +2,7 @@ package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.contains;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.when;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Month;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -102,7 +104,8 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Script vazio: registra 'podcast_sem_roteiro', não chama TTS")
     void scriptVazio_registraMetrica() {
-        when(scriptService.generateScript(START, END)).thenReturn("");
+        // 🔧 overload de 4 args: a delegação de generateAndSendPodcast(3 args) chama esta
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("");
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
@@ -114,7 +117,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Script null: registra 'podcast_sem_roteiro'")
     void scriptNulo_registraMetrica() {
-        when(scriptService.generateScript(START, END)).thenReturn(null);
+        when(scriptService.generateScript(START, END, null, null)).thenReturn(null);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
@@ -129,7 +132,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("TTS vazio: registra 'podcast_tts_vazio'")
     void ttsVazio_registraMetrica() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro ok");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro ok");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn(new byte[0]);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
@@ -142,7 +145,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("TTS null: registra 'podcast_tts_vazio'")
     void ttsNulo_registraMetrica() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro ok");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro ok");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn(null);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
@@ -157,7 +160,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Envio com sucesso: 'podcast_publicado' + 'podcast_compressao_pulada'")
     void sucesso_registraMetricas() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro do podcast");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro do podcast");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
         // 🔧 Onda 3.4: enviarMidia agora retorna boolean
         when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
@@ -178,7 +181,8 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Falha após 3 tentativas: 'podcast_falha_envio' + 'podcast_fallback_texto'")
     void falhaAposRetries_registraMetricas() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro de fallback");
+        when(scriptService.generateScript(START, END, null, null))
+                .thenReturn("roteiro de fallback");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
         // 🔧 Onda 3.4: agora a falha é representada por retorno false (não exceção)
         when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(false);
@@ -196,7 +200,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Falha 1x (retorno false) mas sucesso na 2ª: 'podcast_publicado'")
     void falhaDepoisSucesso() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
 
         // 🔧 Onda 3.4: primeiro retorno é false, segundo é true
@@ -214,7 +218,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Falha 1x por exceção, sucesso na 2ª: 'podcast_publicado'")
     void falhaPorExcecaoDepoisSucesso() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
 
         // sendWithRetry também captura exceções do enviarMidia
@@ -237,7 +241,7 @@ class PodcastPublisherServiceTest {
     @DisplayName("Áudio >5MB: tenta compressão; sem ffmpeg, registra 'podcast_compressao_falha'")
     void audioGrande_tentaCompressao() {
         byte[] audioGrande = new byte[6 * 1024 * 1024]; // 6 MB
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn(audioGrande);
         when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
@@ -264,7 +268,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Exceção na síntese: fallback de texto, sem 'podcast_publicado'")
     void excecaoNaSintese_fallbackTexto() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString()))
                 .thenThrow(new RuntimeException("Azure down"));
 
@@ -284,7 +288,7 @@ class PodcastPublisherServiceTest {
     @DisplayName("Fallback com >4000 chars: envia em múltiplas partes")
     void fallbackTextoMultiplasPartes() {
         String roteiroLongo = "a".repeat(5000);
-        when(scriptService.generateScript(START, END)).thenReturn(roteiroLongo);
+        when(scriptService.generateScript(START, END, null, null)).thenReturn(roteiroLongo);
         when(ttsClient.synthesizeFullText(anyString()))
                 .thenThrow(new RuntimeException("Azure down"));
 
@@ -302,7 +306,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Fallback de texto também falha: não registra 'podcast_fallback_texto'")
     void fallbackTextoFalha() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString()))
                 .thenThrow(new RuntimeException("Azure down"));
         doThrow(new RuntimeException("Telegram down"))
@@ -322,7 +326,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("3 execuções com sucesso: 3 'podcast_publicado' + 3 'podcast_compressao_pulada'")
     void tresSucessos() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio-pequeno".getBytes());
         when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
@@ -338,7 +342,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("2 sucessos + 1 sem roteiro: métricas corretas")
     void doisSucessosUmSemRoteiro() {
-        when(scriptService.generateScript(START, END))
+        when(scriptService.generateScript(START, END, null, null))
                 .thenReturn("roteiro")
                 .thenReturn("roteiro")
                 .thenReturn("");
@@ -360,7 +364,7 @@ class PodcastPublisherServiceTest {
     @Test
     @DisplayName("Envio ok: nenhuma métrica de erro")
     void envioOkSemErros() {
-        when(scriptService.generateScript(START, END)).thenReturn("roteiro");
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio".getBytes());
         when(telegramFacade.enviarMidia(eq(CHAT_ID), anyString(), anyString())).thenReturn(true);
 
@@ -391,5 +395,26 @@ class PodcastPublisherServiceTest {
         for (Trigger trigger : triggerCaptor.getAllValues()) {
             trigger.nextExecution(ctx);
         }
+    }
+
+    // ============================================================
+    // SOBRECARGA COM from/to (REENVIO POR SEXTA-FEIRA)
+    // ============================================================
+
+    @Test
+    @DisplayName("generateAndSendPodcast com from/to propaga horário para o script service")
+    void generateAndSendPodcast_comIntervaloPreciso() {
+        LocalDate start = LocalDate.of(2026, Month.OCTOBER, 2);
+        LocalDate end = LocalDate.of(2026, Month.OCTOBER, 9);
+        LocalDateTime from = LocalDateTime.of(2026, Month.OCTOBER, 2, 12, 0);
+        LocalDateTime to = LocalDateTime.of(2026, Month.OCTOBER, 9, 11, 59, 59);
+
+        when(scriptService.generateScript(start, end, from, to)).thenReturn("roteiro");
+        when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio".getBytes());
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
+        service.generateAndSendPodcast(start, end, CHAT_ID, from, to);
+
+        verify(scriptService).generateScript(start, end, from, to);
     }
 }

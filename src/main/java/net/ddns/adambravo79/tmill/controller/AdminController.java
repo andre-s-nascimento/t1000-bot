@@ -1107,7 +1107,7 @@ public class AdminController {
                     try {
                         log.info("📥 [async] Gerando podcast de reenvio para chat {}", chatId);
                         podcastPublisherService.generateAndSendPodcast(
-                                from.toLocalDate(), to.toLocalDate(), chatId);
+                                from.toLocalDate(), to.toLocalDate(), chatId, from, to);
                         log.info("✅ [async] Podcast de reenvio finalizado para chat {}", chatId);
                     } catch (Exception e) {
                         log.error(

@@ -937,7 +937,11 @@ public class AdminWebController {
                                 finalFriday,
                                 finalChatId);
                         podcastPublisherService.generateAndSendPodcast(
-                                finalFrom.toLocalDate(), finalTo.toLocalDate(), finalChatId);
+                                finalFrom.toLocalDate(),
+                                finalTo.toLocalDate(),
+                                finalChatId,
+                                finalFrom,
+                                finalTo);
                         log.info(
                                 "✅ [web/async] Reenvio de podcast finalizado para chat {}",
                                 finalChatId);

@@ -2,11 +2,16 @@
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -89,5 +94,36 @@ class PodcastScriptServiceTest {
         assertThat(result).isEqualTo("Roteiro Final do Podcast");
         verify(promptRegistryService).getPodcastSystemPrompt();
         verify(promptRegistryService).getPodcastUserPrompt(Mockito.anyString());
+    }
+
+    @Test
+    @DisplayName("generateScript com from/to filtra por timestamp preciso")
+    void generateScript_comIntervaloPreciso_filtraPorTimestamp() {
+        LocalDate start = LocalDate.of(2026, 10, 2);
+        LocalDate end = LocalDate.of(2026, 10, 9);
+        LocalDateTime from = LocalDateTime.of(2026, 10, 2, 12, 0, 0);
+        LocalDateTime to = LocalDateTime.of(2026, 10, 9, 11, 59, 59);
+
+        when(jdbcTemplate.queryForList(
+                        anyString(), eq(String.class), eq(123456L), eq(from), eq(to)))
+                .thenReturn(List.of("Áudio 1", "Áudio 2"));
+
+        when(promptRegistryService.getPodcastTemperature()).thenReturn(0.7);
+        when(promptRegistryService.getPodcastSystemPrompt()).thenReturn("System");
+        when(promptRegistryService.getPodcastUserPrompt(anyString())).thenReturn("User");
+        when(groqClient.chatCompletion(
+                        anyString(), anyString(), anyString(), anyDouble(), anyInt()))
+                .thenReturn("Roteiro");
+
+        String result = service.generateScript(start, end, from, to);
+
+        assertThat(result).isEqualTo("Roteiro");
+        verify(jdbcTemplate)
+                .queryForList(
+                        contains("timestamp >= ?"),
+                        eq(String.class),
+                        eq(123456L),
+                        eq(from),
+                        eq(to));
     }
 }
