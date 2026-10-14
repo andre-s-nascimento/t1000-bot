@@ -1,0 +1,17 @@
+{
+  "tts": {
+    "max-audio-size-bytes": 5242880,
+    "compress-bitrate": "64k",
+    "compress-channels": 1,
+    "compress-sample-rate": 22050,
+    "compress-timeout-seconds": 120
+  },
+  "telegram": {
+    "audio-max-size-mb": 20,
+    "use-document-when-over-mb": 5
+  },
+  "podcast": {
+    "max-audio-size-bytes": 5242880,
+    "compress-timeout-seconds": 180
+  }
+}

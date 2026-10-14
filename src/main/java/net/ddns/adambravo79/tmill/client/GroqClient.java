@@ -22,6 +22,8 @@ import net.ddns.adambravo79.tmill.model.ChatCompletionResponse;
 import net.ddns.adambravo79.tmill.model.Choice;
 import net.ddns.adambravo79.tmill.model.TranscriptionResponse;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
+import net.ddns.adambravo79.tmill.service.config.GroqConfigService;
+import net.ddns.adambravo79.tmill.service.config.RefinementConfigService;
 import net.ddns.adambravo79.tmill.service.digest.DigestPromptFactory;
 
 @Slf4j
@@ -33,18 +35,10 @@ public class GroqClient {
     private static final String SYSTEM_PROMPT_REFINAMENTO =
             "Corrija a pontuação e remova vícios de fala. Retorne apenas o texto limpo.";
 
-    /**
-     * Quando o refinamento perde mais que este percentual do texto, consideramos que foi truncado
-     * (finish_reason=length). Um refinamento bem feito preserva ~95% do texto, então uma redução de
-     * mais de 30% é sinal claro de corte.
-     */
-    private static final double MAX_REFINAMENTO_REDUCAO = 0.30;
-
-    /** Textos muito curtos geram falso positivo na checagem de truncamento. */
-    private static final int MIN_LENGTH_PARA_CHECAR_TRUNCAMENTO = 200;
-
     private final RestClient restClient;
     private final DigestPromptFactory promptFactory;
+    private final GroqConfigService groqConfig;
+    private final RefinementConfigService refinementConfig;
     private final int maxPromptLength;
 
     @Value("${groq.model.transcription:whisper-large-v3}")
@@ -56,13 +50,13 @@ public class GroqClient {
     @Value("${groq.model.digest:openai/gpt-oss-120b}")
     private String digestModel;
 
-    @Value("${groq.model.refinement.max-tokens:4000}")
-    private int refinementMaxTokens;
-
     /**
      * Liga/desliga reasoning_effort=low para modelos de raciocínio (ex.: gpt-oss-20b, gpt-oss-120b).
      * Sem isso, o modelo gasta a maior parte do max_tokens "pensando" e o output volta truncado
      * (finish_reason=length).
+     *
+     * <p>Mantido em {@code application.properties} — é uma configuração de "feature" do Groq,
+     * não um parâmetro de negócio do T1000.
      */
     @Value("${groq.model.reasoning-effort:low}")
     private String reasoningEffort;
@@ -73,7 +67,9 @@ public class GroqClient {
             @Value("${groq.max-prompt-length:32000}") int maxPromptLength,
             @Value("${groq.connect-timeout:5s}") Duration connectTimeout,
             @Value("${groq.read-timeout:30s}") Duration readTimeout,
-            DigestPromptFactory promptFactory) {
+            DigestPromptFactory promptFactory,
+            GroqConfigService groqConfig,
+            RefinementConfigService refinementConfig) {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
@@ -88,14 +84,23 @@ public class GroqClient {
 
         this.maxPromptLength = maxPromptLength;
         this.promptFactory = promptFactory;
+        this.groqConfig = groqConfig;
+        this.refinementConfig = refinementConfig;
     }
 
-    // Construtor para testes
+    /**
+     * Construtor para testes — mantém a assinatura antiga e injeta configs com valores default.
+     *
+     * <p>Testes que precisam customizar os valores devem usar o construtor de 8 args com mocks
+     * de {@link GroqConfigService} e {@link RefinementConfigService}.
+     */
     public GroqClient(
             RestClient restClient, int maxPromptLength, DigestPromptFactory promptFactory) {
         this.restClient = restClient;
         this.promptFactory = promptFactory;
         this.maxPromptLength = maxPromptLength;
+        this.groqConfig = null;
+        this.refinementConfig = null;
     }
 
     // ========================= TRANSCRIÇÃO =========================
@@ -144,6 +149,12 @@ public class GroqClient {
 
         log.info("🤖 Iniciando refinamento (input: {} chars)", textoBruto.length());
 
+        // 🔧 Onda 3.4: parâmetros do LLM vêm do GroqConfigService
+        GroqConfigService.RefinementSpec llmSpec = resolveRefinementLlmSpec();
+
+        // 🔧 Onda 3.4: regras do pipeline vêm do RefinementConfigService
+        RefinementConfigService.RefinementSpec ruleSpec = resolveRefinementRuleSpec();
+
         String resultado;
         try {
             resultado =
@@ -151,8 +162,8 @@ public class GroqClient {
                             SYSTEM_PROMPT_REFINAMENTO,
                             textoBruto,
                             refinementModel,
-                            0.18,
-                            refinementMaxTokens);
+                            llmSpec.temperature(),
+                            llmSpec.maxTokens());
         } catch (Exception e) {
             log.error(
                     "❌ Erro no refinamento ({}), usando texto bruto como fallback",
@@ -171,11 +182,11 @@ public class GroqClient {
             return textoBruto;
         }
 
-        // FIX 2: refinamento truncado (redução > 30%) → usa bruto
+        // FIX 2: refinamento truncado (redução > X%) → usa bruto
         // Só checa em textos com tamanho mínimo para evitar falso positivo em inputs curtos.
-        if (textoBruto.length() >= MIN_LENGTH_PARA_CHECAR_TRUNCAMENTO) {
+        if (textoBruto.length() >= ruleSpec.minLengthParaChecarTruncamento()) {
             double reductionRatio = 1.0 - (resultado.length() / (double) textoBruto.length());
-            if (reductionRatio > MAX_REFINAMENTO_REDUCAO) {
+            if (reductionRatio > ruleSpec.maxRefinamentoReducao()) {
                 log.warn(
                         "⚠️ Refinamento reduziu {}% do texto (input={} chars, output={} chars)."
                                 + " Provavelmente TRUNCADO. Usando texto bruto como fallback.",
@@ -196,12 +207,45 @@ public class GroqClient {
         return resultado;
     }
 
+    /**
+     * Resolve os parâmetros de LLM do refinamento (temperature, maxTokens) com fallback seguro
+     * caso o serviço de config não esteja disponível (ex.: construtor de teste).
+     */
+    private GroqConfigService.RefinementSpec resolveRefinementLlmSpec() {
+        if (groqConfig == null) {
+            return new GroqConfigService.RefinementSpec(0.18, 4000);
+        }
+        return groqConfig.getRefinementSpec();
+    }
+
+    /**
+     * Resolve as regras de pipeline do refinamento (maxReducao, minLength) com fallback seguro.
+     */
+    private RefinementConfigService.RefinementSpec resolveRefinementRuleSpec() {
+        if (refinementConfig == null) {
+            return new RefinementConfigService.RefinementSpec(0.30, 200, 4000, 0.18);
+        }
+        return refinementConfig.getSpec();
+    }
+
     // ========================= DIGEST =========================
 
     public String gerarResumoDigest(String messages, DigestPersona persona, String periodLabel) {
         String systemPrompt = promptFactory.buildSystemPrompt(persona, periodLabel);
         String userPrompt = promptFactory.buildUserPrompt(messages);
-        return chatCompletion(systemPrompt, userPrompt, digestModel, 0.5, 2200);
+
+        // 🔧 Onda 3.4: temperature e maxTokens vêm do GroqConfigService
+        GroqConfigService.DigestSpec spec = resolveDigestSpec();
+
+        return chatCompletion(
+                systemPrompt, userPrompt, digestModel, spec.temperature(), spec.maxTokens());
+    }
+
+    private GroqConfigService.DigestSpec resolveDigestSpec() {
+        if (groqConfig == null) {
+            return new GroqConfigService.DigestSpec(0.5, 2200);
+        }
+        return groqConfig.getDigestSpec();
     }
 
     // ========================= CHAT COMPLETION =========================
@@ -229,7 +273,6 @@ public class GroqClient {
             log.warn("⚠️ Prompt acima do limite size={} limit={}", totalSize, maxPromptLength);
         }
 
-        // LinkedHashMap para permitir adicionar reasoning_effort condicionalmente.
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put(MODEL, model);
         payload.put(

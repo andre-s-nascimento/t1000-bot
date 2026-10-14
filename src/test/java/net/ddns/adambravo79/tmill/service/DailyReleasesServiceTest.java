@@ -5,12 +5,12 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import java.time.LocalDate;
-import java.time.Month;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +30,8 @@ import net.ddns.adambravo79.tmill.dto.TvResult;
 import net.ddns.adambravo79.tmill.model.FullRelease;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +42,8 @@ class DailyReleasesServiceTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private ReleaseNotifiedRepository releaseRepository;
     @Mock private Cache<String, String> providerCache;
+    @Mock private JsonConfigLoader jsonConfigLoader;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private DailyReleasesService service;
 
@@ -49,21 +53,70 @@ class DailyReleasesServiceTest {
     private static final String TV_TYPE = "tv";
     private static final LocalDate TODAY = LocalDate.now(BRAZIL_ZONE);
 
-    private static final long TMDB_ID = 123L;
-    private static final String MEDIA_TYPE = "movie";
-    private static final LocalDate RELEASE_DATE = LocalDate.of(2026, Month.JULY, 15);
-    private static final String TITLE = "Filme Teste";
-    private static final String OVERVIEW = "Sinopse";
-    private static final Double RATING = 8.5;
-    private static final String PROVIDERS = "Netflix, Prime";
-    private static final String POSTER_PATH = "/poster.jpg";
-
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(service, "chatIdsStr", CHAT_IDS);
+
+        // Default: feature flag habilitada (cron roda normalmente)
+        lenient().when(featureFlags.isEnabled("daily.releases.enabled")).thenReturn(true);
+        lenient().when(featureFlags.isEnabled("weekly.digest.enabled")).thenReturn(true);
     }
 
-    // ===================== sendHourlyReleases =====================
+    // =========================================================================
+    // 🆕 FEATURE FLAG — daily.releases.enabled
+    // =========================================================================
+
+    @Test
+    @DisplayName("sendHourlyReleases: flag 'daily.releases.enabled' desabilitada → pula")
+    void sendHourlyReleases_flagDesabilitada_pula() {
+        when(featureFlags.isEnabled("daily.releases.enabled")).thenReturn(false);
+
+        service.sendHourlyReleases();
+
+        verifyNoInteractions(tmdbClient, watchmodeClient, telegramFacade, releaseRepository);
+    }
+
+    @Test
+    @DisplayName("sendHourlyReleases: flag 'daily.releases.enabled' habilitada → executa")
+    void sendHourlyReleases_flagHabilitada_executa() {
+        when(featureFlags.isEnabled("daily.releases.enabled")).thenReturn(true);
+
+        TmdbDiscoverMovieResponse movieResponse = mock(TmdbDiscoverMovieResponse.class);
+        when(movieResponse.results()).thenReturn(List.of());
+        when(tmdbClient.discoverMoviesByDate(anyString(), anyString())).thenReturn(movieResponse);
+
+        TmdbDiscoverTvResponse tvResponse = mock(TmdbDiscoverTvResponse.class);
+        when(tvResponse.results()).thenReturn(List.of());
+        when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
+
+        service.sendHourlyReleases();
+
+        // A verificação executa mesmo que não encontre lançamentos
+        verify(tmdbClient).discoverMoviesByDate(anyString(), anyString());
+        verify(tmdbClient).discoverTvByDate(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("sendWeeklyDigest: NÃO valida 'daily.releases.enabled' (feature separada)")
+    void sendWeeklyDigest_naoValidaFeatureFlag() {
+        // O stub da flag é intencionalmente órfão: o teste PROVA que sendWeeklyDigest
+        // não consulta essa flag. Por isso lenient().
+        lenient().when(featureFlags.isEnabled("daily.releases.enabled")).thenReturn(false);
+
+        when(releaseRepository.findFullReleasesBetween(any(), any())).thenReturn(List.of());
+
+        service.sendWeeklyDigest();
+
+        verify(releaseRepository).findFullReleasesBetween(any(), any());
+        verify(telegramFacade, times(2))
+                .enviarMensagemHtml(anyLong(), contains("Nenhum lançamento"));
+        // Documenta a intenção: a flag não foi consultada
+        verify(featureFlags, never()).isEnabled("daily.releases.enabled");
+    }
+
+    // =========================================================================
+    // SEND HOURLY RELEASES — validações iniciais
+    // =========================================================================
 
     @Test
     void sendHourlyReleases_quandoChatIdsVazio_naoFazNada() {
@@ -89,21 +142,10 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
-
         service.sendHourlyReleases();
 
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
     }
 
     @Test
@@ -144,21 +186,11 @@ class DailyReleasesServiceTest {
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
         when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(true);
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         service.sendHourlyReleases();
 
         verify(providerCache, never()).get(anyString(), any());
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -175,20 +207,11 @@ class DailyReleasesServiceTest {
 
         when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn(null);
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
+
         service.sendHourlyReleases();
 
         verify(tmdbClient, never()).buscarDetalhes(anyLong());
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
         verify(telegramFacade, never()).enviarFotoHtml(anyLong(), anyString(), anyString());
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
@@ -214,19 +237,9 @@ class DailyReleasesServiceTest {
         when(tmdbClient.buscarDetalhes(1L)).thenReturn(details);
 
         service.sendHourlyReleases();
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         verify(tmdbClient, times(1)).buscarDetalhes(1L);
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
         verify(telegramFacade, never()).enviarFotoHtml(anyLong(), anyString(), anyString());
     }
@@ -242,7 +255,6 @@ class DailyReleasesServiceTest {
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
-        // ID do stub = 1L (o mesmo do MovieResult)
         when(releaseRepository.isNotified(1L, MOVIE_TYPE, TODAY)).thenReturn(false);
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Netflix, Prime Video");
 
@@ -254,7 +266,6 @@ class DailyReleasesServiceTest {
 
         service.sendHourlyReleases();
 
-        // Captura o que foi salvo para inspecionar
         ArgumentCaptor<FullRelease> captor = ArgumentCaptor.forClass(FullRelease.class);
         verify(releaseRepository).saveFullRelease(captor.capture());
 
@@ -315,20 +326,10 @@ class DailyReleasesServiceTest {
         when(providerCache.get(eq("movie_1"), any())).thenReturn("Netflix");
         when(tmdbClient.buscarDetalhes(1L))
                 .thenThrow(new RuntimeException("Erro ao buscar detalhes"));
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         service.sendHourlyReleases();
 
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -340,20 +341,11 @@ class DailyReleasesServiceTest {
         TmdbDiscoverTvResponse tvResponse = mock(TmdbDiscoverTvResponse.class);
         when(tvResponse.results()).thenReturn(List.of());
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
+
         service.sendHourlyReleases();
 
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
     }
 
     @Test
@@ -468,7 +460,6 @@ class DailyReleasesServiceTest {
         verify(telegramFacade, times(2)).enviarMensagemHtml(anyLong(), captor.capture());
 
         List<String> mensagensEnviadas = captor.getAllValues();
-        mensagensEnviadas.forEach(msg -> System.out.println("DEBUG MSG CAPTURADA:\n" + msg));
         assertThat(mensagensEnviadas)
                 .anySatisfy(
                         mensagem ->
@@ -476,9 +467,7 @@ class DailyReleasesServiceTest {
                                         .contains("Filme Teste")
                                         .contains("GIRO DOS STREAMINGS")
                                         .contains("Netflix")
-                                        .containsPattern(
-                                                "(?s)8[,.]0/10")); // (?s) ativa modo DOTALL
-        // (multilinha)
+                                        .containsPattern("(?s)8[,.]0/10"));
     }
 
     @Test
@@ -538,7 +527,7 @@ class DailyReleasesServiceTest {
                 .hasMessageContaining("Erro no banco");
     }
 
-    // ===================== Testes para séries (cobertura adicional) =====================
+    // ===================== Série (cobertura adicional) =====================
 
     @Test
     void sendHourlyReleases_comSerieComProvedor_enviaESalva() {
@@ -586,21 +575,11 @@ class DailyReleasesServiceTest {
         when(tmdbClient.discoverTvByDate(anyString(), anyString())).thenReturn(tvResponse);
 
         when(releaseRepository.isNotified(2L, TV_TYPE, TODAY)).thenReturn(true);
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         service.sendHourlyReleases();
 
         verify(providerCache, never()).get(anyString(), any());
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -612,20 +591,31 @@ class DailyReleasesServiceTest {
 
         when(tmdbClient.discoverTvByDate(anyString(), anyString()))
                 .thenThrow(new RuntimeException("Erro na API"));
-        FullRelease fullRelease =
-                new FullRelease(
-                        TMDB_ID,
-                        MEDIA_TYPE,
-                        RELEASE_DATE,
-                        TITLE,
-                        OVERVIEW,
-                        RATING,
-                        PROVIDERS,
-                        POSTER_PATH);
 
         service.sendHourlyReleases();
 
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
-        verify(releaseRepository, never()).saveFullRelease(fullRelease);
+        verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
+    }
+
+    @Test
+    @DisplayName("sendWeeklyDigest: flag 'weekly.digest.enabled' off → pula")
+    void sendWeeklyDigest_flagDesabilitada_pula() {
+        when(featureFlags.isEnabled("weekly.digest.enabled")).thenReturn(false);
+
+        service.sendWeeklyDigest();
+
+        verifyNoInteractions(releaseRepository, telegramFacade);
+    }
+
+    @Test
+    @DisplayName("sendWeeklyDigest: flag 'weekly.digest.enabled' on → executa")
+    void sendWeeklyDigest_flagHabilitada_executa() {
+        when(featureFlags.isEnabled("weekly.digest.enabled")).thenReturn(true);
+        when(releaseRepository.findFullReleasesBetween(any(), any())).thenReturn(List.of());
+
+        service.sendWeeklyDigest();
+
+        verify(releaseRepository).findFullReleasesBetween(any(), any());
     }
 }

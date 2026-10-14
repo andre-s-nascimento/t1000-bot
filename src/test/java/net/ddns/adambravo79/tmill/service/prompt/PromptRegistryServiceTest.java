@@ -291,6 +291,39 @@ class PromptRegistryServiceTest {
         assertThat(service.getActivePersonaName()).isEqualTo("T1000");
     }
 
+    // =========================================================================
+    // getPodcastUserPrompt
+    // =========================================================================
+
+    @Test
+    @DisplayName("Podcast user prompt deve combinar o template configurado com as mensagens")
+    void shouldBuildPodcastUserPromptWithConfiguredTemplate() {
+        Map<String, Object> podcastSystem = new HashMap<>();
+        podcastSystem.put("userPrompt", "Prefácio customizado:\n\n");
+
+        doReturn(Optional.of(podcastSystem))
+                .when(loader)
+                .loadConfig(eq("prompts/podcast-system.json"), eq(Map.class), any());
+
+        String result = service.getPodcastUserPrompt("Áudio 1\nÁudio 2");
+
+        assertThat(result).isEqualTo("Prefácio customizado:\n\nÁudio 1\nÁudio 2");
+    }
+
+    @Test
+    @DisplayName(
+            "Podcast user prompt deve usar o fallback padrão se a chave userPrompt não existir")
+    void shouldBuildPodcastUserPromptWithFallbackWhenConfigIsMissing() {
+        doReturn(Optional.empty())
+                .when(loader)
+                .loadConfig(eq("prompts/podcast-system.json"), eq(Map.class), any());
+
+        String result = service.getPodcastUserPrompt("Mensagem Teste");
+
+        assertThat(result)
+                .isEqualTo("Aqui estão as mensagens da semana passada:\n\nMensagem Teste");
+    }
+
     private static Map<String, Object> basePrompts() {
         Map<String, Object> persona = new HashMap<>();
         persona.put("systemPrompt", "Persona T1000");
@@ -308,5 +341,15 @@ class PromptRegistryServiceTest {
         prompts.put("userPromptTemplate", "Mensagens: %s");
 
         return prompts;
+    }
+
+    @Test
+    @DisplayName("getPrompt deve lidar com tipos e chaves inválidas corretamente")
+    void shouldHandleGetPromptEdgeCases() {
+        // Chave inexistente
+        assertThat(service.getPrompt("inexistente", String.class)).isEmpty();
+
+        // Tipo incorreto
+        assertThat(service.getPrompt("userPromptTemplate", Integer.class)).isEmpty();
     }
 }

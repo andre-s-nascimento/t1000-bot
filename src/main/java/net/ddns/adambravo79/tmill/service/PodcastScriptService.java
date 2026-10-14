@@ -2,6 +2,7 @@
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -35,16 +36,47 @@ public class PodcastScriptService {
     private static final int MAX_MESSAGES = 20;
 
     public String generateScript(LocalDate start, LocalDate end) {
-        String sql =
-                """
-                    SELECT text FROM transcripts
-                    WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
-                    AND text IS NOT NULL AND TRIM(text) != ''
-                    ORDER BY timestamp ASC
-                """;
+        return generateScript(start, end, null, null);
+    }
 
-        List<String> messages =
-                jdbcTemplate.queryForList(sql, String.class, targetUserId, start, end);
+    /**
+     * Gera o roteiro do podcast filtrando por intervalo preciso de {@link LocalDateTime}.
+     *
+     * <p>Se {@code from} e {@code to} forem nulos, cai no filtro por data inteira ({@code DATE}).
+     * Caso contrário, filtra por {@code timestamp >= from} e {@code timestamp <= to}.
+     *
+     * <p>Usado pelo {@code PodcastPublisherService} para respeitar o intervalo exato
+     * "sexta 12:00 → sexta 11:59" definido pelo {@code AdminUtils.calcularPeriodoPodcast}.
+     */
+    public String generateScript(
+            LocalDate start, LocalDate end, LocalDateTime from, LocalDateTime to) {
+
+        String sql;
+        Object[] params;
+
+        if (from != null && to != null) {
+            sql =
+                    """
+                        SELECT text FROM transcripts
+                        WHERE user_id = ?
+                          AND timestamp >= ?
+                          AND timestamp <= ?
+                          AND text IS NOT NULL AND TRIM(text) != ''
+                        ORDER BY timestamp ASC
+                    """;
+            params = new Object[] {targetUserId, from, to};
+        } else {
+            sql =
+                    """
+                        SELECT text FROM transcripts
+                        WHERE user_id = ? AND DATE(timestamp) BETWEEN ? AND ?
+                        AND text IS NOT NULL AND TRIM(text) != ''
+                        ORDER BY timestamp ASC
+                    """;
+            params = new Object[] {targetUserId, start, end};
+        }
+
+        List<String> messages = jdbcTemplate.queryForList(sql, String.class, params);
 
         if (messages.isEmpty()) {
             return null;
@@ -67,16 +99,18 @@ public class PodcastScriptService {
         }
 
         String systemPrompt = promptRegistryService.getPodcastSystemPrompt();
-        String userPrompt = "Aqui estão as mensagens da semana passada:\n\n" + combined;
+        String userPrompt = promptRegistryService.getPodcastUserPrompt(combined);
 
         log.info(
-                "🎙️ Gerando roteiro do podcast para semana de {} a {} ({} caracteres)",
-                start,
-                end,
+                "🎙️ Gerando roteiro do podcast para {} a {} ({} caracteres)",
+                (from != null ? from : start + " 00:00"),
+                (to != null ? to : end + " 23:59"),
                 combined.length());
 
+        double temperature = promptRegistryService.getPodcastTemperature();
         String script =
-                groqClient.chatCompletion(systemPrompt, userPrompt, digestModel, 0.7, maxTokens);
+                groqClient.chatCompletion(
+                        systemPrompt, userPrompt, digestModel, temperature, maxTokens);
 
         log.info("✅ Roteiro gerado com {} caracteres.", script.length());
         return script;

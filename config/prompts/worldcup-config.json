@@ -1,0 +1,7 @@
+{
+  "updateCron": "0 0 3 * * *",
+  "noonCron": "0 0 12 * * *",
+  "eveningCron": "0 30 18 * * *",
+  "checkCron": "0 * * * * *",
+  "cleanCron": "0 5 0 * * *"
+}

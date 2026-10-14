@@ -2,11 +2,15 @@ package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -15,21 +19,29 @@ import static org.mockito.Mockito.when;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.scheduling.Trigger;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,7 +53,8 @@ class WorldCupUpdaterServiceTest {
     @Mock private RestClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
     @Mock private RestClient.RequestHeadersSpec<?> requestHeadersSpec;
     @Mock private RestClient.ResponseSpec responseSpec;
-    @Mock private FeatureFlagAdminService featureFlags; // <-- ADICIONAR
+    @Mock private FeatureFlagAdminService featureFlags;
+    @Mock private JsonConfigLoader jsonConfigLoader;
 
     @Spy @InjectMocks private WorldCupUpdaterService service;
 
@@ -175,5 +188,43 @@ class WorldCupUpdaterServiceTest {
         service.forceUpdate();
 
         verify(service).updateWorldCupData();
+    }
+
+    @Test
+    @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
+    void configureTasks_deveRegistrarAsTasksECobrirLambda() {
+        // Preparamos o mock do jsonConfigLoader com todas as chaves possíveis
+        // para que este teste seja reaproveitável em todas as classes
+        lenient()
+                .when(jsonConfigLoader.loadConfig(anyString(), eq(Map.class), anyString()))
+                .thenReturn(
+                        Optional.of(
+                                Map.of(
+                                        "cron", "0 0 12 * * *",
+                                        "updateCron", "0 0 12 * * *",
+                                        "hourlyCron", "0 0 12 * * *",
+                                        "weeklyCron", "0 0 12 * * *",
+                                        "morningCron", "0 0 12 * * *",
+                                        "eveningCron", "0 0 12 * * *",
+                                        "noonCron", "0 0 12 * * *",
+                                        "checkCron", "0 0 12 * * *",
+                                        "cleanCron", "0 0 12 * * *")));
+
+        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
+
+        // Aciona o método que registra as tarefas
+        service.configureTasks(taskRegistrar);
+
+        // Captura as triggers que foram adicionadas
+        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
+        verify(taskRegistrar, atLeastOnce())
+                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
+
+        // Aciona a lambda de cada trigger para cobrir o código do getCron()
+        // 🔧 FIX: Usar SimpleTriggerContext em vez de mock(TriggerContext.class)
+        SimpleTriggerContext ctx = new SimpleTriggerContext();
+        for (Trigger trigger : triggerCaptor.getAllValues()) {
+            trigger.nextExecution(ctx);
+        }
     }
 }

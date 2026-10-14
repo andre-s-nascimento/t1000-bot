@@ -83,3 +83,4 @@ EOF
 /test-migration-speed.sh
 
 /config/feature-flags.json
+/config/feature-flags.json.tmp

@@ -1,0 +1,55 @@
+{
+  "retry": {
+    "transcription": {
+      "max-retries": 2,
+      "delay-ms": 1000,
+      "multiplier": 2,
+      "max-delay-ms": 5000
+    },
+    "refinement": {
+      "max-retries": 3,
+      "delay-ms": 2000,
+      "multiplier": 3,
+      "max-delay-ms": 30000
+    },
+    "chat-completion": {
+      "max-retries": 4,
+      "delay-ms": 2000,
+      "multiplier": 3,
+      "max-delay-ms": 60000
+    },
+    "tmdb-search": {
+      "max-retries": 2,
+      "delay-ms": 1000,
+      "multiplier": 2,
+      "max-delay-ms": 5000
+    },
+    "tmdb-details": {
+      "max-retries": 2,
+      "delay-ms": 1000,
+      "multiplier": 2,
+      "max-delay-ms": 5000
+    },
+    "tmdb-credits": {
+      "max-retries": 1,
+      "delay-ms": 500,
+      "multiplier": 2,
+      "max-delay-ms": 5000
+    }
+  },
+  "digest": {
+    "temperature": 0.5,
+    "max-tokens": 2200
+  },
+  "refinement": {
+    "temperature": 0.18,
+    "max-tokens": 4000
+  },
+  "transcription": {
+    "model": "whisper-large-v3"
+  },
+  "models": {
+    "refinement": "openai/gpt-oss-20b",
+    "digest": "openai/gpt-oss-120b"
+  }
+}

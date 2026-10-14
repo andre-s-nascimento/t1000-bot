@@ -170,13 +170,6 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 // ============================================================================
-// JACOCO
-// ============================================================================
-jacoco {
-    toolVersion = '0.8.11'
-}
-
-// ============================================================================
 // TESTES
 // ============================================================================
 test {
@@ -237,8 +230,12 @@ tasks.register('unitTest', Test) {
 }
 
 // ============================================================================
-// JACOCO REPORT
+// JACOCO
 // ============================================================================
+jacoco {
+    toolVersion = '0.8.11'
+}
+
 jacocoTestReport {
     dependsOn tasks.named('test')
 
@@ -247,34 +244,23 @@ jacocoTestReport {
         html.required = true
     }
 
-    // Substitui afterEvaluate por configuração direta (deprecated em Gradle 8+)
-    classDirectories.setFrom(
-            files(
-                    classDirectories.files.collect { dir ->
-                        fileTree(dir: dir, exclude: [
-                                'net/ddns/adambravo79/tmill/client/**',
-                                'net/ddns/adambravo79/tmill/config/**',
-                                'net/ddns/adambravo79/tmill/TmillApplication*'
-                        ])
-                    }
-            )
-    )
 }
 
-// ============================================================================
-// JACOCO COVERAGE VERIFICATION
-// ============================================================================
 jacocoTestCoverageVerification {
     dependsOn tasks.named('jacocoTestReport')
 
-    // Aplica as mesmas exclusões do relatório
+    // Exclusões apenas para a verificação local — alinhadas com sonar.coverage.exclusions
     classDirectories.setFrom(
             files(
                     classDirectories.files.collect { dir ->
                         fileTree(dir: dir, exclude: [
                                 'net/ddns/adambravo79/tmill/client/**',
                                 'net/ddns/adambravo79/tmill/config/**',
-                                'net/ddns/adambravo79/tmill/TmillApplication*'
+                                'net/ddns/adambravo79/tmill/TmillApplication*',
+                                'net/ddns/adambravo79/tmill/constant/**',
+                                'net/ddns/adambravo79/tmill/dto/**',
+                                'net/ddns/adambravo79/tmill/model/**',
+                                'net/ddns/adambravo79/tmill/document/**'
                         ])
                     }
             )
@@ -302,18 +288,50 @@ jacocoTestCoverageVerification {
             }
             excludes = [
                     'net.ddns.adambravo79.tmill.TmillApplication',
-                    'net.ddns.adambravo79.tmill.config.*',
+                    //'net.ddns.adambravo79.tmill.config.*',
                     'net.ddns.adambravo79.tmill.client.*',
                     'net.ddns.adambravo79.tmill.constant.*',
                     '*.dto.*',
                     '*.model.*',
                     '*.document.*',
+                    'net.ddns.adambravo79.tmill.config.TestAdminController',
                     // Schedulers — wrappers finos do scheduler, dificilmente testáveis
                     'net.ddns.adambravo79.tmill.service.BirthdayScheduler'
             ]
         }
     }
 }
+
+// ============================================================================
+// SONARQUBE
+// ============================================================================
+sonar {
+    properties {
+        property 'sonar.projectKey', 'andre-s-nascimento_t1000-bot'
+        property 'sonar.organization', 'andre-s-nascimento'
+        property 'sonar.host.url', 'https://sonarcloud.io'
+        property 'sonar.coverage.jacoco.xmlReportPaths',
+                layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml')
+                        .get().asFile.absolutePath
+
+        // 🔧 Exclusões explícitas para o Sonar — alinhadas com jacocoTestCoverageVerification
+        property 'sonar.coverage.exclusions', [
+                '**/client/**',
+                '**/config/**',
+                '**/constant/**',
+                '**/dto/**',
+                '**/model/**',
+                '**/document/**',
+                '**/TmillApplication.java',
+                '**/service/BirthdayScheduler.java'
+        ].join(',')
+
+        property 'sonar.exclusions', '**/build/**,**/src/test/**'
+        property 'sonar.java.source', '21'
+    }
+}
+
+
 // ============================================================================
 // CHECK — agrega todas as verificações
 // ============================================================================

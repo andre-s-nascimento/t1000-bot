@@ -11,13 +11,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Month;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -30,11 +33,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.ui.Model;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.model.Birthday;
@@ -52,17 +57,16 @@ import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
 class AdminWebControllerTest {
-
-    // =========================================================================
-    // MOCKS — todas as dependências do controller
-    // =========================================================================
 
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
@@ -85,13 +89,15 @@ class AdminWebControllerTest {
     @Mock private MigrationService migrationService;
     @Mock private FeatureFlagAdminService featureFlagAdminService;
     @Mock private PromptRegistryService promptRegistryService;
+    @Mock private WorldCupTeamsService teamsService;
+    @Mock private TelegramExceptionHandler telegramExceptionHandler;
+    @Mock private TmdbClient tmdbClient;
+    @Mock private AdminConfigService adminConfigService;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
 
-    // =========================================================================
-    // SETUP
-    // =========================================================================
+    private static final long SHOWCASE_CHAT_ID = -1003703557250L;
 
     @BeforeEach
     void setUp() {
@@ -117,9 +123,12 @@ class AdminWebControllerTest {
                         birthdayRepository,
                         migrationService,
                         featureFlagAdminService,
-                        promptRegistryService);
+                        promptRegistryService,
+                        teamsService,
+                        telegramExceptionHandler,
+                        tmdbClient,
+                        adminConfigService);
 
-        // @Value fields — não injetados por ReflectionTestUtils
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
         ReflectionTestUtils.setField(controller, "ownerId", 999L);
         ReflectionTestUtils.setField(controller, "publishChatId", 555L);
@@ -127,6 +136,10 @@ class AdminWebControllerTest {
         ReflectionTestUtils.setField(controller, "digestChatIdsStr", "333,444");
         ReflectionTestUtils.setField(controller, "migrationSqlitePath", "./data/test.db");
 
+        lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
+        lenient()
+                .when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled"))
+                .thenReturn(true);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -260,14 +273,16 @@ class AdminWebControllerTest {
     // =========================================================================
 
     @Test
+    @SneakyThrows
     @DisplayName("falaT1000Tts: texto válido retorna OK")
-    void falaT1000Tts_textoValido() throws Exception {
+    void falaT1000Tts_textoValido() {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         Path finalPath = Paths.get("/tmp/Cronicas-do-T1000-Audio-1.mp3");
 
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         try (var mockedFiles = mockStatic(Files.class)) {
             mockedFiles
@@ -328,12 +343,14 @@ class AdminWebControllerTest {
     }
 
     @Test
+    @SneakyThrows
     @DisplayName("falaT1000Tts: sem chatId usa ownerId")
-    void falaT1000Tts_semChatIdUsaOwner() throws Exception {
+    void falaT1000Tts_semChatIdUsaOwner() {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         try (var mockedFiles = mockStatic(Files.class)) {
             mockedFiles
@@ -348,6 +365,38 @@ class AdminWebControllerTest {
             mockMvc.perform(post("/admin-web/fala-t1000-tts").param("message", "Test"))
                     .andExpect(status().isOk())
                     .andExpect(content().string(containsString("chat 999")));
+        }
+    }
+
+    @Test
+    @SneakyThrows
+    @DisplayName("KI-001 residual: falaT1000Tts responde 500 se enviarMidia retornar false")
+    void falaT1000Tts_midiaRetornaFalse_retorna500() {
+        byte[] audio = new byte[] {1, 2, 3};
+        Path tempPath = Paths.get("/tmp/tts_audio.mp3");
+        when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
+        when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        // enviarMidia=false → o WebController NÃO tem fallback explícito → 500 direto
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        try (var mockedFiles = mockStatic(Files.class)) {
+            mockedFiles
+                    .when(() -> Files.write(any(Path.class), any(byte[].class)))
+                    .thenReturn(tempPath);
+            mockedFiles
+                    .when(() -> Files.move(any(Path.class), any(Path.class)))
+                    .thenReturn(tempPath);
+            mockedFiles.when(() -> Files.deleteIfExists(any(Path.class))).thenReturn(true);
+            mockedFiles.when(() -> Files.exists(any(Path.class))).thenReturn(false);
+
+            mockMvc.perform(
+                            post("/admin-web/fala-t1000-tts")
+                                    .param("message", "Test")
+                                    .param("chatId", "123"))
+                    .andExpect(status().is5xxServerError())
+                    .andExpect(content().string(containsString("Falha ao enviar áudio")));
+
+            verify(telegramFacade).enviarMidia(eq(123L), anyString(), anyString());
         }
     }
 
@@ -383,13 +432,14 @@ class AdminWebControllerTest {
     }
 
     @Test
-    @DisplayName("testAzureTts: sucesso → flash success")
     @SneakyThrows
+    @DisplayName("testAzureTts: sucesso → flash success")
     void testAzureTts_sucesso() {
         byte[] audio = new byte[] {1, 2, 3};
         Path tempPath = Paths.get("/tmp/test_azure.mp3");
         when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         try (var mockedFiles = mockStatic(Files.class)) {
             mockedFiles
@@ -404,6 +454,32 @@ class AdminWebControllerTest {
             assertThat(view).isEqualTo("redirect:/admin-web");
             assertThat(attrs.getFlashAttributes().get("success").toString())
                     .contains("Áudio de teste enviado");
+        }
+    }
+
+    @Test
+    @SneakyThrows
+    @DisplayName("KI-001 residual: testAzureTts responde flash error se enviarMidia retornar false")
+    void testAzureTts_midiaRetornaFalse_flashError() {
+        byte[] audio = new byte[] {1, 2, 3};
+        Path tempPath = Paths.get("/tmp/test_azure.mp3");
+        when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(audio);
+        when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        try (var mockedFiles = mockStatic(Files.class)) {
+            mockedFiles
+                    .when(() -> Files.write(any(Path.class), any(byte[].class)))
+                    .thenReturn(tempPath);
+            mockedFiles.when(() -> Files.deleteIfExists(any(Path.class))).thenReturn(true);
+            mockedFiles.when(() -> Files.exists(any(Path.class))).thenReturn(false);
+
+            RedirectAttributes attrs = newRedirectAttributes();
+            String view = controller.testAzureTts(attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("error").toString())
+                    .contains("Falha ao enviar áudio");
         }
     }
 
@@ -574,9 +650,7 @@ class AdminWebControllerTest {
     @Test
     @DisplayName("reloadWorldCupShowcase: HttpClientErrorException é silenciada")
     void reloadWorldCupShowcase_erroHttp() {
-        doThrow(
-                        new org.springframework.web.client.HttpClientErrorException(
-                                org.springframework.http.HttpStatus.FORBIDDEN))
+        doThrow(new HttpClientErrorException(org.springframework.http.HttpStatus.FORBIDDEN))
                 .when(telegramFacade)
                 .enviarMensagemHtml(anyLong(), anyString());
 
@@ -725,6 +799,7 @@ class AdminWebControllerTest {
         AutoResponseOverride response = new AutoResponseOverride("Olá!", null);
         when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
                 .thenReturn(Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(
                         post("/admin-web/test-auto-response")
@@ -743,6 +818,7 @@ class AdminWebControllerTest {
                 new AutoResponseOverride("Olá!", "https://example.com/a.mp4");
         when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
                 .thenReturn(Optional.of(response));
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(
                         post("/admin-web/test-auto-response")
@@ -786,6 +862,26 @@ class AdminWebControllerTest {
                                 .param("chatId", "123"))
                 .andExpect(status().is5xxServerError())
                 .andExpect(content().string(containsString("Erro interno")));
+    }
+
+    @Test
+    @DisplayName("KI-001 residual: testAutoResponse responde 500 se enviarMidia retornar false")
+    void testAutoResponse_midiaRetornaFalse_retorna500() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Olá!", "https://example.com/a.mp4");
+        when(autoResponseService.getResponseRule(any(), eq("oi"), any()))
+                .thenReturn(Optional.of(response));
+        // enviarMidia=false → controller Web NÃO tem fallback explícito → 500 direto
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+        mockMvc.perform(
+                        post("/admin-web/test-auto-response")
+                                .param("message", "oi")
+                                .param("chatId", "123"))
+                .andExpect(status().is5xxServerError())
+                .andExpect(content().string(containsString("Falha ao enviar")));
+
+        verify(telegramFacade).enviarMidia(eq(123L), eq("https://example.com/a.mp4"), anyString());
     }
 
     @Test
@@ -944,7 +1040,6 @@ class AdminWebControllerTest {
 
         controller.testPodcast("2026-01-01", "2026-01-31", 123L, attrs);
 
-        // Async pode demorar; só verifica flash imediato
         assertThat(attrs.getFlashAttributes().get("success").toString())
                 .contains("Podcast agendado");
     }
@@ -1007,6 +1102,158 @@ class AdminWebControllerTest {
         controller.testPodcastDays(7, 123L, attrs);
 
         assertThat(attrs.getFlashAttributes().get("success")).isNotNull();
+    }
+
+    // =========================================================================
+    // 🆕 PODCAST — REENVIO POR SEXTA-FEIRA
+    // =========================================================================
+
+    @Nested
+    @DisplayName("POST /admin-web/podcast/resend")
+    class ResendPodcast {
+
+        @Test
+        @DisplayName("sem friday: usa última sexta e flash success")
+        void semFriday_usaUltimaSexta() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast(null, 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("success").toString())
+                    .contains("Reenvio agendado")
+                    .contains("Chat: 123");
+        }
+
+        @Test
+        @DisplayName("sem friday e sem chatId: usa ownerId")
+        void semFriday_semChatId_usaOwner() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast(null, null, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("success").toString()).contains("999");
+        }
+
+        @Test
+        @DisplayName("friday inválida: flash error")
+        void fridayInvalida_flashError() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast("nao-e-data", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("error").toString())
+                    .contains("Data inválida");
+        }
+
+        @Test
+        @DisplayName("dia que não é sexta: flash error")
+        void diaNaoSexta_flashError() {
+            // 2026-10-13 é uma terça
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast("2026-10-13", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            assertThat(attrs.getFlashAttributes().get("error").toString())
+                    .contains("não é uma sexta-feira");
+        }
+
+        @Test
+        @DisplayName("sexta 09/10/2026: flash success com período correto")
+        void sextaValida_flashSuccess() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            String view = controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+            String flash = attrs.getFlashAttributes().get("success").toString();
+            assertThat(flash).contains("2026-10-09").contains("2026-10-02").contains("Chat: 123");
+        }
+
+        @Test
+        @DisplayName("sexta válida: dispara async com from/to corretos")
+        void sextaValida_disparaAsync() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(podcastPublisherService, atLeastOnce())
+                                            .generateAndSendPodcast(
+                                                    java.time.LocalDate.of(2026, Month.OCTOBER, 2),
+                                                    java.time.LocalDate.of(2026, Month.OCTOBER, 9),
+                                                    123L,
+                                                    java.time.LocalDateTime.of(
+                                                            2026, Month.OCTOBER, 2, 12, 0, 0),
+                                                    java.time.LocalDateTime.of(
+                                                            2026, Month.OCTOBER, 9, 11, 59, 59)));
+        }
+
+        @Test
+        @DisplayName("sexta válida sem chatId: usa ownerId no async")
+        void sextaValida_semChatId_usaOwner() {
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            controller.resendPodcast("2026-10-09", null, attrs);
+
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(podcastPublisherService, atLeastOnce())
+                                            .generateAndSendPodcast(
+                                                    any(), any(), eq(999L), any(), any()));
+        }
+
+        @Test
+        @DisplayName("erro no async: envia mensagem de erro no chat")
+        void erroAsync_enviaMensagem() {
+            doThrow(new RuntimeException("boom"))
+                    .when(podcastPublisherService)
+                    .generateAndSendPodcast(any(), any(), anyLong(), any(), any());
+
+            RedirectAttributes attrs = newRedirectAttributes();
+            controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(telegramFacade, atLeastOnce())
+                                            .enviarMensagem(eq(123L), contains("Erro")));
+        }
+
+        @Test
+        @DisplayName("erro no async + erro ao enviar mensagem: não propaga")
+        void erroAsync_erroEnvioMensagem_naoLanca() {
+            doThrow(new RuntimeException("boom"))
+                    .when(podcastPublisherService)
+                    .generateAndSendPodcast(any(), any(), anyLong(), any(), any());
+            doThrow(new RuntimeException("falha"))
+                    .when(telegramFacade)
+                    .enviarMensagem(anyLong(), anyString());
+
+            RedirectAttributes attrs = newRedirectAttributes();
+
+            // Não deve lançar
+            String view = controller.resendPodcast("2026-10-09", 123L, attrs);
+
+            assertThat(view).isEqualTo("redirect:/admin-web");
+
+            // Aguarda o async terminar antes de validar os stubs
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(telegramFacade, atLeastOnce())
+                                            .enviarMensagem(eq(123L), anyString()));
+        }
     }
 
     // =========================================================================
@@ -1254,7 +1501,6 @@ class AdminWebControllerTest {
     @Test
     @DisplayName("configFiles: retorna mapa com 3 arquivos")
     void configFiles_sucesso() throws Exception {
-        // Resource que não existe → todos retornam "Arquivo não encontrado"
         Resource resource = mock(Resource.class);
         when(resource.exists()).thenReturn(false);
         when(resourceLoader.getResource(anyString())).thenReturn(resource);
@@ -1289,7 +1535,7 @@ class AdminWebControllerTest {
         RedirectAttributes attrs = newRedirectAttributes();
         controller.testWeeklyReminderShowcase(null, attrs);
 
-        verify(weeklyReminderService).sendReminderToChat(AdminUtils.SHOWCASE_CHAT_ID);
+        verify(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
     }
 
     @Test
@@ -1319,5 +1565,17 @@ class AdminWebControllerTest {
                                         "success", "Prompts e personas recarregados com sucesso."));
 
         verify(promptRegistryService).reload();
+    }
+
+    @Test
+    @DisplayName("debugCache: flag 'admin.debug-cache.enabled' off → 404 com mensagem")
+    void debugCache_flagDesabilitada_retorna404() throws Exception {
+        when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled")).thenReturn(false);
+
+        mockMvc.perform(get("/admin-web/debug/cache/file-id"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.erro").value("Debug cache desabilitado por feature flag"));
+
+        verifyNoInteractions(cacheService);
     }
 }
