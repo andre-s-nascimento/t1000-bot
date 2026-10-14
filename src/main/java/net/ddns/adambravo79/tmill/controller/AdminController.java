@@ -230,6 +230,12 @@ public class AdminController {
             @RequestParam("end") String endDate,
             @RequestParam(value = "chatId", required = false) Long chatId) {
 
+        if (!featureFlagAdminService.isEnabled("ai.digest.custom-period.enabled")) {
+            log.warn("📴 Custom digest desabilitado por feature flag.");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body("❌ Custom digest desabilitado. Use os presets (morning/evening).");
+        }
+
         if (startDate == null || startDate.isBlank() || endDate == null || endDate.isBlank()) {
             return ResponseEntity.badRequest().body("Parâmetros 'start' e 'end' são obrigatórios.");
         }

@@ -62,11 +62,11 @@ class FeatureFlagAdminServiceTest {
     class Registro {
 
         @Test
-        @DisplayName("registra exatamente 13 flags no boot")
+        @DisplayName("registra exatamente 18 flags no boot")
         void registers13Flags() {
             adminService.registerKnownFlags();
 
-            assertThat(flagService.list()).hasSize(13);
+            assertThat(flagService.list()).hasSize(18);
         }
 
         @Test
@@ -86,6 +86,12 @@ class FeatureFlagAdminServiceTest {
                             "worldcup.reminders30min.enabled",
                             "easter.eggs.enabled",
                             "admin.features.toggle-enabled",
+                            // ===== Média prioridade — Onda 3.5.2 =====
+                            "weekly.digest.enabled",
+                            "birthday.enabled",
+                            "birthday.group-notification.enabled",
+                            "podcast.fallback-text.enabled",
+                            "ai.digest.custom-period.enabled",
                             // ===== Já existentes =====
                             "worldcup.enabled",
                             "transcription.enabled",

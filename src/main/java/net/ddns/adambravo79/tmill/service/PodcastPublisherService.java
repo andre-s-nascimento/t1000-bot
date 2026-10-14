@@ -386,6 +386,11 @@ public class PodcastPublisherService implements SchedulingConfigurer {
 
     private void enviarRoteiroComoTexto(
             long chatId, String script, LocalDate startDate, LocalDate endDate) {
+        if (!featureFlags.isEnabled("podcast.fallback-text.enabled")) {
+            log.info("📴 Fallback de texto desabilitado por feature flag — enviando só erro.");
+            telegramFacade.enviarMensagem(chatId, "❌ Erro ao gerar áudio do podcast.");
+            return;
+        }
         try {
             String header =
                     String.format(

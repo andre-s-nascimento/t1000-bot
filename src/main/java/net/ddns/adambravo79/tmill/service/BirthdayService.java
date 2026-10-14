@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.Birthday;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.GroupAuthorizationService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -33,6 +34,7 @@ public class BirthdayService {
     private final TelegramFacade telegramFacade;
     private final GroupAuthorizationService groupAuthorizationService;
     private final MetricsService metricsService;
+    private final FeatureFlagAdminService featureFlags;
 
     @Value(
             "${birthday.gif-url:https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2cyem12dm1ldmp0NGR4bHl0NHRqcXBka3pzejN6eHJpeG9nZTliZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/11wifmSGQD9CtW/giphy.gif}")
@@ -99,6 +101,11 @@ public class BirthdayService {
     }
 
     public int enviarParabensPara(int day, int month) {
+        if (!featureFlags.isEnabled("birthday.enabled")) {
+            log.info("🎂 Parabéns desabilitados por feature flag — pulando.");
+            return 0;
+        }
+
         List<Birthday> aniversariantes = repository.findByDayAndMonth(day, month);
 
         if (aniversariantes.isEmpty()) {
@@ -136,7 +143,13 @@ public class BirthdayService {
 
         boolean enviadoPrivado = enviarPrivado(b, mensagem);
 
-        boolean enviadoGrupo = enviarGrupos(b, mensagem);
+        // 🆕 Sub-flag: envia nos grupos apenas se habilitada
+        boolean enviadoGrupo = false;
+        if (featureFlags.isEnabled("birthday.group-notification.enabled")) {
+            enviadoGrupo = enviarGrupos(b, mensagem);
+        } else {
+            log.debug("📴 Notificação em grupo desabilitada — enviando só no privado.");
+        }
 
         return enviadoPrivado || enviadoGrupo;
     }

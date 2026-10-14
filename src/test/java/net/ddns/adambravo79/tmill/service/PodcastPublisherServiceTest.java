@@ -443,4 +443,33 @@ class PodcastPublisherServiceTest {
 
         verify(scriptService).generateScript(any(), any(), any(), any());
     }
+
+    @Test
+    @DisplayName("enviarRoteiroComoTexto: flag 'podcast.fallback-text.enabled' off → só erro")
+    void fallbackText_flagDesabilitada_soErro() {
+        when(featureFlags.isEnabled("podcast.fallback-text.enabled")).thenReturn(false);
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
+        when(ttsClient.synthesizeFullText(anyString()))
+                .thenThrow(new RuntimeException("Azure down"));
+
+        service.generateAndSendPodcast(START, END, CHAT_ID);
+
+        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Erro ao gerar áudio"));
+        verify(telegramFacade, never()).enviarMensagemHtml(eq(CHAT_ID), anyString());
+        verify(metricsService, never()).success("podcast_fallback_texto");
+    }
+
+    @Test
+    @DisplayName("enviarRoteiroComoTexto: flag on → envia roteiro como texto")
+    void fallbackText_flagHabilitada_enviaTexto() {
+        when(featureFlags.isEnabled("podcast.fallback-text.enabled")).thenReturn(true);
+        when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
+        when(ttsClient.synthesizeFullText(anyString()))
+                .thenThrow(new RuntimeException("Azure down"));
+
+        service.generateAndSendPodcast(START, END, CHAT_ID);
+
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), contains("Áudio indisponível"));
+        verify(metricsService).success("podcast_fallback_texto");
+    }
 }

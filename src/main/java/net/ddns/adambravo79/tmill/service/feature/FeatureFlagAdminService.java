@@ -55,6 +55,23 @@ public class FeatureFlagAdminService {
                 "admin.features.toggle-enabled",
                 true,
                 "Permitir alteração de flags via painel admin");
+        // =====================================================================
+        // Média prioridade — Onda 3.5.2
+        // =====================================================================
+        registerBool("weekly.digest.enabled", true, "Giro semanal dos streamings (quinta-feira)");
+        registerBool("birthday.enabled", true, "Parabéns automáticos de aniversário");
+        registerBool(
+                "birthday.group-notification.enabled",
+                true,
+                "Notificar aniversário também nos grupos (senão só no privado)");
+        registerBool(
+                "podcast.fallback-text.enabled",
+                true,
+                "Enviar roteiro como texto quando o áudio do podcast falha");
+        registerBool(
+                "ai.digest.custom-period.enabled",
+                true,
+                "Permitir custom-digest com período arbitrário");
         registerBool("worldcup.enabled", false, "Envio de jogos da Copa do Mundo");
         registerBool("transcription.enabled", true, "Transcrição de áudio (Whisper/Groq)");
         registerBool("auto.response.enabled", true, "Respostas automáticas no chat");

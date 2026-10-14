@@ -59,6 +59,7 @@ class DailyReleasesServiceTest {
 
         // Default: feature flag habilitada (cron roda normalmente)
         lenient().when(featureFlags.isEnabled("daily.releases.enabled")).thenReturn(true);
+        lenient().when(featureFlags.isEnabled("weekly.digest.enabled")).thenReturn(true);
     }
 
     // =========================================================================
@@ -595,5 +596,26 @@ class DailyReleasesServiceTest {
 
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
         verify(releaseRepository, never()).saveFullRelease(any(FullRelease.class));
+    }
+
+    @Test
+    @DisplayName("sendWeeklyDigest: flag 'weekly.digest.enabled' off → pula")
+    void sendWeeklyDigest_flagDesabilitada_pula() {
+        when(featureFlags.isEnabled("weekly.digest.enabled")).thenReturn(false);
+
+        service.sendWeeklyDigest();
+
+        verifyNoInteractions(releaseRepository, telegramFacade);
+    }
+
+    @Test
+    @DisplayName("sendWeeklyDigest: flag 'weekly.digest.enabled' on → executa")
+    void sendWeeklyDigest_flagHabilitada_executa() {
+        when(featureFlags.isEnabled("weekly.digest.enabled")).thenReturn(true);
+        when(releaseRepository.findFullReleasesBetween(any(), any())).thenReturn(List.of());
+
+        service.sendWeeklyDigest();
+
+        verify(releaseRepository).findFullReleasesBetween(any(), any());
     }
 }

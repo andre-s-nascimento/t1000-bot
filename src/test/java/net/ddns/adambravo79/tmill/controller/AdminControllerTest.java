@@ -2310,4 +2310,34 @@ class AdminControllerTest {
         mockMvc.perform(post("/admin/migrate-sqlite").param("dryRun", "false"))
                 .andExpect(status().is(expectedStatus));
     }
+
+    @Test
+    @DisplayName("customDigest: flag 'ai.digest.custom-period.enabled' off → 503")
+    void customDigest_flagDesabilitada_retorna503() throws Exception {
+        when(featureFlagAdminService.isEnabled("ai.digest.custom-period.enabled"))
+                .thenReturn(false);
+
+        mockMvc.perform(
+                        get("/admin/custom-digest")
+                                .param("start", "2026-05-07")
+                                .param("end", "2026-05-08"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(content().string(containsString("Custom digest desabilitado")));
+
+        verifyNoInteractions(dailyDigestService);
+    }
+
+    @Test
+    @DisplayName("customDigest: flag on → executa normalmente")
+    void customDigest_flagHabilitada_executa() throws Exception {
+        when(featureFlagAdminService.isEnabled("ai.digest.custom-period.enabled")).thenReturn(true);
+
+        mockMvc.perform(
+                        get("/admin/custom-digest")
+                                .param("start", "2026-05-07")
+                                .param("end", "2026-05-08"))
+                .andExpect(status().isOk());
+
+        verify(dailyDigestService).generateDigestCustom(any(), any(), isNull());
+    }
 }

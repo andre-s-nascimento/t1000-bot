@@ -150,6 +150,16 @@ public record FeatureFlagDefinition(
 | `easter.eggs.enabled`             | `true`  | ✅       | Easter eggs nas buscas de filmes                         |
 | `admin.features.toggle-enabled`   | `true`  | ✅       | Permite alterar flags via painel admin                   |
 
+### Média prioridade — Onda 3.5.2
+
+| Flag                                  | Default | Editável | O que controla                                 |
+| ------------------------------------- | ------- | -------- | ---------------------------------------------- |
+| `weekly.digest.enabled`               | `true`  | ✅       | Giro semanal dos streamings (quinta 18:30)     |
+| `birthday.enabled`                    | `true`  | ✅       | Parabéns automáticos de aniversário            |
+| `birthday.group-notification.enabled` | `true`  | ✅       | Notificar aniversário também nos grupos        |
+| `podcast.fallback-text.enabled`       | `true`  | ✅       | Enviar roteiro como texto quando o áudio falha |
+| `ai.digest.custom-period.enabled`     | `true`  | ✅       | Permitir custom-digest com período arbitrário  |
+
 ### Já existentes
 
 | Flag                       | Default | Editável | O que controla                                    |

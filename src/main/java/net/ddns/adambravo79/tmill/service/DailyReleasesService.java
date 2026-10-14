@@ -134,6 +134,11 @@ public class DailyReleasesService implements SchedulingConfigurer {
     // =================== GIRO SEMANAL ===================
 
     public void sendWeeklyDigest() {
+        if (!featureFlags.isEnabled("weekly.digest.enabled")) {
+            log.info("📅 Giro semanal desabilitado por feature flag — pulando.");
+            return;
+        }
+
         log.info("📅 Gerando giro semanal dos streamings...");
         if (chatIdsStr == null || chatIdsStr.isBlank()) return;
 

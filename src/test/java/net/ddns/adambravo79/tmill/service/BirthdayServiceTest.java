@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -19,6 +20,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +37,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.Birthday;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.GroupAuthorizationService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -46,6 +49,7 @@ class BirthdayServiceTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private GroupAuthorizationService groupAuthorizationService;
     @Mock private MetricsService metricsService;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private BirthdayService service;
 
@@ -53,6 +57,14 @@ class BirthdayServiceTest {
 
     private void setGif() {
         ReflectionTestUtils.setField(service, "gifUrl", GIF);
+    }
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(featureFlags.isEnabled("birthday.enabled")).thenReturn(true);
+        lenient()
+                .when(featureFlags.isEnabled("birthday.group-notification.enabled"))
+                .thenReturn(true);
     }
 
     // =========================
@@ -388,5 +400,49 @@ class BirthdayServiceTest {
                 .contains("Marilyn Monroe")
                 .contains("1962")
                 .contains("HAPPY BIRTHDAY");
+    }
+
+    @Test
+    @DisplayName("enviarParabensPara: flag 'birthday.enabled' off → retorna 0 e não consulta repo")
+    void enviarParabensPara_flagDesabilitada_pula() {
+        when(featureFlags.isEnabled("birthday.enabled")).thenReturn(false);
+
+        int enviados = service.enviarParabensPara(5, 10);
+
+        assertThat(enviados).isZero();
+        verifyNoInteractions(repository, telegramFacade, groupAuthorizationService);
+    }
+
+    @Test
+    @DisplayName("enviarParabensPara: sub-flag de grupo off → envia só no privado")
+    void enviarParabensPara_grupoOff_soPrivado() {
+        when(featureFlags.isEnabled("birthday.group-notification.enabled")).thenReturn(false);
+        setGif();
+        Birthday b = new Birthday(1L, 100L, "Fulano", 5, 10, null);
+        when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
+        int enviados = service.enviarParabensPara(5, 10);
+
+        assertThat(enviados).isEqualTo(1);
+        verify(telegramFacade, times(1)).enviarMidia(eq(100L), eq(GIF), anyString());
+        verify(groupAuthorizationService, never()).getAllowedGroups();
+    }
+
+    @Test
+    @DisplayName("enviarParabensPara: sub-flag de grupo on → envia no privado e nos grupos")
+    void enviarParabensPara_grupoOn_privadoEGrupos() {
+        when(featureFlags.isEnabled("birthday.group-notification.enabled")).thenReturn(true);
+        setGif();
+        Birthday b = new Birthday(1L, 100L, "Fulano", 5, 10, null);
+        when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
+        when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
+        int enviados = service.enviarParabensPara(5, 10);
+
+        assertThat(enviados).isEqualTo(1);
+        verify(telegramFacade).enviarMidia(eq(100L), eq(GIF), anyString());
+        verify(telegramFacade).enviarMidia(eq(-100L), eq(GIF), anyString());
     }
 }
