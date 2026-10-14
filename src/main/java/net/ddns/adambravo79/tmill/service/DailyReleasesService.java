@@ -28,6 +28,7 @@ import net.ddns.adambravo79.tmill.model.FullRelease;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @Slf4j
@@ -40,15 +41,11 @@ public class DailyReleasesService implements SchedulingConfigurer {
     private final TelegramFacade telegramFacade;
     private final ReleaseNotifiedRepository releaseRepository;
     private final JsonConfigLoader jsonConfigLoader;
+    private final FeatureFlagAdminService featureFlags;
 
     /**
      * Cache de provedores de streaming, injetado via {@link
      * net.ddns.adambravo79.tmill.config.CaffeineConfig#providerCache()}.
-     *
-     * <p>Antes era um campo {@code final} inicializado inline com {@code Caffeine.newBuilder()}, o
-     * que impedia mocká-lo nos testes. Agora é injetado por construtor (via
-     * {@code @RequiredArgsConstructor}), permitindo {@code @Mock} limpo no {@code
-     * DailyReleasesServiceTest}.
      */
     private final Cache<String, String> providerCache;
 
@@ -83,7 +80,19 @@ public class DailyReleasesService implements SchedulingConfigurer {
 
     // =================== NOTIFICAÇÃO A CADA 6 HORAS ===================
 
+    /**
+     * Verificação automática de lançamentos (a cada 6 horas).
+     *
+     * <p><b>Feature flag:</b> se {@code daily.releases.enabled} estiver desabilitada, este método
+     * apenas loga e retorna. O admin ainda pode disparar manualmente via {@code
+     * /admin/test-daily-releases}.
+     */
     public void sendHourlyReleases() {
+        if (!featureFlags.isEnabled("daily.releases.enabled")) {
+            log.info("📅 Verificação de lançamentos desabilitada por feature flag — pulando.");
+            return;
+        }
+
         log.info("⏰ Executando verificação de lançamentos (6 em 6 horas)...");
         if (chatIdsStr == null || chatIdsStr.isBlank()) {
             log.warn("Nenhum chat configurado para lançamentos.");

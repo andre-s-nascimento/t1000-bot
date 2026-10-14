@@ -39,6 +39,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -53,6 +54,7 @@ class PodcastPublisherServiceTest {
     @Mock private MetricsService metricsService;
     @Mock private PromptRegistryService promptRegistryService;
     @Mock private AudioConfigService audioConfig;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private PodcastPublisherService service;
 
@@ -95,6 +97,7 @@ class PodcastPublisherServiceTest {
                         inv ->
                                 Files.createTempFile(
                                         tempDir, inv.getArgument(0), inv.getArgument(1)));
+        lenient().when(featureFlags.isEnabled("podcast.enabled")).thenReturn(true);
     }
 
     // ============================================================
@@ -416,5 +419,28 @@ class PodcastPublisherServiceTest {
         service.generateAndSendPodcast(start, end, CHAT_ID, from, to);
 
         verify(scriptService).generateScript(start, end, from, to);
+    }
+
+    @Test
+    @DisplayName("publishWeeklyPodcast: flag 'podcast.enabled' desabilitada → pula")
+    void publishWeeklyPodcast_flagDesabilitada_pula() {
+        when(featureFlags.isEnabled("podcast.enabled")).thenReturn(false);
+
+        service.publishWeeklyPodcast();
+
+        verifyNoInteractions(scriptService, ttsClient, telegramFacade, metricsService);
+    }
+
+    @Test
+    @DisplayName("publishWeeklyPodcast: flag 'podcast.enabled' habilitada → gera")
+    void publishWeeklyPodcast_flagHabilitada_gera() {
+        when(featureFlags.isEnabled("podcast.enabled")).thenReturn(true);
+        when(scriptService.generateScript(any(), any(), any(), any())).thenReturn("roteiro");
+        when(ttsClient.synthesizeFullText(anyString())).thenReturn("audio".getBytes());
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
+        service.publishWeeklyPodcast();
+
+        verify(scriptService).generateScript(any(), any(), any(), any());
     }
 }

@@ -23,6 +23,7 @@ import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,24 +31,74 @@ class WeeklyReminderServiceTest {
 
     @Mock private TelegramFacade telegramFacade;
     @Mock private JsonConfigLoader jsonConfigLoader;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private WeeklyReminderService service;
+
+    private static final long GROUP_100 = -100L;
+    private static final long GROUP_200 = -200L;
+    private static final String MEDIA_FILE = "/app/media/video.mp4";
 
     @BeforeEach
     void setUp() {
         Set<Long> newAllowedGroups = new HashSet<>();
         ReflectionTestUtils.setField(service, "allowedGroups", newAllowedGroups);
+
+        // Default: feature flag habilitada (cron roda normalmente)
+        lenient().when(featureFlags.isEnabled("weekly.reminder.enabled")).thenReturn(true);
     }
 
-    // =========================
+    // =========================================================================
+    // 🆕 FEATURE FLAG — weekly.reminder.enabled
+    // =========================================================================
+
+    @Test
+    @DisplayName("sendWednesdayReminder: flag 'weekly.reminder.enabled' desabilitada → pula")
+    void sendWednesdayReminder_flagDesabilitada_pula() {
+        when(featureFlags.isEnabled("weekly.reminder.enabled")).thenReturn(false);
+        ReflectionTestUtils.setField(service, "allowedGroups", Set.of(GROUP_100));
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
+
+        service.sendWednesdayReminder();
+
+        verifyNoInteractions(telegramFacade);
+    }
+
+    @Test
+    @DisplayName("sendWednesdayReminder: flag 'weekly.reminder.enabled' habilitada → envia")
+    void sendWednesdayReminder_flagHabilitada_envia() {
+        when(featureFlags.isEnabled("weekly.reminder.enabled")).thenReturn(true);
+        ReflectionTestUtils.setField(service, "allowedGroups", Set.of(GROUP_100));
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
+
+        service.sendWednesdayReminder();
+
+        verify(telegramFacade).enviarMidia(eq(GROUP_100), eq(MEDIA_FILE), contains("quatro horas"));
+    }
+
+    @Test
+    @DisplayName("sendReminderToChat: NÃO valida feature flag (comando explícito do admin)")
+    void sendReminderToChat_naoValidaFeatureFlag() {
+        // Stub intencionalmente órfão: o teste PROVA que sendReminderToChat não consulta a flag.
+        lenient().when(featureFlags.isEnabled("weekly.reminder.enabled")).thenReturn(false);
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
+
+        service.sendReminderToChat(GROUP_100);
+
+        verify(telegramFacade).enviarMidia(eq(GROUP_100), eq(MEDIA_FILE), anyString());
+        // Documenta a intenção: a flag não foi consultada
+        verify(featureFlags, never()).isEnabled("weekly.reminder.enabled");
+    }
+
+    // =========================================================================
     // TESTES DE INICIALIZAÇÃO
-    // =========================
+    // =========================================================================
 
     @Test
     void init_deveCarregarGruposDaPropriedade() {
         String allowedChatsStr = "-100123,-100456";
         ReflectionTestUtils.setField(service, "allowedChatsStr", allowedChatsStr);
-        ReflectionTestUtils.setField(service, "mediaFilePath", "/app/media/video.mp4");
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
 
         service.init();
 
@@ -97,46 +148,44 @@ class WeeklyReminderServiceTest {
         verifyNoInteractions(telegramFacade);
     }
 
-    // =========================
-    // TESTES DE ENVIO (sendWednesdayReminder)
-    // =========================
+    // =========================================================================
+    // ENVIO (sendWednesdayReminder)
+    // =========================================================================
 
     @Test
     void sendWednesdayReminder_deveEnviarParaTodosOsGruposComMidia() {
-        Set<Long> allowedGroups = Set.of(-100L, -200L);
+        Set<Long> allowedGroups = Set.of(GROUP_100, GROUP_200);
         ReflectionTestUtils.setField(service, "allowedGroups", allowedGroups);
-        ReflectionTestUtils.setField(service, "mediaFilePath", "/app/media/video.mp4");
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
 
         service.sendWednesdayReminder();
 
-        verify(telegramFacade)
-                .enviarMidia(eq(-100L), eq("/app/media/video.mp4"), contains("quatro horas"));
-        verify(telegramFacade)
-                .enviarMidia(eq(-200L), eq("/app/media/video.mp4"), contains("quatro horas"));
+        verify(telegramFacade).enviarMidia(eq(GROUP_100), eq(MEDIA_FILE), contains("quatro horas"));
+        verify(telegramFacade).enviarMidia(eq(GROUP_200), eq(MEDIA_FILE), contains("quatro horas"));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
     @Test
     void sendWednesdayReminder_deveEnviarSemMidiaQuandoArquivoVazio() {
-        Set<Long> allowedGroups = Set.of(-100L);
+        Set<Long> allowedGroups = Set.of(GROUP_100);
         ReflectionTestUtils.setField(service, "allowedGroups", allowedGroups);
         ReflectionTestUtils.setField(service, "mediaFilePath", "");
 
         service.sendWednesdayReminder();
 
-        verify(telegramFacade).enviarMensagemHtml(eq(-100L), contains("quatro horas"));
+        verify(telegramFacade).enviarMensagemHtml(eq(GROUP_100), contains("quatro horas"));
         verify(telegramFacade, never()).enviarMidia(anyLong(), anyString(), anyString());
     }
 
     @Test
     void sendWednesdayReminder_deveEnviarSemMidiaQuandoArquivoNull() {
-        Set<Long> allowedGroups = Set.of(-100L);
+        Set<Long> allowedGroups = Set.of(GROUP_100);
         ReflectionTestUtils.setField(service, "allowedGroups", allowedGroups);
         ReflectionTestUtils.setField(service, "mediaFilePath", null);
 
         service.sendWednesdayReminder();
 
-        verify(telegramFacade).enviarMensagemHtml(eq(-100L), contains("quatro horas"));
+        verify(telegramFacade).enviarMensagemHtml(eq(GROUP_100), contains("quatro horas"));
         verify(telegramFacade, never()).enviarMidia(anyLong(), anyString(), anyString());
     }
 
@@ -152,33 +201,32 @@ class WeeklyReminderServiceTest {
 
     @Test
     void sendWednesdayReminder_deveCapturarExcecaoElogar() {
-        Set<Long> allowedGroups = Set.of(-100L);
+        Set<Long> allowedGroups = Set.of(GROUP_100);
         ReflectionTestUtils.setField(service, "allowedGroups", allowedGroups);
-        ReflectionTestUtils.setField(service, "mediaFilePath", "/app/media/video.mp4");
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
 
         doThrow(new RuntimeException("Erro no envio"))
                 .when(telegramFacade)
-                .enviarMidia(eq(-100L), anyString(), anyString());
+                .enviarMidia(eq(GROUP_100), anyString(), anyString());
 
         service.sendWednesdayReminder();
 
-        verify(telegramFacade).enviarMidia(eq(-100L), eq("/app/media/video.mp4"), anyString());
+        verify(telegramFacade).enviarMidia(eq(GROUP_100), eq(MEDIA_FILE), anyString());
         // Não lança exceção, apenas loga o erro
     }
 
-    // =========================
-    // TESTES DE ENVIO (sendReminderToChat)
-    // =========================
+    // =========================================================================
+    // ENVIO (sendReminderToChat)
+    // =========================================================================
 
     @Test
     void sendReminderToChat_deveEnviarParaChatComMidia() {
         long chatId = 12345L;
-        ReflectionTestUtils.setField(service, "mediaFilePath", "/app/media/video.mp4");
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
 
         service.sendReminderToChat(chatId);
 
-        verify(telegramFacade)
-                .enviarMidia(eq(chatId), eq("/app/media/video.mp4"), contains("quatro horas"));
+        verify(telegramFacade).enviarMidia(eq(chatId), eq(MEDIA_FILE), contains("quatro horas"));
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -203,7 +251,7 @@ class WeeklyReminderServiceTest {
     @Test
     void sendReminderToChat_deveCapturarExcecaoElogar() {
         long chatId = 12345L;
-        ReflectionTestUtils.setField(service, "mediaFilePath", "/app/media/video.mp4");
+        ReflectionTestUtils.setField(service, "mediaFilePath", MEDIA_FILE);
 
         doThrow(new RuntimeException("Erro no envio"))
                 .when(telegramFacade)
@@ -211,15 +259,17 @@ class WeeklyReminderServiceTest {
 
         service.sendReminderToChat(chatId);
 
-        verify(telegramFacade).enviarMidia(eq(chatId), eq("/app/media/video.mp4"), anyString());
+        verify(telegramFacade).enviarMidia(eq(chatId), eq(MEDIA_FILE), anyString());
         // Não lança exceção, apenas loga o erro
     }
+
+    // =========================================================================
+    // CONFIGURE TASKS
+    // =========================================================================
 
     @Test
     @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
     void configureTasks_deveRegistrarAsTasksECobrirLambda() {
-        // Preparamos o mock do jsonConfigLoader com todas as chaves possíveis
-        // para que este teste seja reaproveitável em todas as classes
         lenient()
                 .when(jsonConfigLoader.loadConfig(anyString(), eq(Map.class), anyString()))
                 .thenReturn(
@@ -237,16 +287,12 @@ class WeeklyReminderServiceTest {
 
         ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
 
-        // Aciona o método que registra as tarefas
         service.configureTasks(taskRegistrar);
 
-        // Captura as triggers que foram adicionadas
         ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
         verify(taskRegistrar, atLeastOnce())
                 .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
 
-        // Aciona a lambda de cada trigger para cobrir o código do getCron()
-        // 🔧 FIX: Usar SimpleTriggerContext em vez de mock(TriggerContext.class)
         SimpleTriggerContext ctx = new SimpleTriggerContext();
         for (Trigger trigger : triggerCaptor.getAllValues()) {
             trigger.nextExecution(ctx);

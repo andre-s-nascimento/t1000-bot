@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Month;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1182,15 +1183,13 @@ class AdminWebControllerTest {
                             () ->
                                     verify(podcastPublisherService, atLeastOnce())
                                             .generateAndSendPodcast(
-                                                    eq(java.time.LocalDate.of(2026, 10, 2)),
-                                                    eq(java.time.LocalDate.of(2026, 10, 9)),
-                                                    eq(123L),
-                                                    eq(
-                                                            java.time.LocalDateTime.of(
-                                                                    2026, 10, 2, 12, 0, 0)),
-                                                    eq(
-                                                            java.time.LocalDateTime.of(
-                                                                    2026, 10, 9, 11, 59, 59))));
+                                                    java.time.LocalDate.of(2026, Month.OCTOBER, 2),
+                                                    java.time.LocalDate.of(2026, Month.OCTOBER, 9),
+                                                    123L,
+                                                    java.time.LocalDateTime.of(
+                                                            2026, Month.OCTOBER, 2, 12, 0, 0),
+                                                    java.time.LocalDateTime.of(
+                                                            2026, Month.OCTOBER, 9, 11, 59, 59)));
         }
 
         @Test

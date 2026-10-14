@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.core.env.Environment;
 
 import tools.jackson.databind.ObjectMapper;
@@ -25,16 +27,18 @@ import tools.jackson.databind.ObjectMapper;
  * <p>Verifica:
  *
  * <ul>
- *   <li>Registro das 7 flags conhecidas no {@code @PostConstruct}
+ *   <li>Registro das 13 flags conhecidas no {@code @PostConstruct}
  *   <li>Leitura correta dos defaults do {@code Environment}
  *   <li>Delegação para o {@link FeatureFlagService}
  *   <li>Flags read-only são registradas como tal
+ *   <li>{@code toggleWithCheck} respeita a guarda-chuva {@code admin.features.toggle-enabled}
  * </ul>
  *
  * <p>Usa o {@link FeatureFlagService} <b>real</b> (sem persistência) para validar a integração
  * entre os dois serviços — não há mock do {@code FeatureFlagService}, só do {@code Environment}.
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class FeatureFlagAdminServiceTest {
 
     @Mock private Environment environment;
@@ -58,11 +62,11 @@ class FeatureFlagAdminServiceTest {
     class Registro {
 
         @Test
-        @DisplayName("registra exatamente 7 flags no boot")
-        void registersSixFlags() {
+        @DisplayName("registra exatamente 13 flags no boot")
+        void registers13Flags() {
             adminService.registerKnownFlags();
 
-            assertThat(flagService.list()).hasSize(7);
+            assertThat(flagService.list()).hasSize(13);
         }
 
         @Test
@@ -75,13 +79,21 @@ class FeatureFlagAdminServiceTest {
 
             assertThat(keys)
                     .containsExactlyInAnyOrder(
+                            // ===== Alta prioridade — Onda 3.5.1 =====
+                            "podcast.enabled",
+                            "weekly.reminder.enabled",
+                            "daily.releases.enabled",
+                            "worldcup.reminders30min.enabled",
+                            "easter.eggs.enabled",
+                            "admin.features.toggle-enabled",
+                            // ===== Já existentes =====
                             "worldcup.enabled",
                             "transcription.enabled",
                             "auto.response.enabled",
                             "digest.enabled",
                             "worldcup.update.enabled",
-                            "migration.enabled",
-                            "prompts.external.enabled");
+                            "prompts.external.enabled",
+                            "migration.enabled");
         }
 
         @Test
@@ -98,6 +110,16 @@ class FeatureFlagAdminServiceTest {
         void othersAreEditable() {
             adminService.registerKnownFlags();
 
+            // ===== Alta prioridade =====
+            assertThat(flagService.get("podcast.enabled").get().readOnly()).isFalse();
+            assertThat(flagService.get("weekly.reminder.enabled").get().readOnly()).isFalse();
+            assertThat(flagService.get("daily.releases.enabled").get().readOnly()).isFalse();
+            assertThat(flagService.get("worldcup.reminders30min.enabled").get().readOnly())
+                    .isFalse();
+            assertThat(flagService.get("easter.eggs.enabled").get().readOnly()).isFalse();
+            assertThat(flagService.get("admin.features.toggle-enabled").get().readOnly()).isFalse();
+
+            // ===== Já existentes =====
             assertThat(flagService.get("worldcup.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("transcription.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("auto.response.enabled").get().readOnly()).isFalse();
@@ -126,7 +148,7 @@ class FeatureFlagAdminServiceTest {
             adminService.registerKnownFlags();
             adminService.registerKnownFlags();
 
-            assertThat(flagService.list()).hasSize(7);
+            assertThat(flagService.list()).hasSize(13);
         }
     }
 
@@ -207,6 +229,38 @@ class FeatureFlagAdminServiceTest {
 
             assertThat(flagService.isEnabled("worldcup.enabled")).isFalse();
         }
+
+        // =====================================================================
+        // 🆕 Onda 3.5.1 — defaults das novas flags
+        // =====================================================================
+
+        @Test
+        @DisplayName("alta prioridade: todas as 6 novas flags usam default true")
+        void altaPrioridade_defaultTrue() {
+            adminService.registerKnownFlags();
+
+            assertThat(flagService.isEnabled("podcast.enabled")).isTrue();
+            assertThat(flagService.isEnabled("weekly.reminder.enabled")).isTrue();
+            assertThat(flagService.isEnabled("daily.releases.enabled")).isTrue();
+            assertThat(flagService.isEnabled("worldcup.reminders30min.enabled")).isTrue();
+            assertThat(flagService.isEnabled("easter.eggs.enabled")).isTrue();
+            assertThat(flagService.isEnabled("admin.features.toggle-enabled")).isTrue();
+        }
+
+        @Test
+        @DisplayName("alta prioridade: Environment sobrescreve o default")
+        void altaPrioridade_envOverride() {
+            when(environment.getProperty("podcast.enabled")).thenReturn("false");
+            when(environment.getProperty("weekly.reminder.enabled")).thenReturn("false");
+
+            adminService.registerKnownFlags();
+
+            assertThat(flagService.isEnabled("podcast.enabled")).isFalse();
+            assertThat(flagService.isEnabled("weekly.reminder.enabled")).isFalse();
+            // As demais mantêm o default
+            assertThat(flagService.isEnabled("daily.releases.enabled")).isTrue();
+            assertThat(flagService.isEnabled("easter.eggs.enabled")).isTrue();
+        }
     }
 
     // =========================================================================
@@ -218,13 +272,13 @@ class FeatureFlagAdminServiceTest {
     class Delegacao {
 
         @Test
-        @DisplayName("list delega e retorna as 7 flags")
+        @DisplayName("list delega e retorna as 13 flags")
         void listDelegates() {
             adminService.registerKnownFlags();
 
             List<FeatureFlagState> list = adminService.list();
 
-            assertThat(list).hasSize(7);
+            assertThat(list).hasSize(13);
         }
 
         @Test
@@ -235,8 +289,16 @@ class FeatureFlagAdminServiceTest {
             Map<String, Map<String, Object>> map = adminService.listAsMap();
 
             assertThat(map)
-                    .hasSize(7)
+                    .hasSize(13)
                     .containsKeys(
+                            // Alta prioridade
+                            "podcast.enabled",
+                            "weekly.reminder.enabled",
+                            "daily.releases.enabled",
+                            "worldcup.reminders30min.enabled",
+                            "easter.eggs.enabled",
+                            "admin.features.toggle-enabled",
+                            // Já existentes
                             "worldcup.enabled",
                             "transcription.enabled",
                             "auto.response.enabled",
@@ -285,6 +347,65 @@ class FeatureFlagAdminServiceTest {
             assertThatThrownBy(() -> adminService.toggle("nao.existe", true))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Flag desconhecida");
+        }
+    }
+
+    // =========================================================================
+    // 🆕 toggleWithCheck — guarda-chuva admin.features.toggle-enabled
+    // =========================================================================
+
+    @Nested
+    @DisplayName("toggleWithCheck (guarda-chuva)")
+    class ToggleWithCheck {
+
+        @Test
+        @DisplayName("guarda-chuva habilitada: toggle funciona normalmente")
+        void guardaChuvaHabilitada_toggleFunciona() {
+            when(environment.getProperty("podcast.enabled")).thenReturn("false");
+            adminService.registerKnownFlags();
+
+            // Default é true, então toggleWithCheck deve funcionar
+            adminService.toggleWithCheck("podcast.enabled", true);
+
+            assertThat(adminService.isEnabled("podcast.enabled")).isTrue();
+        }
+
+        @Test
+        @DisplayName("guarda-chuva desabilitada: toggleWithCheck lança IllegalStateException")
+        void guardaChuvaDesabilitada_lanca() {
+            when(environment.getProperty("admin.features.toggle-enabled")).thenReturn("false");
+            when(environment.getProperty("podcast.enabled")).thenReturn("false");
+            adminService.registerKnownFlags();
+
+            assertThatThrownBy(() -> adminService.toggleWithCheck("podcast.enabled", true))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Toggle de feature flags desabilitado");
+
+            // A flag alvo NÃO foi alterada
+            assertThat(adminService.isEnabled("podcast.enabled")).isFalse();
+        }
+
+        @Test
+        @DisplayName("guarda-chuva desabilitada: toggle (sem check) ainda funciona")
+        void guardaChuvaDesabilitada_toggleSemCheckFunciona() {
+            when(environment.getProperty("admin.features.toggle-enabled")).thenReturn("false");
+            when(environment.getProperty("podcast.enabled")).thenReturn("false");
+            adminService.registerKnownFlags();
+
+            // O método toggle (sem check) continua permitindo a alteração
+            adminService.toggle("podcast.enabled", true);
+
+            assertThat(adminService.isEnabled("podcast.enabled")).isTrue();
+        }
+
+        @Test
+        @DisplayName("guarda-chuva desabilitada: toggle em flag read-only propaga o erro original")
+        void guardaChuvaHabilitada_toggleReadOnly() {
+            adminService.registerKnownFlags();
+
+            assertThatThrownBy(() -> adminService.toggleWithCheck("migration.enabled", true))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("read-only");
         }
     }
 }

@@ -1,5 +1,4 @@
 /* (c) 2026 | 11/06/2026 */
-
 package net.ddns.adambravo79.tmill.service;
 
 import java.time.Clock;
@@ -37,10 +36,13 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
 
     private static final String WORLDCUP_DESABILITADO = "worldcup_desabilitado";
     private static final String WORLDCUP_ENABLED = "worldcup.enabled";
+    private static final String WORLDCUP_REMINDERS_30MIN_ENABLED =
+            "worldcup.reminders30min.enabled";
     private static final String WORLDCUP_JOGOS_ENVIADOS = "worldcup_jogos_enviados";
     private static final String WORLDCUP_SEM_JOGOS = "worldcup_sem_jogos";
     private static final String POSICAO_PLACAR = "%s (%s) x (%s) %s - %s";
     private static final String FECHA_BOLD = "</b>\n\n";
+
     private final StaticWorldCupService worldCupService;
     private final TelegramFacade telegramFacade;
     private final Set<Long> allowedGroups = new HashSet<>();
@@ -141,8 +143,26 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         sendMatchesMessage(today, "🏆 RESUMO DOS JOGOS DE HOJE");
     }
 
+    /**
+     * Verifica se algum jogo começa em 30 minutos e envia aviso.
+     *
+     * <p>Roda a cada minuto (via {@code checkCron}). O aviso é enviado apenas uma vez por jogo,
+     * rastreado via {@link #remindersSent}.
+     *
+     * <p><b>Feature flag:</b> se {@code worldcup.reminders30min.enabled} estiver desabilitada, este
+     * método apenas retorna. Os jogos continuam sendo enviados nos horários agendados (noon/evening)
+     * — apenas os avisos individuais de 30 min são suprimidos.
+     */
     public void checkThirtyMinutesBeforeEachMatch() {
-        if (!featureFlags.isEnabled(WORLDCUP_ENABLED) || allowedGroups.isEmpty()) return;
+        if (!featureFlags.isEnabled(WORLDCUP_ENABLED)) return;
+
+        if (!featureFlags.isEnabled(WORLDCUP_REMINDERS_30MIN_ENABLED)) {
+            log.debug("⏰ Lembretes 30 min desabilitados por feature flag — pulando.");
+            return;
+        }
+
+        if (allowedGroups.isEmpty()) return;
+
         LocalDate today = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         LocalDateTime now = LocalDateTime.now(clock);
 
@@ -206,7 +226,6 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
 
     private void sendThirtyMinuteReminder(WorldCupMatch match) {
         ZonedDateTime localTime = match.getMatchDateTime(ZoneId.of(BotMessages.BRAZIL_ZONE));
-        // Use a text block for the multi-line message
         String message =
                 """
                 <b>⏰ Faltam 30 minutos para o inicio do jogo!</b>
@@ -275,10 +294,8 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
             return sb.toString();
         }
 
-        // Build the header with scores and possible extra time/penalties
         sb.append(formatScoreHeader(match));
 
-        // Append goals
         List<Goal> allGoals = collectAllGoals(match);
         allGoals.sort(Comparator.comparingInt(g -> parseMinuteToInt(g.minute())));
 
@@ -350,11 +367,6 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
     }
 
     private String determineGoalTeam(Goal goal, WorldCupMatch match) {
-        // Assuming Goal objects do not contain team info; we need to check which list contains the
-        // goal.
-        // Since we don't have a direct link, we can use a simple heuristic: if the goal appears in
-        // home
-        // team's list, it's home.
         if (match.goals1() != null && match.goals1().contains(goal)) {
             return match.homeTeam();
         } else if (match.goals2() != null && match.goals2().contains(goal)) {
@@ -368,7 +380,7 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         minute = minute.trim();
         if (minute.contains("+")) {
             String[] parts = minute.split("\\+");
-            if (parts.length < 2) return 0; // ← adicione esta linha
+            if (parts.length < 2) return 0;
             try {
                 int base = Integer.parseInt(parts[0]);
                 int extra = Integer.parseInt(parts[1]);

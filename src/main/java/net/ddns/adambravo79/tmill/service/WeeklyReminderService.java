@@ -16,6 +16,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 
 @Slf4j
@@ -23,8 +24,16 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 @RequiredArgsConstructor
 public class WeeklyReminderService implements SchedulingConfigurer {
 
+    private static final String REMINDER_MESSAGE =
+            """
+            <i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
+
+            <b>Muito Prazer (1979) - David Neves</b>
+            """;
+
     private final TelegramFacade telegramFacade;
     private final JsonConfigLoader jsonConfigLoader;
+    private final FeatureFlagAdminService featureFlags;
 
     @Value("${bot.allowed-chats:}")
     private String allowedChatsStr;
@@ -70,27 +79,27 @@ public class WeeklyReminderService implements SchedulingConfigurer {
                 .orElse("0 0 16 * * 3");
     }
 
+    /**
+     * Envio automático do lembrete semanal (quarta-feira).
+     *
+     * <p><b>Feature flag:</b> se {@code weekly.reminder.enabled} estiver desabilitada, este método
+     * apenas loga e retorna. O admin ainda pode disparar manualmente via {@link
+     * #sendReminderToChat(Long)} (endpoint {@code /admin/test-weekly-reminder-showcase}).
+     */
     public void sendWednesdayReminder() {
+        if (!featureFlags.isEnabled("weekly.reminder.enabled")) {
+            log.info("📅 Lembrete semanal desabilitado por feature flag — pulando envio.");
+            return;
+        }
+
         if (allowedGroups.isEmpty()) {
             log.info("Nenhum grupo configurado para receber o lembrete semanal.");
             return;
         }
 
-        String message =
-"""
-<i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
-
-<b>Muito Prazer (1979) - David Neves</b>
-""";
-
         for (Long groupId : allowedGroups) {
             try {
-                // dentro do loop de grupos:
-                if (mediaFilePath != null && !mediaFilePath.isBlank()) {
-                    telegramFacade.enviarMidia(groupId, mediaFilePath, message);
-                } else {
-                    telegramFacade.enviarMensagemHtml(groupId, message);
-                }
+                sendReminder(groupId);
                 log.info("Lembrete semanal enviado para grupo {}", groupId);
             } catch (Exception e) {
                 log.error("Erro ao enviar lembrete para grupo {}: {}", groupId, e.getMessage());
@@ -98,27 +107,33 @@ public class WeeklyReminderService implements SchedulingConfigurer {
         }
     }
 
+    /**
+     * Envio manual do lembrete para um chat específico.
+     *
+     * <p><b>Não valida feature flag</b> — é um comando explícito do admin.
+     */
     public void sendReminderToChat(Long chatId) {
         if (chatId == null) {
             log.warn("chatId nulo, ignorando envio de lembrete");
             return;
         }
-        String message =
-"""
-<i>"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>"
-
-<b>Muito Prazer (1979) - David Neves</b>
-""";
-
         try {
-            if (mediaFilePath != null && !mediaFilePath.isBlank()) {
-                telegramFacade.enviarMidia(chatId, mediaFilePath, message);
-            } else {
-                telegramFacade.enviarMensagemHtml(chatId, message);
-            }
+            sendReminder(chatId);
             log.info("Lembrete semanal enviado para chat {}", chatId);
         } catch (Exception e) {
             log.error("Erro ao enviar lembrete para chat {}: {}", chatId, e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // HELPERS PRIVADOS
+    // =========================================================================
+
+    private void sendReminder(long chatId) {
+        if (mediaFilePath != null && !mediaFilePath.isBlank()) {
+            telegramFacade.enviarMidia(chatId, mediaFilePath, REMINDER_MESSAGE);
+        } else {
+            telegramFacade.enviarMensagemHtml(chatId, REMINDER_MESSAGE);
         }
     }
 }

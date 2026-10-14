@@ -64,11 +64,12 @@ class WorldCupSchedulerServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Flag da Copa habilitada por padrão em todos os testes.
-        // lenient() evita UnnecessaryStubbingException nos testes que não consultam a flag.
+        // Flag mestra da Copa habilitada por padrão
         lenient().when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(true);
+        // 🆕 Nova flag: reminders 30min habilitada por padrão
+        lenient().when(featureFlags.isEnabled("worldcup.reminders30min.enabled")).thenReturn(true);
 
-        // Como o WorldCupSchedulerService agora delega para WorldCupTeamsService,
+        // Como o WorldCupSchedulerService delega para WorldCupTeamsService,
         // configuramos respostas determinísticas para os times usados nos testes.
         lenient()
                 .when(teamsService.translateTeam(anyString()))
@@ -110,6 +111,86 @@ class WorldCupSchedulerServiceTest {
         service.init();
     }
 
+    // =========================================================================
+    // 🆕 FEATURE FLAG — worldcup.reminders30min.enabled
+    // =========================================================================
+
+    @Test
+    @DisplayName("checkThirtyMinutes: flag 'worldcup.reminders30min.enabled' off → pula")
+    void checkThirtyMinutos_reminders30minOff_pula() {
+        when(featureFlags.isEnabled("worldcup.reminders30min.enabled")).thenReturn(false);
+
+        service.checkThirtyMinutesBeforeEachMatch();
+
+        verifyNoInteractions(worldCupService, telegramFacade, metricsService);
+    }
+
+    @Test
+    @DisplayName("checkThirtyMinutes: flag 'worldcup.enabled' off → pula mesmo com reminders on")
+    void checkThirtyMinutos_worldcupOff_pula() {
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
+
+        service.checkThirtyMinutesBeforeEachMatch();
+
+        verifyNoInteractions(worldCupService, telegramFacade, metricsService);
+        // worldcup.enabled foi consultada (pelo init + pelo método)
+        verify(featureFlags, atLeastOnce()).isEnabled("worldcup.enabled");
+        verify(featureFlags, never()).isEnabled("worldcup.reminders30min.enabled");
+    }
+
+    @Test
+    @DisplayName("checkThirtyMinutes: flag 'worldcup.reminders30min.enabled' on → envia lembrete")
+    void checkThirtyMinutos_reminders30minOn_envia() {
+        ZoneId zone = ZoneId.of("America/Sao_Paulo");
+        // 2026-07-01 11:30:01 BRT = 14:30:01 UTC
+        Clock fixed = Clock.fixed(Instant.parse("2026-07-01T14:30:01Z"), zone);
+
+        WorldCupSchedulerService serviceWithClock =
+                new WorldCupSchedulerService(
+                        worldCupService,
+                        telegramFacade,
+                        worldCupUpdaterService,
+                        fixed,
+                        metricsService,
+                        featureFlags,
+                        jsonConfigLoader,
+                        teamsService);
+
+        Set<Long> groups = new HashSet<>();
+        groups.add(-100L);
+        ReflectionTestUtils.setField(serviceWithClock, "allowedGroups", groups);
+        ReflectionTestUtils.setField(serviceWithClock, "allowedChatsStr", "");
+
+        LocalDate date = LocalDate.now(fixed);
+        WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
+
+        serviceWithClock.checkThirtyMinutesBeforeEachMatch();
+
+        verify(telegramFacade).enviarMensagemHtml(eq(-100L), contains("Faltam 30 minutos"));
+        verify(metricsService).success("worldcup_lembrete_30min_enviado");
+    }
+
+    @Test
+    @DisplayName("Reminders 30min desabilitada: noon/evening seguem funcionando")
+    void reminders30minOff_noonEEveningFuncionam() {
+        // NÃO stuba 'worldcup.reminders30min.enabled':
+        // noon/evening só olham 'worldcup.enabled' (que está true no setUp)
+
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
+
+        service.sendNoonMatches();
+        service.sendEveningMatches();
+
+        verify(telegramFacade, times(2)).enviarMensagemHtml(eq(-100L), anyString());
+        verify(metricsService, times(2)).success("worldcup_jogos_enviados");
+        verify(metricsService, never()).success("worldcup_lembrete_30min_enviado");
+        // Prova explícita: nenhuma das chamadas consultou a flag de reminders
+        verify(featureFlags, never()).isEnabled("worldcup.reminders30min.enabled");
+    }
+
     // ============================================================
     // PARSE MINUTE
     // ============================================================
@@ -129,7 +210,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendMatchesMessage (privado, broadcast)
+    // sendMatchesMessage (privado, broadcast)
     // ============================================================
 
     @Test
@@ -196,7 +277,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendThirtyMinuteReminder
+    // sendThirtyMinuteReminder
     // ============================================================
 
     @Test
@@ -216,7 +297,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendResultsToChat
+    // sendResultsToChat
     // ============================================================
 
     @Test
@@ -348,7 +429,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendMatchesToChat (público)
+    // sendMatchesToChat
     // ============================================================
 
     @Test
@@ -393,7 +474,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendMatchesMessageToChat (privado)
+    // sendMatchesMessageToChat
     // ============================================================
 
     @Test
@@ -461,7 +542,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — métodos *ToChat (noon/evening/manual)
+    // *ToChat (noon/evening/manual)
     // ============================================================
 
     @Test
@@ -531,7 +612,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendManualTest (broadcast)
+    // sendManualTest (broadcast)
     // ============================================================
 
     @Test
@@ -566,43 +647,8 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // LEMBRETES 30 MIN — checkThirtyMinutesBeforeEachMatch
+    // LEMBRETES 30 MIN (com Clock fixo)
     // ============================================================
-
-    @Test
-    @DisplayName("checkThirtyMinutesBeforeEachMatch: 11:30 dispara lembrete e registra métrica")
-    void checkThirtyMinutos_disparaRegistraMetrica() {
-        ZoneId zone = ZoneId.of("America/Sao_Paulo");
-        // 2026-07-01 11:30:01 BRT = 14:30:01 UTC
-        Clock fixed = Clock.fixed(Instant.parse("2026-07-01T14:30:01Z"), zone);
-
-        // Reconstrói o serviço com o Clock fixo (o campo é final, não pode ser alterado via
-        // reflection)
-        WorldCupSchedulerService serviceWithClock =
-                new WorldCupSchedulerService(
-                        worldCupService,
-                        telegramFacade,
-                        worldCupUpdaterService,
-                        fixed,
-                        metricsService,
-                        featureFlags,
-                        jsonConfigLoader,
-                        teamsService);
-
-        Set<Long> groups = new HashSet<>();
-        groups.add(-100L);
-        ReflectionTestUtils.setField(serviceWithClock, "allowedGroups", groups);
-        ReflectionTestUtils.setField(serviceWithClock, "allowedChatsStr", "");
-
-        LocalDate date = LocalDate.now(fixed);
-        WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
-
-        serviceWithClock.checkThirtyMinutesBeforeEachMatch();
-
-        verify(telegramFacade).enviarMensagemHtml(eq(-100L), contains("Faltam 30 minutos"));
-        verify(metricsService).success("worldcup_lembrete_30min_enviado");
-    }
 
     @Test
     @DisplayName("checkThirtyMinutes: lembrete duplicado não reenvia")
@@ -622,15 +668,15 @@ class WorldCupSchedulerServiceTest {
     }
 
     @Test
-    @DisplayName("checkThirtyMinutes: disabled não faz nada")
-    void checkThirtyMinutos_disabled() {
+    @DisplayName("checkThirtyMinutes: worldcup desabilitado → pula")
+    void checkThirtyMinutos_worldcupDisabled() {
         when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.checkThirtyMinutesBeforeEachMatch();
         verifyNoInteractions(worldCupService, telegramFacade, metricsService);
     }
 
     @Test
-    @DisplayName("checkThirtyMinutes: sem grupos não faz nada")
+    @DisplayName("checkThirtyMinutes: sem grupos → pula")
     void checkThirtyMinutos_semGrupos() {
         ReflectionTestUtils.setField(service, "allowedGroups", new HashSet<>());
         service.checkThirtyMinutesBeforeEachMatch();
@@ -638,7 +684,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // AGENDADOS
+    // sendNoonMatches / sendEveningMatches (broadcast)
     // ============================================================
 
     @Test
@@ -684,7 +730,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // CLEAN REMINDERS
+    // cleanReminders
     // ============================================================
 
     @Test
@@ -702,7 +748,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // RELOAD
+    // reloadWorldCup
     // ============================================================
 
     @Test
@@ -715,7 +761,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // INIT
+    // init
     // ============================================================
 
     @Test
@@ -739,7 +785,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // CONTAGEM DE MÉTRICAS EM FLUXO COMPLEXO
+    // Fluxos complexos
     // ============================================================
 
     @Test
@@ -777,7 +823,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // CONFIGURE TASKS
+    // configureTasks
     // ============================================================
 
     @Test

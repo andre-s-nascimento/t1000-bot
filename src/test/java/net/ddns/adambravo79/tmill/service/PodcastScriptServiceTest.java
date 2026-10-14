@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Month;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -99,10 +100,10 @@ class PodcastScriptServiceTest {
     @Test
     @DisplayName("generateScript com from/to filtra por timestamp preciso")
     void generateScript_comIntervaloPreciso_filtraPorTimestamp() {
-        LocalDate start = LocalDate.of(2026, 10, 2);
-        LocalDate end = LocalDate.of(2026, 10, 9);
-        LocalDateTime from = LocalDateTime.of(2026, 10, 2, 12, 0, 0);
-        LocalDateTime to = LocalDateTime.of(2026, 10, 9, 11, 59, 59);
+        LocalDate start = LocalDate.of(2026, Month.OCTOBER, 2);
+        LocalDate end = LocalDate.of(2026, Month.OCTOBER, 9);
+        LocalDateTime from = LocalDateTime.of(2026, Month.OCTOBER, 2, 12, 0, 0);
+        LocalDateTime to = LocalDateTime.of(2026, Month.OCTOBER, 9, 11, 59, 59);
 
         when(jdbcTemplate.queryForList(
                         anyString(), eq(String.class), eq(123456L), eq(from), eq(to)))

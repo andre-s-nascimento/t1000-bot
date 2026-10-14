@@ -16,6 +16,7 @@ import net.ddns.adambravo79.tmill.model.CastRecord;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 /**
@@ -31,14 +32,17 @@ public class MovieService {
     private final TmdbClient tmdbClient;
     private final EasterEggService easterEggService;
     private final MetricsService metricsService;
+    private final FeatureFlagAdminService featureFlags;
 
     public MovieService(
             TmdbClient tmdbClient,
             EasterEggService easterEggService,
-            MetricsService metricsService) {
+            MetricsService metricsService,
+            FeatureFlagAdminService featureFlags) {
         this.tmdbClient = tmdbClient;
         this.easterEggService = easterEggService;
         this.metricsService = metricsService;
+        this.featureFlags = featureFlags;
     }
 
     /**
@@ -68,6 +72,9 @@ public class MovieService {
 
     /**
      * Busca detalhes completos de um filme diretamente pelo ID no TMDB.
+     *
+     * <p><b>Feature flag:</b> se {@code easter.eggs.enabled} estiver desabilitada, o easter egg
+     * não é consultado nem concatenado à resposta. O restante do fluxo permanece inalterado.
      *
      * @param id identificador único do filme no TMDB.
      * @return {@link MovieOrchestrationResponse} com texto formatado e URL do poster.
@@ -101,8 +108,12 @@ public class MovieService {
             String elenco = formatCast(elencoFuture.join());
             String diretor = diretorFuture.join();
             String streamings = streamingsFuture.join();
-            String easterEgg =
-                    easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse("");
+
+            // 🆕 Feature flag: só consulta o easter egg se a flag estiver habilitada
+            String easterEgg = "";
+            if (featureFlags.isEnabled("easter.eggs.enabled")) {
+                easterEgg = easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse("");
+            }
 
             String textoHtml =
                     buildResponseText(
@@ -112,7 +123,6 @@ public class MovieService {
             MovieOrchestrationResponse response =
                     new MovieOrchestrationResponse(textoHtml, urlPoster);
 
-            // 👇 ADICIONAR
             metricsService.success("tmdb_buscar_detalhes");
 
             return response;

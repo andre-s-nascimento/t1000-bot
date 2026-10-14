@@ -44,6 +44,17 @@ public class FeatureFlagAdminService {
 
     @PostConstruct
     public void registerKnownFlags() {
+        // --- Alta prioridade (Onda 3.5.1) ---
+        registerBool("podcast.enabled", true, "Publicação automática semanal do podcast");
+        registerBool("weekly.reminder.enabled", true, "Lembrete semanal de quarta-feira");
+        registerBool("daily.releases.enabled", true, "Notificação de lançamentos a cada 6h");
+        registerBool(
+                "worldcup.reminders30min.enabled", true, "Aviso 30 min antes de cada jogo da Copa");
+        registerBool("easter.eggs.enabled", true, "Easter eggs nas buscas de filmes");
+        registerBool(
+                "admin.features.toggle-enabled",
+                true,
+                "Permitir alteração de flags via painel admin");
         registerBool("worldcup.enabled", false, "Envio de jogos da Copa do Mundo");
         registerBool("transcription.enabled", true, "Transcrição de áudio (Whisper/Groq)");
         registerBool("auto.response.enabled", true, "Respostas automáticas no chat");
@@ -77,6 +88,10 @@ public class FeatureFlagAdminService {
         return flagService.isEnabled(key);
     }
 
+    /**
+     * @deprecated Use {@link #toggleWithCheck(String, boolean)} — que valida a guarda-chuva.
+     */
+    @Deprecated(since = "2.6.0")
     public void toggle(String key, boolean enabled) {
         flagService.toggle(key, enabled);
     }
@@ -101,5 +116,21 @@ public class FeatureFlagAdminService {
             return defaultValue;
         }
         return Boolean.parseBoolean(raw.trim());
+    }
+
+    /**
+     * Altera uma flag com verificação da flag guarda-chuva {@code admin.features.toggle-enabled}.
+     *
+     * <p>Se a guarda-chuva estiver desabilitada, qualquer toggle lança {@link IllegalStateException}.
+     * Isso evita que alguém desabilite uma flag por engano enquanto a própria governança está
+     * bloqueada.
+     */
+    public void toggleWithCheck(String key, boolean enabled) {
+        if (!flagService.isEnabled("admin.features.toggle-enabled")) {
+            throw new IllegalStateException(
+                    "Toggle de feature flags desabilitado. Habilite "
+                            + "'admin.features.toggle-enabled' para continuar.");
+        }
+        flagService.toggle(key, enabled);
     }
 }

@@ -3,6 +3,7 @@ package net.ddns.adambravo79.tmill.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +27,7 @@ import net.ddns.adambravo79.tmill.model.CastRecord;
 import net.ddns.adambravo79.tmill.model.MovieOrchestrationResponse;
 import net.ddns.adambravo79.tmill.model.MovieRecord;
 import net.ddns.adambravo79.tmill.model.MovieSearchResponse;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,12 +36,64 @@ class MovieServiceTest {
     @Mock private TmdbClient tmdbClient;
     @Mock private EasterEggService easterEggService;
     @Mock private MetricsService metricsService;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private MovieService movieService;
 
-    // ============================================================
+    @BeforeEach
+    void setUp() {
+        // Default: easter eggs habilitados (mantém os testes existentes passando)
+        lenient().when(featureFlags.isEnabled("easter.eggs.enabled")).thenReturn(true);
+    }
+
+    // =========================================================================
+    // 🆕 FEATURE FLAG — easter.eggs.enabled
+    // =========================================================================
+
+    @Test
+    @DisplayName("buscarPorId: flag 'easter.eggs.enabled' off → não consulta easter egg")
+    void buscarPorId_easterEggsOff_naoConsulta() {
+        when(featureFlags.isEnabled("easter.eggs.enabled")).thenReturn(false);
+        Long id = 42L;
+        stubMovieWithFullDetails(id, "Filme");
+
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result.textoFormatado()).doesNotContain("Easter Egg");
+        verifyNoInteractions(easterEggService);
+    }
+
+    @Test
+    @DisplayName("buscarPorId: flag 'easter.eggs.enabled' on → consulta easter egg")
+    void buscarPorId_easterEggsOn_consulta() {
+        when(featureFlags.isEnabled("easter.eggs.enabled")).thenReturn(true);
+        Long id = 42L;
+        stubMovieWithFullDetails(id, "Filme");
+        when(easterEggService.getEasterEgg(id)).thenReturn(Optional.of("🎬 Easter Egg!"));
+
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result.textoFormatado()).contains("Easter Egg!");
+        verify(easterEggService).getEasterEgg(id);
+    }
+
+    @Test
+    @DisplayName("buscarPorId: flag off → easter egg presente no service mas ignorado")
+    void buscarPorId_easterEggsOff_ignoraEggDisponivel() {
+        when(featureFlags.isEnabled("easter.eggs.enabled")).thenReturn(false);
+        Long id = 42L;
+        stubMovieWithFullDetails(id, "Filme");
+
+        // Mesmo que o service tenha um egg para o id, não deve ser consultado
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result.textoFormatado()).doesNotContain("🎬 Easter Egg!");
+        verify(easterEggService, never()).getEasterEgg(anyLong());
+    }
+
+    // =========================================================================
     // buscarFilme — validações de entrada (não devem registrar métrica)
-    // ============================================================
+    // =========================================================================
 
     @Test
     @DisplayName("buscarFilme: termo curto lança exceção e não registra métrica")
@@ -62,9 +117,9 @@ class MovieServiceTest {
         verifyNoInteractions(metricsService);
     }
 
-    // ============================================================
+    // =========================================================================
     // buscarFilme — sucesso
-    // ============================================================
+    // =========================================================================
 
     @Test
     @DisplayName("buscarFilme: sucesso registra métrica success")
@@ -72,8 +127,6 @@ class MovieServiceTest {
         MovieRecord filme =
                 new MovieRecord(1L, "Filme", "Movie", "2020", "", 1.0, 1.0, "", List.of());
 
-        // 🔧 FIX: o MovieService sanitiza removendo @ e # mas MANTÉM acentos.
-        // Portanto o stub precisa ser "válidotermo" (com acento).
         when(tmdbClient.pesquisarFilme("válidotermo"))
                 .thenReturn(new MovieSearchResponse(1, 1, 1, List.of(filme)));
 
@@ -84,9 +137,9 @@ class MovieServiceTest {
         verify(metricsService, never()).error("tmdb_buscar_filme");
     }
 
-    // ============================================================
+    // =========================================================================
     // buscarFilme — falha
-    // ============================================================
+    // =========================================================================
 
     @Test
     @DisplayName("buscarFilme: null retorna erro e registra métrica error")
@@ -114,9 +167,9 @@ class MovieServiceTest {
         verify(metricsService, never()).success("tmdb_buscar_filme");
     }
 
-    // ============================================================
+    // =========================================================================
     // buscarPorId — sucesso
-    // ============================================================
+    // =========================================================================
 
     @Test
     @DisplayName("buscarPorId: sucesso registra métrica success")
@@ -263,9 +316,9 @@ class MovieServiceTest {
         assertThat(result.urlFoto()).isEmpty();
     }
 
-    // ============================================================
+    // =========================================================================
     // buscarPorId — falha
-    // ============================================================
+    // =========================================================================
 
     @Test
     @DisplayName("buscarPorId: detalhes null lança exceção e registra métrica error")
@@ -291,9 +344,9 @@ class MovieServiceTest {
         verify(metricsService, never()).success("tmdb_buscar_detalhes");
     }
 
-    // ============================================================
-    // Isolamento: cada chamada bem-sucedida registra exatamente 1 métrica
-    // ============================================================
+    // =========================================================================
+    // Isolamento — cada chamada bem-sucedida registra exatamente 1 métrica
+    // =========================================================================
 
     @Test
     @DisplayName("buscarPorId: cada execução registra exatamente 1 success")
@@ -307,9 +360,9 @@ class MovieServiceTest {
         verify(metricsService, never()).error("tmdb_buscar_detalhes");
     }
 
-    // ============================================================
+    // =========================================================================
     // HELPERS
-    // ============================================================
+    // =========================================================================
 
     private void stubMovieWithFullDetails(Long id, String title) {
         MovieRecord movie =
@@ -328,6 +381,6 @@ class MovieServiceTest {
                 .thenReturn(List.of(new CastRecord("Wagner Moura", "Marcelo")));
         when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor Teste");
         when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Netflix");
-        when(easterEggService.getEasterEgg(anyLong())).thenReturn(Optional.empty());
+        lenient().when(easterEggService.getEasterEgg(anyLong())).thenReturn(Optional.empty());
     }
 }

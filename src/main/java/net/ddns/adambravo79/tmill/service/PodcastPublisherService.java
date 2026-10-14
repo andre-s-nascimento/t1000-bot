@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
 import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -37,6 +38,7 @@ public class PodcastPublisherService implements SchedulingConfigurer {
     private final MetricsService metricsService;
     private final PromptRegistryService promptRegistryService;
     private final AudioConfigService audioConfig;
+    private final FeatureFlagAdminService featureFlags;
 
     @Value("${podcast.publish.chat-id}")
     private long publishChatId;
@@ -62,7 +64,20 @@ public class PodcastPublisherService implements SchedulingConfigurer {
                                 .nextExecution(ctx));
     }
 
+    /**
+     * Publicação semanal agendada via cron.
+     *
+     * <p><b>Feature flag:</b> se {@code podcast.enabled} estiver desabilitada, este método apenas
+     * loga e retorna sem fazer nada. O admin ainda pode disparar manualmente via {@link
+     * #generateAndSendPodcast(LocalDate, LocalDate, long)} (endpoints {@code /admin/test-podcast},
+     * {@code /admin/podcast/resend}).
+     */
     public void publishWeeklyPodcast() {
+        if (!featureFlags.isEnabled("podcast.enabled")) {
+            log.info("🎧 Podcast desabilitado por feature flag — pulando publicação semanal.");
+            return;
+        }
+
         log.info("🎧 Iniciando geração do podcast semanal (Sexta-feira)...");
 
         LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
@@ -72,15 +87,31 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         generateAndSendPodcast(startOfWeek, endOfWeek, publishChatId);
     }
 
+    // =========================================================================
+    // SOBRECARGA 1: dia inteiro (3 args)
+    // =========================================================================
+
+    /**
+     * Gera e envia o podcast para um intervalo de dias (00:00 → 23:59).
+     *
+     * <p>Usado pelos endpoints administrativos e pelo cron semanal. NÃO valida feature flags —
+     * chamadas administrativas explícitas devem funcionar independentemente de {@code
+     * podcast.enabled}.
+     */
     public void generateAndSendPodcast(LocalDate startDate, LocalDate endDate, long chatId) {
         generateAndSendPodcast(startDate, endDate, chatId, null, null);
     }
 
+    // =========================================================================
+    // SOBRECARGA 2: intervalo preciso (5 args)
+    // =========================================================================
+
     /**
      * Gera e envia o podcast respeitando um intervalo preciso de {@link LocalDateTime}.
      *
-     * <p>Se {@code from} e {@code to} forem nulos, cai no comportamento antigo (dia inteiro).
-     * Usado pelo endpoint de reenvio por sexta-feira.
+     * <p>Se {@code from} e {@code to} forem nulos, cai no comportamento antigo (dia inteiro). Usado
+     * pelo endpoint de reenvio por sexta-feira para respeitar o intervalo {@code sexta 12:00 →
+     * sexta 11:59:59}.
      */
     public void generateAndSendPodcast(
             LocalDate startDate,
@@ -111,7 +142,7 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         byte[] audioData = generateAndProcessAudio(script, chatId, startDate, endDate);
 
         if (audioData.length == 0) {
-            return;
+            return; // O fluxo foi encerrado (com fallback disparado) nos sub-métodos
         }
 
         // 3 e 4. Prepara arquivo, salva e envia
@@ -126,6 +157,10 @@ public class PodcastPublisherService implements SchedulingConfigurer {
                 script.length());
         log.info("✅ Podcast finalizado em {}ms", System.currentTimeMillis() - start);
     }
+
+    // =========================================================================
+    // ETAPAS INTERNAS
+    // =========================================================================
 
     private byte[] generateAndProcessAudio(
             String script, long chatId, LocalDate startDate, LocalDate endDate) {
@@ -315,9 +350,8 @@ public class PodcastPublisherService implements SchedulingConfigurer {
     /**
      * Tenta enviar o áudio até {@code maxRetryAttempts} vezes.
      *
-     * <p><b>KI-001:</b> só faz retry se {@link TelegramFacade#enviarMidia} retornar
-     * {@code false} ou lançar exceção. Depende do 3/5 (TelegramFacade mudando a
-     * assinatura para {@code boolean}).
+     * <p><b>KI-001:</b> só faz retry se {@link TelegramFacade#enviarMidia} retornar {@code false} ou
+     * lançar exceção.
      */
     private boolean sendWithRetry(long chatId, Path file, String caption) {
         for (int attempt = 1; attempt <= maxRetryAttempts; attempt++) {
