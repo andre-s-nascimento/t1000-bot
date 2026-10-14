@@ -53,13 +53,14 @@ public class TelegramSafeExecutor {
      * Tenta enviar a mensagem de fallback. Erros são logados mas não propagados — o fallback é a
      * última linha de defesa.
      *
-     * <p>Captura {@link TelegramException} porque {@link TelegramSender#enviar(long, String)} a
-     * declara como <b>checked exception</b> (não é {@link RuntimeException}).
+     * <p>Captura {@link TelegramException} (checked, declarada por {@link
+     * TelegramSender#enviar}) e {@link RuntimeException} (para cobrir erros inesperados dos
+     * mocks de teste e wrappers).
      */
     private void enviarFallback(Long chatId, TelegramSender fallback) {
         try {
             fallback.enviar(chatId, FALLBACK_MESSAGE);
-        } catch (TelegramException fallbackError) {
+        } catch (TelegramException | RuntimeException fallbackError) {
             log.error("❌ Fallback também falhou chatId={}", chatId, fallbackError);
         }
     }

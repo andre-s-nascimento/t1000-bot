@@ -34,6 +34,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 class SecurityConfigTest {
@@ -60,6 +61,7 @@ class SecurityConfigTest {
         @Autowired private SecurityConfig securityConfig;
 
         @MockitoBean private MetricsService metricsService;
+        @MockitoBean private FeatureFlagAdminService featureFlagAdminService;
 
         @Test
         @DisplayName("GET /admin/** sem auth → 401 JSON")
@@ -120,6 +122,7 @@ class SecurityConfigTest {
 
         @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
         @MockitoBean private MetricsService metricsService;
+        @MockitoBean private FeatureFlagAdminService featureFlagAdminService;
 
         @Test
         @DisplayName("ClientRegistrationRepository retorna null quando credenciais vazias")

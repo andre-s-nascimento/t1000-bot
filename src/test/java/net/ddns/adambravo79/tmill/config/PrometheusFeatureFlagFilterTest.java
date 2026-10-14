@@ -1,6 +1,6 @@
 package net.ddns.adambravo79.tmill.config;
 
-import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -28,6 +28,8 @@ import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 @ExtendWith(MockitoExtension.class)
 class PrometheusFeatureFlagFilterTest {
 
+    private static final String FLAG = "metrics.prometheus.enabled";
+
     @Mock private FeatureFlagAdminService featureFlags;
     @Mock private FilterChain chain;
 
@@ -40,9 +42,7 @@ class PrometheusFeatureFlagFilterTest {
     void setUp() {
         request = new MockHttpServletRequest();
         response = new MockHttpServletResponse();
-
-        // Default: flag habilitada (não bloqueia)
-        lenient().when(featureFlags.isEnabled("metrics.prometheus.enabled")).thenReturn(true);
+        // 🔧 FIX: sem stub default — cada teste parametrizado stuba explicitamente
     }
 
     // =========================================================================
@@ -51,7 +51,6 @@ class PrometheusFeatureFlagFilterTest {
 
     static Stream<Arguments> deveDeixarPassar() {
         return Stream.of(
-                // (flagEnabled, requestUri, descrição)
                 Arguments.of(true, "/actuator/prometheus", "flag on + /actuator/prometheus"),
                 Arguments.of(true, "/actuator/prometheus/subpath", "flag on + subpath"),
                 Arguments.of(false, "/actuator/health", "flag off + /actuator/health"),
@@ -65,13 +64,15 @@ class PrometheusFeatureFlagFilterTest {
     void deveDeixarPassar(boolean flagEnabled, String requestUri, String descricao)
             throws ServletException, IOException {
 
-        when(featureFlags.isEnabled("metrics.prometheus.enabled")).thenReturn(flagEnabled);
+        // 🔧 lenient: para URIs fora de /actuator/prometheus, a flag NÃO é consultada
+        // (short-circuit do &&). O stub é intencionalmente órfão nesses casos.
+        lenient().when(featureFlags.isEnabled(FLAG)).thenReturn(flagEnabled);
         request.setRequestURI(requestUri);
 
         filter.doFilterInternal(request, response, chain);
 
         verify(chain).doFilter(request, response);
-        verify(response, never()).setStatus(any(Integer.class));
+        assertThat(response.getStatus()).isEqualTo(200);
     }
 
     // =========================================================================
@@ -89,12 +90,12 @@ class PrometheusFeatureFlagFilterTest {
     @DisplayName("Filtro deve retornar 404 quando a flag está off e a rota é prometheus")
     void deveBloquear(String requestUri, String descricao) throws ServletException, IOException {
 
-        when(featureFlags.isEnabled("metrics.prometheus.enabled")).thenReturn(false);
+        when(featureFlags.isEnabled(FLAG)).thenReturn(false);
         request.setRequestURI(requestUri);
 
         filter.doFilterInternal(request, response, chain);
 
-        verify(response).setStatus(404);
+        assertThat(response.getStatus()).isEqualTo(404);
         verify(chain, never()).doFilter(request, response);
     }
 }

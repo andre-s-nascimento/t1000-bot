@@ -14,6 +14,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 
 @WebMvcTest(controllers = TestAdminController.class)
@@ -30,6 +31,7 @@ class SecurityDevModeConfigTest {
     @Autowired private MockMvc mockMvc;
 
     @MockitoBean private MetricsService metricsService;
+    @MockitoBean private FeatureFlagAdminService featureFlagAdminService;
 
     @Test
     @DisplayName("Modo dev ativado: /admin/** acessível sem autenticação")

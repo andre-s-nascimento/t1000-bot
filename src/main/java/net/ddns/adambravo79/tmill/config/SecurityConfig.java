@@ -95,7 +95,9 @@ public class SecurityConfig {
 
     @Bean
     @SuppressWarnings("java:S4502") // CSRF desabilitado intencionalmente em modo dev
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http, PrometheusFeatureFlagFilter prometheusFeatureFlagFilter)
+            throws Exception {
 
         // ===================== MODO DEV (sem autenticação) =====================
         if (securityDisabled) {
@@ -104,6 +106,11 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                     .csrf(csrf -> csrf.disable())
                     .headers(headers -> headers.frameOptions(frame -> frame.disable()));
+
+            // 🆕 Adiciona o filtro de Prometheus na cadeia de segurança
+            http.addFilterBefore(
+                    prometheusFeatureFlagFilter,
+                    org.springframework.security.web.access.intercept.AuthorizationFilter.class);
 
             return http.build();
         }
@@ -177,6 +184,12 @@ public class SecurityConfig {
 
         log.info("🛡️ SecurityConfig carregado. E-mails autorizados: {}", allowedEmails);
 
+        // 🆕 Adiciona o filtro de Prometheus na cadeia de segurança
+        http.addFilterBefore(
+                prometheusFeatureFlagFilter,
+                org.springframework.security.web.access.intercept.AuthorizationFilter.class);
+
+        // Adiciona o filtro de autorização por email DEPOIS
         http.addFilterAfter(
                 adminEmailAuthorizationFilter,
                 org.springframework.security.web.access.intercept.AuthorizationFilter.class);
