@@ -154,7 +154,7 @@ class FeatureFlagAdminServiceTest {
             adminService.registerKnownFlags();
             adminService.registerKnownFlags();
 
-            assertThat(flagService.list()).hasSize(13);
+            assertThat(flagService.list()).hasSize(18);
         }
     }
 
@@ -277,6 +277,8 @@ class FeatureFlagAdminServiceTest {
     @DisplayName("Delegação")
     class Delegacao {
 
+        private static final int TOTAL_FLAGS = 18;
+
         @Test
         @DisplayName("list delega e retorna as 13 flags")
         void listDelegates() {
@@ -284,7 +286,7 @@ class FeatureFlagAdminServiceTest {
 
             List<FeatureFlagState> list = adminService.list();
 
-            assertThat(list).hasSize(13);
+            assertThat(list).hasSize(18);
         }
 
         @Test
@@ -295,7 +297,7 @@ class FeatureFlagAdminServiceTest {
             Map<String, Map<String, Object>> map = adminService.listAsMap();
 
             assertThat(map)
-                    .hasSize(13)
+                    .hasSize(TOTAL_FLAGS)
                     .containsKeys(
                             // Alta prioridade
                             "podcast.enabled",
