@@ -98,6 +98,7 @@ class PodcastPublisherServiceTest {
                                 Files.createTempFile(
                                         tempDir, inv.getArgument(0), inv.getArgument(1)));
         lenient().when(featureFlags.isEnabled("podcast.enabled")).thenReturn(true);
+        lenient().when(featureFlags.isEnabled("podcast.fallback-text.enabled")).thenReturn(true);
     }
 
     // ============================================================

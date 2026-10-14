@@ -280,7 +280,7 @@ class FeatureFlagAdminServiceTest {
         private static final int TOTAL_FLAGS = 18;
 
         @Test
-        @DisplayName("list delega e retorna as 13 flags")
+        @DisplayName("list delega e retorna as flags")
         void listDelegates() {
             adminService.registerKnownFlags();
 

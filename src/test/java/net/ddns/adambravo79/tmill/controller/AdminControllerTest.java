@@ -137,6 +137,10 @@ class AdminControllerTest {
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
 
+        lenient()
+                .when(featureFlagAdminService.isEnabled("ai.digest.custom-period.enabled"))
+                .thenReturn(true);
+
         lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
 
         lenient()
