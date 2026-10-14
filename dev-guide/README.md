@@ -31,10 +31,10 @@ você precisa no momento:
 
 ## Índice de guias
 
-| Guia                              | Descrição                                                                                                               | Status      |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------- |
-| [Feature Flags](feature-flags.md) | Sistema de flags runtime, catálogo, como adicionar e usar                                                               | ✅          |
-| `config-files.md`                 | Todos os arquivos JSON de configuração (audio, groq, refinement, admin, worldcup, tmdb-aliases, feature-flags, prompts) | ⏳ em breve |
+| Guia                                        | Descrição                                                                                        | Status |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------ |
+| [Feature Flags](feature-flags.md)           | Sistema de flags runtime, catálogo, como adicionar e usar                                        | ✅     |
+| [Arquivos de Configuração](config-files.md) | Todos os JSONs de configuração (audio, groq, refinement, admin, worldcup, tmdb-aliases, prompts) | ✅     |
 
 > **Nota:** o guia de arquivos de configuração (`config-files.md`) está planejado para o
 > próximo ciclo. Até lá, os arquivos podem ser encontrados em `src/main/resources/` e

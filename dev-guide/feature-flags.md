@@ -489,3 +489,4 @@ Suba em dev, acesse `/admin-web` → aba Features, confirme que a nova flag apar
 - Endpoints REST: `src/main/java/net/ddns/adambravo79/tmill/controller/AdminController.java`
 - Endpoints Web: `src/main/java/net/ddns/adambravo79/tmill/controller/AdminWebController.java`
 - Configuração: `src/main/resources/application.properties` (seção 12)
+- [Arquivos de Configuração](config-files.md) — guia geral dos JSONs externos
