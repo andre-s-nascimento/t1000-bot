@@ -137,6 +137,9 @@ class AdminWebControllerTest {
         ReflectionTestUtils.setField(controller, "migrationSqlitePath", "./data/test.db");
 
         lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
+        lenient()
+                .when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled"))
+                .thenReturn(true);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -1562,5 +1565,17 @@ class AdminWebControllerTest {
                                         "success", "Prompts e personas recarregados com sucesso."));
 
         verify(promptRegistryService).reload();
+    }
+
+    @Test
+    @DisplayName("debugCache: flag 'admin.debug-cache.enabled' off → 404 com mensagem")
+    void debugCache_flagDesabilitada_retorna404() throws Exception {
+        when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled")).thenReturn(false);
+
+        mockMvc.perform(get("/admin-web/debug/cache/file-id"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.erro").value("Debug cache desabilitado por feature flag"));
+
+        verifyNoInteractions(cacheService);
     }
 }

@@ -1200,6 +1200,13 @@ public class AdminController {
 
     @GetMapping("/debug/cache/{fileId}")
     public ResponseEntity<Map<String, Object>> debugCache(@PathVariable("fileId") String fileId) {
+        // 🆕 Onda 3.5.3 — respeita feature flag
+        if (!featureFlagAdminService.isEnabled("admin.debug-cache.enabled")) {
+            log.debug("📴 Debug cache desabilitado por feature flag — retornando 404.");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("erro", "Debug cache desabilitado por feature flag"));
+        }
+
         var entry = fileTranscriptionCacheService.get(fileId);
         if (entry == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

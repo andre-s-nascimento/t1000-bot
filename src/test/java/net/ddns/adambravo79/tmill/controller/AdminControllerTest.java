@@ -157,7 +157,9 @@ class AdminControllerTest {
 
                             return emptyResource;
                         });
-
+        lenient()
+                .when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled"))
+                .thenReturn(true);
         this.mockMvc = MockMvcBuilders.standaloneSetup(adminController).build();
     }
 
@@ -2343,5 +2345,17 @@ class AdminControllerTest {
                 .andExpect(status().isOk());
 
         verify(dailyDigestService).generateDigestCustom(any(), any(), isNull());
+    }
+
+    @Test
+    @DisplayName("debugCache: flag 'admin.debug-cache.enabled' off → 404 com mensagem")
+    void debugCache_flagDesabilitada_retorna404() throws Exception {
+        when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled")).thenReturn(false);
+
+        mockMvc.perform(get("/admin/debug/cache/file-id"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.erro").value("Debug cache desabilitado por feature flag"));
+
+        verifyNoInteractions(fileTranscriptionCacheService);
     }
 }

@@ -5,7 +5,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
 import lombok.extern.slf4j.Slf4j;
@@ -24,25 +25,36 @@ import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
  *
  * <p>Principais responsabilidades: - Pesquisar filmes por nome. - Buscar detalhes completos por ID.
  * - Montar resposta formatada com título, ano, nota, elenco, sinopse e provedores de streaming.
+ *
+ * <p><b>Cache:</b> os detalhes por ID são cacheados no cache {@code movieDetails} (Caffeine,
+ * configurado em {@code application.properties}). O uso do cache pode ser desabilitado em runtime
+ * via feature flag {@code tmdb.cache.enabled}.
  */
 @Slf4j
 @Service
 public class MovieService {
 
+    private static final String CACHE_NAME = "movieDetails";
+    private static final String FLAG_TMDB_CACHE = "tmdb.cache.enabled";
+    private static final String FLAG_EASTER_EGGS = "easter.eggs.enabled";
+
     private final TmdbClient tmdbClient;
     private final EasterEggService easterEggService;
     private final MetricsService metricsService;
     private final FeatureFlagAdminService featureFlags;
+    private final CacheManager cacheManager;
 
     public MovieService(
             TmdbClient tmdbClient,
             EasterEggService easterEggService,
             MetricsService metricsService,
-            FeatureFlagAdminService featureFlags) {
+            FeatureFlagAdminService featureFlags,
+            CacheManager cacheManager) {
         this.tmdbClient = tmdbClient;
         this.easterEggService = easterEggService;
         this.metricsService = metricsService;
         this.featureFlags = featureFlags;
+        this.cacheManager = cacheManager;
     }
 
     /**
@@ -73,15 +85,67 @@ public class MovieService {
     /**
      * Busca detalhes completos de um filme diretamente pelo ID no TMDB.
      *
-     * <p><b>Feature flag:</b> se {@code easter.eggs.enabled} estiver desabilitada, o easter egg
-     * não é consultado nem concatenado à resposta. O restante do fluxo permanece inalterado.
+     * <p><b>Feature flags:</b>
+     *
+     * <ul>
+     *   <li>{@code tmdb.cache.enabled}: se desabilitada, ignora o cache Caffeine e consulta o
+     *       TMDB a cada request.
+     *   <li>{@code easter.eggs.enabled}: se desabilitada, não consulta nem concatena easter egg.
+     * </ul>
      *
      * @param id identificador único do filme no TMDB.
      * @return {@link MovieOrchestrationResponse} com texto formatado e URL do poster.
      * @throws MovieNotFoundException se os detalhes não forem encontrados.
      */
-    @Cacheable(value = "movieDetails", key = "#id", unless = "#result == null")
     public MovieOrchestrationResponse buscarPorId(long id) {
+        if (isCacheEnabled()) {
+            MovieOrchestrationResponse cached = getFromCache(id);
+            if (cached != null) {
+                log.debug("🎬 Cache HIT para movieDetails id={}", id);
+                return cached;
+            }
+            log.debug("🎬 Cache MISS para movieDetails id={}", id);
+        }
+
+        MovieOrchestrationResponse response = fetchFromTmdb(id);
+
+        if (isCacheEnabled()) {
+            putInCache(id, response);
+        }
+
+        return response;
+    }
+
+    // =========================================================================
+    // HELPERS DE CACHE
+    // =========================================================================
+
+    private boolean isCacheEnabled() {
+        return featureFlags.isEnabled(FLAG_TMDB_CACHE);
+    }
+
+    private MovieOrchestrationResponse getFromCache(long id) {
+        Cache cache = cacheManager.getCache(CACHE_NAME);
+        if (cache == null) {
+            log.warn("⚠️ Cache '{}' não configurado — bypass.", CACHE_NAME);
+            return null;
+        }
+        return cache.get(id, MovieOrchestrationResponse.class);
+    }
+
+    private void putInCache(long id, MovieOrchestrationResponse response) {
+        Cache cache = cacheManager.getCache(CACHE_NAME);
+        if (cache == null) {
+            return;
+        }
+        cache.put(id, response);
+    }
+
+    // =========================================================================
+    // PIPELINE TMDB
+    // =========================================================================
+
+    private MovieOrchestrationResponse fetchFromTmdb(long id) {
         try {
             // Busca detalhes, elenco, diretor e provedores em paralelo
             CompletableFuture<MovieRecord> detalhesFuture =
@@ -108,12 +172,7 @@ public class MovieService {
             String elenco = formatCast(elencoFuture.join());
             String diretor = diretorFuture.join();
             String streamings = streamingsFuture.join();
-
-            // 🆕 Feature flag: só consulta o easter egg se a flag estiver habilitada
-            String easterEgg = "";
-            if (featureFlags.isEnabled("easter.eggs.enabled")) {
-                easterEgg = easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse("");
-            }
+            String easterEgg = getEasterEgg(id);
 
             String textoHtml =
                     buildResponseText(
@@ -124,7 +183,6 @@ public class MovieService {
                     new MovieOrchestrationResponse(textoHtml, urlPoster);
 
             metricsService.success("tmdb_buscar_detalhes");
-
             return response;
         } catch (Exception e) {
             metricsService.error("tmdb_buscar_detalhes");
@@ -132,7 +190,16 @@ public class MovieService {
         }
     }
 
-    // ========================= MÉTODOS AUXILIARES PARA FORMATAÇÃO =========================
+    private String getEasterEgg(long id) {
+        if (!featureFlags.isEnabled(FLAG_EASTER_EGGS)) {
+            return "";
+        }
+        return easterEggService.getEasterEgg(id).map(egg -> "\n\n" + egg).orElse("");
+    }
+
+    // =========================================================================
+    // MÉTODOS AUXILIARES DE FORMATAÇÃO
+    // =========================================================================
 
     private String formatYear(MovieRecord detalhes) {
         if (detalhes.releaseDate() != null && detalhes.releaseDate().length() >= 4) {

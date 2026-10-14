@@ -277,7 +277,7 @@ class FeatureFlagAdminServiceTest {
     @DisplayName("Delegação")
     class Delegacao {
 
-        private static final int TOTAL_FLAGS = 18;
+        private static final int TOTAL_FLAGS = 23;
 
         @Test
         @DisplayName("list delega e retorna as flags")

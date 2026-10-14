@@ -22,16 +22,49 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>Expor operações de leitura e toggle para os controllers (REST e Web).
  * </ul>
  *
- * <p><b>Flags registradas</b>:
+ * <p><b>Flags registradas</b> (23 no total):
+ *
+ * <h3>Alta prioridade — Onda 3.5.1</h3>
  *
  * <ul>
- *   <li>{@code worldcup.enabled} — envio de jogos da Copa (editável)
- *   <li>{@code transcription.enabled} — transcrição de áudio (editável)
- *   <li>{@code auto.response.enabled} — respostas automáticas (editável)
- *   <li>{@code digest.enabled} — digest diário (editável)
- *   <li>{@code worldcup.update.enabled} — atualização automática do JSON da Copa (editável)
- *   <li>{@code prompts.external.enabled} — uso de prompts e personas externos via JSON (read-only)
- *   <li>{@code migration.enabled} — migração SQLite (read-only)
+ *   <li>{@code podcast.enabled}
+ *   <li>{@code weekly.reminder.enabled}
+ *   <li>{@code daily.releases.enabled}
+ *   <li>{@code worldcup.reminders30min.enabled}
+ *   <li>{@code easter.eggs.enabled}
+ *   <li>{@code admin.features.toggle-enabled}
+ * </ul>
+ *
+ * <h3>Média prioridade — Onda 3.5.2</h3>
+ *
+ * <ul>
+ *   <li>{@code weekly.digest.enabled}
+ *   <li>{@code birthday.enabled}
+ *   <li>{@code birthday.group-notification.enabled}
+ *   <li>{@code podcast.fallback-text.enabled}
+ *   <li>{@code ai.digest.custom-period.enabled}
+ * </ul>
+ *
+ * <h3>Baixa prioridade — Onda 3.5.3</h3>
+ *
+ * <ul>
+ *   <li>{@code metrics.prometheus.enabled}
+ *   <li>{@code admin.debug-cache.enabled}
+ *   <li>{@code tmdb.cache.enabled}
+ *   <li>{@code telegram.error-fallback.enabled}
+ *   <li>{@code kafka.audit.enabled}
+ * </ul>
+ *
+ * <h3>Já existentes</h3>
+ *
+ * <ul>
+ *   <li>{@code worldcup.enabled}
+ *   <li>{@code transcription.enabled}
+ *   <li>{@code auto.response.enabled}
+ *   <li>{@code digest.enabled}
+ *   <li>{@code worldcup.update.enabled}
+ *   <li>{@code prompts.external.enabled}
+ *   <li>{@code migration.enabled} (read-only)
  * </ul>
  */
 @Slf4j
@@ -44,7 +77,9 @@ public class FeatureFlagAdminService {
 
     @PostConstruct
     public void registerKnownFlags() {
-        // --- Alta prioridade (Onda 3.5.1) ---
+        // =====================================================================
+        // Alta prioridade — Onda 3.5.1
+        // =====================================================================
         registerBool("podcast.enabled", true, "Publicação automática semanal do podcast");
         registerBool("weekly.reminder.enabled", true, "Lembrete semanal de quarta-feira");
         registerBool("daily.releases.enabled", true, "Notificação de lançamentos a cada 6h");
@@ -55,6 +90,7 @@ public class FeatureFlagAdminService {
                 "admin.features.toggle-enabled",
                 true,
                 "Permitir alteração de flags via painel admin");
+
         // =====================================================================
         // Média prioridade — Onda 3.5.2
         // =====================================================================
@@ -72,6 +108,27 @@ public class FeatureFlagAdminService {
                 "ai.digest.custom-period.enabled",
                 true,
                 "Permitir custom-digest com período arbitrário");
+
+        // =====================================================================
+        // Baixa prioridade — Onda 3.5.3
+        // =====================================================================
+        registerBool("metrics.prometheus.enabled", true, "Expor endpoint /actuator/prometheus");
+        registerBool(
+                "admin.debug-cache.enabled",
+                true,
+                "Expor endpoints de debug de cache (pode conter texto de transcrição)");
+        registerBool(
+                "tmdb.cache.enabled", true, "Cache de detalhes de filme (@Cacheable movieDetails)");
+        registerBool(
+                "telegram.error-fallback.enabled",
+                true,
+                "Fallback genérico do TelegramSafeExecutor em caso de erro");
+        registerBool(
+                "kafka.audit.enabled", false, "Persistir eventos Kafka no MongoDB (audit trail)");
+
+        // =====================================================================
+        // Já existentes
+        // =====================================================================
         registerBool("worldcup.enabled", false, "Envio de jogos da Copa do Mundo");
         registerBool("transcription.enabled", true, "Transcrição de áudio (Whisper/Groq)");
         registerBool("auto.response.enabled", true, "Respostas automáticas no chat");
@@ -105,11 +162,23 @@ public class FeatureFlagAdminService {
         return flagService.isEnabled(key);
     }
 
-    /**
-     * @deprecated Use {@link #toggleWithCheck(String, boolean)} — que valida a guarda-chuva.
-     */
-    @Deprecated(since = "2.6.0")
     public void toggle(String key, boolean enabled) {
+        flagService.toggle(key, enabled);
+    }
+
+    /**
+     * Altera uma flag com verificação da flag guarda-chuva {@code admin.features.toggle-enabled}.
+     *
+     * @throws IllegalStateException se {@code admin.features.toggle-enabled} estiver desabilitada
+     * @throws IllegalArgumentException se a flag alvo não existir
+     * @throws IllegalStateException se a flag alvo for read-only
+     */
+    public void toggleWithCheck(String key, boolean enabled) {
+        if (!flagService.isEnabled("admin.features.toggle-enabled")) {
+            throw new IllegalStateException(
+                    "Toggle de feature flags desabilitado. Habilite "
+                            + "'admin.features.toggle-enabled' para continuar.");
+        }
         flagService.toggle(key, enabled);
     }
 
@@ -133,21 +202,5 @@ public class FeatureFlagAdminService {
             return defaultValue;
         }
         return Boolean.parseBoolean(raw.trim());
-    }
-
-    /**
-     * Altera uma flag com verificação da flag guarda-chuva {@code admin.features.toggle-enabled}.
-     *
-     * <p>Se a guarda-chuva estiver desabilitada, qualquer toggle lança {@link IllegalStateException}.
-     * Isso evita que alguém desabilite uma flag por engano enquanto a própria governança está
-     * bloqueada.
-     */
-    public void toggleWithCheck(String key, boolean enabled) {
-        if (!flagService.isEnabled("admin.features.toggle-enabled")) {
-            throw new IllegalStateException(
-                    "Toggle de feature flags desabilitado. Habilite "
-                            + "'admin.features.toggle-enabled' para continuar.");
-        }
-        flagService.toggle(key, enabled);
     }
 }

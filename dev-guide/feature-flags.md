@@ -160,6 +160,16 @@ public record FeatureFlagDefinition(
 | `podcast.fallback-text.enabled`       | `true`  | ✅       | Enviar roteiro como texto quando o áudio falha |
 | `ai.digest.custom-period.enabled`     | `true`  | ✅       | Permitir custom-digest com período arbitrário  |
 
+### Baixa prioridade — Onda 3.5.3
+
+| Flag                              | Default | Editável | O que controla                                         |
+| --------------------------------- | ------- | -------- | ------------------------------------------------------ |
+| `metrics.prometheus.enabled`      | `true`  | ✅       | Expor endpoint `/actuator/prometheus`                  |
+| `admin.debug-cache.enabled`       | `true`  | ✅       | Endpoints `/admin/debug/cache/**`                      |
+| `tmdb.cache.enabled`              | `true`  | ✅       | Cache de detalhes de filme (`@Cacheable movieDetails`) |
+| `telegram.error-fallback.enabled` | `true`  | ✅       | Fallback genérico do `TelegramSafeExecutor`            |
+| `kafka.audit.enabled`             | `false` | ✅       | Audit trail de eventos Kafka no MongoDB                |
+
 ### Já existentes
 
 | Flag                       | Default | Editável | O que controla                                    |
@@ -212,6 +222,43 @@ public record FeatureFlagDefinition(
 - **⚠️ Nota:** os controllers hoje usam `toggle()` (sem check). O `toggleWithCheck` está
   disponível para um PR futuro que ative a guarda-chuva de fato.
 - **Caso de uso futuro:** congelar o painel admin durante uma auditoria/incidente.
+
+#### `metrics.prometheus.enabled`
+
+- **Onde é usada:** `PrometheusFeatureFlagFilter` (intercepta `/actuator/prometheus`).
+- **Comportamento:** se desabilitada, o filtro retorna **404** para o path de métricas —
+  o endpoint não é removido, mas fica inacessível via HTTP.
+- **Caso de uso:** ambientes onde expor métricas via HTTP é proibido por política.
+
+#### `admin.debug-cache.enabled`
+
+- **Onde é usada:** `AdminController.debugCache` e `AdminWebController.debugCache`.
+- **Comportamento:** se desabilitada, ambos retornam **404** com mensagem
+  `"Debug cache desabilitado por feature flag"`.
+- **Segurança:** o cache contém texto de transcrição. Desabilitar em produção sensível é recomendado.
+
+#### `tmdb.cache.enabled`
+
+- **Onde é usada:** `MovieService.buscarPorId` (via `CacheManager` programático).
+- **Comportamento:** se desabilitada, o cache `movieDetails` é ignorado — cada request
+  consulta o TMDB do zero.
+- **Caso de uso:** TMDB retornando dados errados; cache servindo resposta antiga.
+
+#### `telegram.error-fallback.enabled`
+
+- **Onde é usada:** `TelegramSafeExecutor.run`.
+- **Comportamento:** se desabilitada, o erro é logado mas **nenhuma mensagem substituta** é
+  enviada ao usuário.
+- **Caso de uso:** manutenção do Telegram; evitar poluir chats com fallbacks em massa.
+
+#### `kafka.audit.enabled`
+
+- **Onde é usada:** `AudioResultConsumer.audit`.
+- **Comportamento:** se habilitada, cada evento processado gera **dois** registros no MongoDB:
+  - `AUDIO_PROCESSED_SUCCESS`/`ERROR` (log padrão, **sempre**)
+  - `KAFKA_AUDIT` (audit trail, **só se a flag estiver on**)
+- **Caso de uso:** correlação com logs do broker Kafka, análise de volume de eventos.
+- **Default:** `false` — audit é opcional.
 
 #### `worldcup.enabled`
 
@@ -489,6 +536,21 @@ Suba em dev, acesse `/admin-web` → aba Features, confirme que a nova flag apar
   `verify(featureFlags, never()).isEnabled("...")`.
 - **Alternativa:** `lenient().when(...)` se o stub for intencionalmente órfão.
 
+### `/actuator/prometheus` retorna 404
+
+- Verifique `metrics.prometheus.enabled` no painel admin.
+- Se estiver off, reabilite ou remova o `PrometheusFeatureFlagFilter` da cadeia de filtros
+  do Spring.
+
+### `debugCache` retorna 404 "Debug cache desabilitado"
+
+- Verifique `admin.debug-cache.enabled`. Se off, reabilite via painel admin.
+
+### Cache de filme não está sendo usado
+
+- Verifique `tmdb.cache.enabled`. Se off, cada request consulta o TMDB do zero (mais lento).
+- Verifique também se o `CacheManager` está configurado (`CaffeineConfig`).
+
 ---
 
 ## Referências
@@ -500,3 +562,4 @@ Suba em dev, acesse `/admin-web` → aba Features, confirme que a nova flag apar
 - Endpoints Web: `src/main/java/net/ddns/adambravo79/tmill/controller/AdminWebController.java`
 - Configuração: `src/main/resources/application.properties` (seção 12)
 - [Arquivos de Configuração](config-files.md) — guia geral dos JSONs externos
+- Filtro Prometheus: `src/main/java/net/ddns/adambravo79/tmill/config/PrometheusFeatureFlagFilter.java`

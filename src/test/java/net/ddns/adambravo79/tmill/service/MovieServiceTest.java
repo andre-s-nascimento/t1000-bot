@@ -2,7 +2,9 @@ package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -20,6 +22,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 
 import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.exception.MovieNotFoundException;
@@ -37,6 +41,8 @@ class MovieServiceTest {
     @Mock private EasterEggService easterEggService;
     @Mock private MetricsService metricsService;
     @Mock private FeatureFlagAdminService featureFlags;
+    @Mock private CacheManager cacheManager;
+    @Mock private Cache cache;
 
     @InjectMocks private MovieService movieService;
 
@@ -44,6 +50,9 @@ class MovieServiceTest {
     void setUp() {
         // Default: easter eggs habilitados (mantém os testes existentes passando)
         lenient().when(featureFlags.isEnabled("easter.eggs.enabled")).thenReturn(true);
+        // Cache habilitado por padrão; devolve um Cache mock
+        lenient().when(featureFlags.isEnabled("tmdb.cache.enabled")).thenReturn(true);
+        lenient().when(cacheManager.getCache("movieDetails")).thenReturn(cache);
     }
 
     // =========================================================================
@@ -382,5 +391,65 @@ class MovieServiceTest {
         when(tmdbClient.buscarDiretor(id)).thenReturn("Diretor Teste");
         when(tmdbClient.buscarOndeAssistirFilme(id)).thenReturn("Netflix");
         lenient().when(easterEggService.getEasterEgg(anyLong())).thenReturn(Optional.empty());
+    }
+
+    @Test
+    @DisplayName("buscarPorId: flag 'tmdb.cache.enabled' off → não consulta o cache")
+    void buscarPorId_cacheDesabilitado_naoConsultaCache() {
+        when(featureFlags.isEnabled("tmdb.cache.enabled")).thenReturn(false);
+        Long id = 42L;
+        stubMovieWithFullDetails(id, "Filme");
+
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result.textoFormatado()).contains("FILME");
+        verify(cacheManager, never()).getCache("movieDetails");
+        verify(cache, never()).get(anyLong(), eq(MovieOrchestrationResponse.class));
+        verify(cache, never()).put(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("buscarPorId: flag 'tmdb.cache.enabled' on e cache HIT → não consulta TMDB")
+    void buscarPorId_cacheHit_retornaDoCache() {
+        when(featureFlags.isEnabled("tmdb.cache.enabled")).thenReturn(true);
+        Long id = 42L;
+        MovieOrchestrationResponse cached =
+                new MovieOrchestrationResponse("cached response", "cached-url");
+        when(cache.get(id, MovieOrchestrationResponse.class)).thenReturn(cached);
+
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result).isSameAs(cached);
+        verify(tmdbClient, never()).buscarDetalhes(anyLong());
+        verify(cache, never()).put(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("buscarPorId: flag 'tmdb.cache.enabled' on e cache MISS → popula cache")
+    void buscarPorId_cacheMiss_populaCache() {
+        when(featureFlags.isEnabled("tmdb.cache.enabled")).thenReturn(true);
+        Long id = 42L;
+        stubMovieWithFullDetails(id, "Filme");
+        when(cache.get(id, MovieOrchestrationResponse.class)).thenReturn(null);
+
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result.textoFormatado()).contains("FILME");
+        verify(cache).put(eq(id), any(MovieOrchestrationResponse.class));
+    }
+
+    @Test
+    @DisplayName("buscarPorId: cacheManager retorna null → bypass sem quebrar")
+    void buscarPorId_cacheManagerNull_bypass() {
+        when(featureFlags.isEnabled("tmdb.cache.enabled")).thenReturn(true);
+        when(cacheManager.getCache("movieDetails")).thenReturn(null);
+        Long id = 42L;
+        stubMovieWithFullDetails(id, "Filme");
+
+        MovieOrchestrationResponse result = movieService.buscarPorId(id);
+
+        assertThat(result.textoFormatado()).contains("FILME");
+        verify(cache, never()).get(anyLong(), eq(MovieOrchestrationResponse.class));
+        verify(cache, never()).put(anyLong(), any());
     }
 }
