@@ -1,3 +1,4 @@
+/* (c) 2026 | 01/10/2026 */
 package net.ddns.adambravo79.tmill.config;
 
 import java.util.Arrays;
@@ -31,6 +32,27 @@ import lombok.extern.slf4j.Slf4j;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final String DEV_MODE_BANNER =
+            """
+
+            ╔════════════════════════════════════════════════════════════════╗
+            ║  ⚠️  MODO DEV ATIVADO — SPRING SECURITY DESABILITADO          ║
+            ║                                                                ║
+            ║  Endpoints /admin/** e /admin-web/** estão SEM AUTENTICAÇÃO.   ║
+            ║                                                                ║
+            ║  ❌ NUNCA use isso em produção!                                ║
+            ║  ❌ NUNCA exponha essa porta publicamente!                     ║
+            ║                                                                ║
+            ║  Para desligar: ADMIN_SECURITY_DISABLED=false (ou remova).     ║
+            ╚════════════════════════════════════════════════════════════════╝
+
+            """;
+
+    private static final String JSON_401_UNAUTHENTICATED =
+            "{\"erro\":\"Não autenticado. Faça login novamente.\"}";
+
+    private static final String JSON_403_FORBIDDEN = "{\"erro\":\"Acesso negado.\"}";
+
     @Value("${admin.google.client-id:}")
     private String googleClientId;
 
@@ -55,28 +77,15 @@ public class SecurityConfig {
     /** Falha o boot se a flag de desabilitar segurança for usada em produção. */
     @PostConstruct
     public void validateSecurityConfig() {
-        if (securityDisabled) {
-            boolean isProd = environment.acceptsProfiles(Profiles.of("prod"));
-
-            if (isProd) {
-                throw new IllegalStateException(
-                        "🚨 FALHA CRÍTICA: `admin.security.disabled=true` NÃO é permitido no"
-                                + " profile `prod`. Desative a flag ou remova o profile `prod`.");
-            }
-
-            log.warn("");
-            log.warn("╔════════════════════════════════════════════════════════════════╗");
-            log.warn("║  ⚠️  MODO DEV ATIVADO — SPRING SECURITY DESABILITADO          ║");
-            log.warn("║                                                                ║");
-            log.warn("║  Endpoints /admin/** e /admin-web/** estão SEM AUTENTICAÇÃO.   ║");
-            log.warn("║                                                                ║");
-            log.warn("║  ❌ NUNCA use isso em produção!                                ║");
-            log.warn("║  ❌ NUNCA exponha essa porta publicamente!                     ║");
-            log.warn("║                                                                ║");
-            log.warn("║  Para desligar: ADMIN_SECURITY_DISABLED=false (ou remova).     ║");
-            log.warn("╚════════════════════════════════════════════════════════════════╝");
-            log.warn("");
+        if (!securityDisabled) {
+            return;
         }
+        if (environment.acceptsProfiles(Profiles.of("prod"))) {
+            throw new IllegalStateException(
+                    "🚨 FALHA CRÍTICA: `admin.security.disabled=true` NÃO é permitido no profile"
+                            + " `prod`. Desative a flag ou remova o profile `prod`.");
+        }
+        log.warn(DEV_MODE_BANNER);
     }
 
     @Bean
@@ -85,7 +94,10 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    @SuppressWarnings("java:S4502") // CSRF desabilitado intencionalmente em modo dev
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http, PrometheusFeatureFlagFilter prometheusFeatureFlagFilter)
+            throws Exception {
 
         // ===================== MODO DEV (sem autenticação) =====================
         if (securityDisabled) {
@@ -94,6 +106,11 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                     .csrf(csrf -> csrf.disable())
                     .headers(headers -> headers.frameOptions(frame -> frame.disable()));
+
+            // 🆕 Adiciona o filtro de Prometheus na cadeia de segurança
+            http.addFilterBefore(
+                    prometheusFeatureFlagFilter,
+                    org.springframework.security.web.access.intercept.AuthorizationFilter.class);
 
             return http.build();
         }
@@ -133,17 +150,13 @@ public class SecurityConfig {
                 .securityContext(sc -> sc.securityContextRepository(securityContextRepository()))
                 .sessionManagement(sm -> sm.sessionFixation().changeSessionId());
 
-        // CSRF: ignorar rotas admin (API interna consumida por scripts) e actuator
+        // CSRF: ignorar rotas admin (API interna) e actuator
         http.csrf(
                 csrf ->
                         csrf.ignoringRequestMatchers("/admin/**", "/admin-web/**")
                                 .ignoringRequestMatchers("/actuator/**"));
 
-        // 🔧 FIX CRÍTICO: para /admin/** (API REST), devolver JSON em 401/403
-        // em vez do redirect HTML padrão do OAuth2.
-        //
-        // No Spring Security 7, usamos requestMatchers() do próprio HttpSecurity
-        // em vez de criar um AntPathRequestMatcher (que foi removido).
+        // Para /admin/** (API REST), devolver JSON em 401/403
         http.exceptionHandling(
                 ex ->
                         ex.defaultAuthenticationEntryPointFor(
@@ -151,14 +164,10 @@ public class SecurityConfig {
                                             log.warn(
                                                     "🔒 401 JSON em /admin/** path={}",
                                                     request.getRequestURI());
-                                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                                            response.setContentType(
-                                                    MediaType.APPLICATION_JSON_VALUE);
-                                            response.setCharacterEncoding("UTF-8");
-                                            response.getWriter()
-                                                    .write(
-                                                            "{\"erro\":\"Não autenticado. Faça"
-                                                                    + " login novamente.\"}");
+                                            writeJson(
+                                                    response,
+                                                    HttpServletResponse.SC_UNAUTHORIZED,
+                                                    JSON_401_UNAUTHENTICATED);
                                         },
                                         request -> request.getRequestURI().startsWith("/admin/"))
                                 .defaultAccessDeniedHandlerFor(
@@ -166,17 +175,21 @@ public class SecurityConfig {
                                             log.warn(
                                                     "🔒 403 JSON em /admin/** path={}",
                                                     request.getRequestURI());
-                                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                                            response.setContentType(
-                                                    MediaType.APPLICATION_JSON_VALUE);
-                                            response.setCharacterEncoding("UTF-8");
-                                            response.getWriter()
-                                                    .write("{\"erro\":\"Acesso negado.\"}");
+                                            writeJson(
+                                                    response,
+                                                    HttpServletResponse.SC_FORBIDDEN,
+                                                    JSON_403_FORBIDDEN);
                                         },
                                         request -> request.getRequestURI().startsWith("/admin/")));
 
         log.info("🛡️ SecurityConfig carregado. E-mails autorizados: {}", allowedEmails);
 
+        // 🆕 Adiciona o filtro de Prometheus na cadeia de segurança
+        http.addFilterBefore(
+                prometheusFeatureFlagFilter,
+                org.springframework.security.web.access.intercept.AuthorizationFilter.class);
+
+        // Adiciona o filtro de autorização por email DEPOIS
         http.addFilterAfter(
                 adminEmailAuthorizationFilter,
                 org.springframework.security.web.access.intercept.AuthorizationFilter.class);
@@ -214,9 +227,10 @@ public class SecurityConfig {
                         .clientName("Google")
                         .build();
 
+        String safeClientId = googleClientId.substring(0, Math.min(12, googleClientId.length()));
         log.info(
                 "✅ ClientRegistrationRepository configurado para Google (clientId={}...)",
-                googleClientId.substring(0, Math.min(12, googleClientId.length())));
+                safeClientId);
 
         return new InMemoryClientRegistrationRepository(google);
     }
@@ -232,13 +246,14 @@ public class SecurityConfig {
         };
     }
 
+    @SuppressWarnings("null")
     private List<String> parseAllowedEmails() {
         if (allowedEmailsStr == null || allowedEmailsStr.isBlank()) {
             return List.of();
         }
         return Arrays.stream(allowedEmailsStr.split(","))
+                .filter(s -> !s.isBlank())
                 .map(String::trim)
-                .filter(s -> !s.isEmpty())
                 .toList();
     }
 
@@ -252,5 +267,14 @@ public class SecurityConfig {
             return realIp.trim();
         }
         return request.getRemoteAddr();
+    }
+
+    /** Escreve uma resposta JSON com status HTTP e charset UTF-8. */
+    private static void writeJson(HttpServletResponse response, int status, String body)
+            throws java.io.IOException {
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(body);
     }
 }

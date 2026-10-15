@@ -136,22 +136,41 @@ cleanup_docker() {
 # ==============================
 ensure_config_files() {
     local config_dir="$(pwd)/config"
-    mkdir -p "$config_dir"
+    local prompts_dir="$config_dir/prompts"
+    
+    # Cria os diretórios necessários
+    mkdir -p "$config_dir" "$prompts_dir"
 
-    local required_files=(
+    # Arquivos na raiz de /config
+    local root_files=(
         "easter-eggs.json"
         "auto-responses.json"
         "worldcup2026.json"
     )
 
-    for file in "${required_files[@]}"; do
+    for file in "${root_files[@]}"; do
         if [ ! -f "$config_dir/$file" ]; then
-            log_warn "Arquivo $file não existe — criando vazio (verifique o conteúdo!)"
+            log_warn "Arquivo $file não existe em $config_dir — criando vazio"
             echo '{}' > "$config_dir/$file"
         fi
     done
 
-    # A aplicação cria/atualiza, mas precisa existir pra não virar diretório
+    # Arquivos em /config/prompts
+    local prompt_files=(
+        "digest-personas.json"
+        "digest-contexts.json"
+        "podcast-system.json"
+        "podcast-config.json"
+    )
+
+    for file in "${prompt_files[@]}"; do
+        if [ ! -f "$prompts_dir/$file" ]; then
+            log_warn "Arquivo de prompt $file não existe em $prompts_dir — criando vazio"
+            echo '{}' > "$prompts_dir/$file"
+        fi
+    done
+
+    # Feature flags na raiz de /config
     if [ ! -f "$config_dir/feature-flags.json" ]; then
         log_info "Inicializando feature-flags.json (persistência de flags)"
         echo '{}' > "$config_dir/feature-flags.json"

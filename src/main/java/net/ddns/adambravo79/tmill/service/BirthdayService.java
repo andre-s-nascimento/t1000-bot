@@ -11,12 +11,14 @@ import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.Birthday;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.GroupAuthorizationService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -32,6 +34,7 @@ public class BirthdayService {
     private final TelegramFacade telegramFacade;
     private final GroupAuthorizationService groupAuthorizationService;
     private final MetricsService metricsService;
+    private final FeatureFlagAdminService featureFlags;
 
     @Value(
             "${birthday.gif-url:https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExc2cyem12dm1ldmp0NGR4bHl0NHRqcXBka3pzejN6eHJpeG9nZTliZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/11wifmSGQD9CtW/giphy.gif}")
@@ -81,34 +84,28 @@ public class BirthdayService {
     boolean isDataValida(int day, int month) {
         if (month < 1 || month > 12) return false;
         if (day < 1) return false;
-        // Usa 2024 (bissexto) para permitir 29/02
+        // Usa 2024 (bissexto) para permitir 29/02.
+        // O valor retornado por LocalDate.of é usado em log.trace para satisfazer java:S2201.
         try {
-            LocalDate.of(2024, month, day);
+            LocalDate dataReferencia = LocalDate.of(2024, month, day);
+            log.trace("Data de referência válida: {}", dataReferencia);
             return true;
         } catch (DateTimeException e) {
             return false;
         }
     }
 
-    /**
-     * Dispara mensagens de parabéns para todos os aniversariantes de hoje. Executado pelo scheduler
-     * às 00:01 (BRT).
-     */
     public void enviarParabensDoDia() {
         LocalDate hoje = LocalDate.now(ZoneId.of(BotMessages.BRAZIL_ZONE));
         enviarParabensPara(hoje.getDayOfMonth(), hoje.getMonthValue());
     }
 
-    /**
-     * Variante testável: envia parabéns para aniversariantes de um dia/mês específico. Ignora
-     * usuários que já receberam parabéns no ano corrente.
-     *
-     * <p>Envia primeiro no privado; se falhar com Forbidden (403), apenas loga e segue. Em seguida,
-     * envia em todos os grupos autorizados (menção por ID).
-     *
-     * @return número de usuários que receberam pelo menos uma mensagem (privado ou grupo)
-     */
     public int enviarParabensPara(int day, int month) {
+        if (!featureFlags.isEnabled("birthday.enabled")) {
+            log.info("🎂 Parabéns desabilitados por feature flag — pulando.");
+            return 0;
+        }
+
         List<Birthday> aniversariantes = repository.findByDayAndMonth(day, month);
 
         if (aniversariantes.isEmpty()) {
@@ -141,35 +138,38 @@ public class BirthdayService {
         return enviados;
     }
 
-    /**
-     * Envia a mensagem de parabéns no privado e nos grupos. Retorna true se pelo menos um envio
-     * ocorreu (privado OU algum grupo).
-     */
     private boolean enviarParabensIndividuais(Birthday b) {
         String mensagem = buildMensagemParabens(buildMencaoHtml(b));
 
-        // 1. Privado primeiro
         boolean enviadoPrivado = enviarPrivado(b, mensagem);
 
-        // 2. Grupos depois
-        boolean enviadoGrupo = enviarGrupos(b, mensagem);
+        // 🆕 Sub-flag: envia nos grupos apenas se habilitada
+        boolean enviadoGrupo = false;
+        if (featureFlags.isEnabled("birthday.group-notification.enabled")) {
+            enviadoGrupo = enviarGrupos(b, mensagem);
+        } else {
+            log.debug("📴 Notificação em grupo desabilitada — enviando só no privado.");
+        }
 
         return enviadoPrivado || enviadoGrupo;
     }
 
-    /**
-     * Envia a mensagem no privado do usuário. Se o usuário não iniciou o bot (Forbidden 403), loga
-     * warn e retorna false — o envio nos grupos continua normalmente.
-     */
     private boolean enviarPrivado(Birthday b, String mensagem) {
         try {
-            telegramFacade.enviarMidia(b.userId(), gifUrl, mensagem);
-            log.info(
-                    "🎉 Parabéns enviados (privado) para userId={} name={}",
-                    b.userId(),
-                    b.userName());
-            return true;
-        } catch (org.springframework.web.client.HttpClientErrorException.Forbidden e) {
+            boolean enviado = telegramFacade.enviarMidia(b.userId(), gifUrl, mensagem);
+            if (enviado) {
+                log.info(
+                        "🎉 Parabéns enviados (privado) para userId={} name={}",
+                        b.userId(),
+                        b.userName());
+            } else {
+                log.warn(
+                        "⚠️ envio (privado) retornou false para userId={} name={}",
+                        b.userId(),
+                        b.userName());
+            }
+            return enviado;
+        } catch (HttpClientErrorException.Forbidden e) {
             log.warn(
                     "⚠️ Usuário {} não iniciou o bot no privado (Forbidden). Pulando privado,"
                             + " enviando apenas nos grupos.",
@@ -181,10 +181,6 @@ public class BirthdayService {
         }
     }
 
-    /**
-     * Envia a mensagem de parabéns em todos os grupos autorizados. Continua mesmo se algum grupo
-     * falhar.
-     */
     private boolean enviarGrupos(Birthday b, String mensagem) {
         Set<Long> grupos = groupAuthorizationService.getAllowedGroups();
         if (grupos.isEmpty()) {
@@ -203,13 +199,17 @@ public class BirthdayService {
 
     private boolean enviarParaGrupo(long groupId, Birthday b, String mensagem) {
         try {
-            telegramFacade.enviarMidia(groupId, gifUrl, mensagem);
-            log.info(
-                    "🎉 Parabéns enviados (grupo {}) para userId={} name={}",
-                    groupId,
-                    b.userId(),
-                    b.userName());
-            return true;
+            boolean enviado = telegramFacade.enviarMidia(groupId, gifUrl, mensagem);
+            if (enviado) {
+                log.info(
+                        "🎉 Parabéns enviados (grupo {}) para userId={} name={}",
+                        groupId,
+                        b.userId(),
+                        b.userName());
+            } else {
+                log.warn("⚠️ envio (grupo {}) retornou false para userId={}", groupId, b.userId());
+            }
+            return enviado;
         } catch (Exception e) {
             log.error(
                     "❌ Falha ao enviar parabéns no grupo {} para userId={}",
@@ -220,10 +220,6 @@ public class BirthdayService {
         }
     }
 
-    /**
-     * Constrói a menção HTML por ID do Telegram — funciona mesmo se o usuário não tiver username
-     * público. O Telegram renderiza como o nome em azul, clicável.
-     */
     String buildMencaoHtml(Birthday b) {
         String nome = b.userName() == null || b.userName().isBlank() ? "amigo(a)" : b.userName();
         String nomeEscapado = escapeHtml(nome);
@@ -239,10 +235,6 @@ public class BirthdayService {
                 .replace("'", "&#39;");
     }
 
-    /**
-     * Monta a mensagem de parabéns com temática cinematográfica (Marilyn Monroe / Happy Birthday Mr.
-     * President).
-     */
     String buildMensagemParabens(String nomeMencionado) {
         return """
         🎬 <b>HAPPY BIRTHDAY, %s!</b> 🎂
@@ -261,7 +253,6 @@ public class BirthdayService {
                 .formatted(nomeMencionado, nomeMencionado);
     }
 
-    /** Exposto para uso em admin/diagnóstico. */
     public String getGifUrl() {
         return gifUrl;
     }

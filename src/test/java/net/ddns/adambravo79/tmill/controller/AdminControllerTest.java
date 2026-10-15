@@ -1,7 +1,9 @@
+/* (c) 2026 | 22/07/2026 */
 package net.ddns.adambravo79.tmill.controller;
 
 import static net.ddns.adambravo79.tmill.constant.BotMessages.WORLD_CUP_NOT_AVAILABLE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -9,19 +11,24 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import java.io.ByteArrayInputStream;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Month;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.core.env.Environment;
@@ -32,6 +39,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.client.HttpClientErrorException;
@@ -39,15 +47,20 @@ import org.springframework.web.client.ResourceAccessException;
 
 import lombok.SneakyThrows;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
+import net.ddns.adambravo79.tmill.client.TmdbClient;
 import net.ddns.adambravo79.tmill.dto.MigrationResult;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
 import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
+import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
+import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import tools.jackson.databind.ObjectMapper;
 
 class AdminControllerTest {
@@ -57,7 +70,7 @@ class AdminControllerTest {
     private Resource emptyResource;
     private MockMvc mockMvc;
 
-    private static final long SHOWCASE_CHAT_ID = -5283244164L;
+    private static final long SHOWCASE_CHAT_ID = -1003703557250L;
 
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
@@ -78,6 +91,11 @@ class AdminControllerTest {
     @Mock private BirthdayRepository birthdayRepository;
     @Mock private MigrationService migrationService;
     @Mock private FeatureFlagAdminService featureFlagAdminService;
+    @Mock private PromptRegistryService promptRegistryService;
+    @Mock private WorldCupTeamsService teamsService;
+    @Mock private TelegramExceptionHandler telegramExceptionHandler;
+    @Mock private AdminConfigService adminConfigService;
+    @Mock private TmdbClient tmdbClient;
 
     @BeforeEach
     @SneakyThrows
@@ -86,7 +104,6 @@ class AdminControllerTest {
 
         objectMapperMock = mock(ObjectMapper.class);
 
-        // Mocks pré-criados — evita UnfinishedStubbingException
         emptyResource = mockResource(false);
 
         adminController =
@@ -110,14 +127,22 @@ class AdminControllerTest {
                         birthdayService,
                         birthdayRepository,
                         migrationService,
-                        featureFlagAdminService);
+                        featureFlagAdminService,
+                        promptRegistryService,
+                        teamsService,
+                        telegramExceptionHandler,
+                        adminConfigService,
+                        tmdbClient);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
 
-        // Stub padrão: NUNCA retorna null. Se o arquivo real não existe no classpath,
-        // retorna mockResource(false). Isso garante que AdminUtils.loadConfigFile
-        // caia nos fallbacks sem NPE.
+        lenient()
+                .when(featureFlagAdminService.isEnabled("ai.digest.custom-period.enabled"))
+                .thenReturn(true);
+
+        lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
+
         lenient()
                 .when(resourceLoader.getResource(anyString()))
                 .thenAnswer(
@@ -132,11 +157,11 @@ class AdminControllerTest {
 
                             return emptyResource;
                         });
-
+        lenient()
+                .when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled"))
+                .thenReturn(true);
         this.mockMvc = MockMvcBuilders.standaloneSetup(adminController).build();
     }
-
-    // ========================= HELPERS =========================
 
     private Resource mockResource(boolean exists) {
         Resource res = mock(Resource.class);
@@ -155,6 +180,18 @@ class AdminControllerTest {
                 .andExpect(content().string(containsString("Tabela de lançamentos limpa")));
 
         verify(releaseNotifiedRepository).clearAll();
+    }
+
+    @Test
+    @DisplayName("POST /admin/reload-prompts - Deve recarregar os prompts e retornar HTTP 200 OK")
+    void shouldReloadPromptsAndReturn200() throws Exception {
+        doNothing().when(promptRegistryService).reload();
+
+        mockMvc.perform(post("/admin/reload-prompts"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("Prompts e personas recarregados com sucesso"));
+
+        verify(promptRegistryService).reload();
     }
 
     @Test
@@ -246,7 +283,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Lembrete semanal enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
     }
@@ -449,7 +486,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Teste manual da Copa enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(worldCupSchedulerService).sendManualTestToChat(SHOWCASE_CHAT_ID);
     }
@@ -553,7 +590,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Envio do meio-dia da Copa enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(worldCupSchedulerService).sendNoonMatchesToChat(SHOWCASE_CHAT_ID);
     }
@@ -569,7 +606,7 @@ class AdminControllerTest {
                                 .string(
                                         containsString(
                                                 "Envio da noite da Copa enviado para o chat"
-                                                        + " -5283244164")));
+                                                        + " -1003703557250")));
 
         verify(worldCupSchedulerService).sendEveningMatchesToChat(SHOWCASE_CHAT_ID);
     }
@@ -713,8 +750,6 @@ class AdminControllerTest {
 
     @Test
     void getConfigFiles_deveRetornarConteudoDosJSONs() throws Exception {
-        // setUp já cobre: retorna ClassPathResource se existir, senão mock(false).
-        // Não importa o que retorne, desde que não seja null.
         mockMvc.perform(get("/admin/config-files"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.*").isNotEmpty());
@@ -735,7 +770,6 @@ class AdminControllerTest {
     void getConfigFiles_quandoJsonInvalido_deveRetornarMensagemErro() throws Exception {
         reset(resourceLoader);
 
-        // Resource existe e devolve JSON inválido
         Resource invalidJsonResource = mock(Resource.class);
         when(invalidJsonResource.exists()).thenReturn(true);
         when(invalidJsonResource.getInputStream())
@@ -743,7 +777,6 @@ class AdminControllerTest {
 
         when(resourceLoader.getResource(anyString())).thenReturn(invalidJsonResource);
 
-        // ObjectMapper real → vai lançar JsonProcessingException naturalmente
         ReflectionTestUtils.setField(adminController, "objectMapper", new ObjectMapper());
 
         mockMvc.perform(get("/admin/config-files"))
@@ -757,19 +790,13 @@ class AdminControllerTest {
     void getConfigFiles_quandoPropertyApontaParaFile_deveCarregar() throws Exception {
         reset(resourceLoader);
 
-        // fileResource responde com JSON válido
         Resource fileResource = mock(Resource.class);
         when(fileResource.exists()).thenReturn(true);
         when(fileResource.getInputStream())
                 .thenReturn(new ByteArrayInputStream("{\"ok\":true}".getBytes()));
 
-        // classpath retorna mock(false) → força AdminUtils a cair no file:
         when(resourceLoader.getResource(startsWith("classpath:"))).thenReturn(emptyResource);
-
-        // file:/app/config/ retorna fileResource (o JSON válido!)
         when(resourceLoader.getResource(startsWith("file:/app/config/"))).thenReturn(fileResource);
-
-        // file:./config/ retorna emptyResource
         when(resourceLoader.getResource(startsWith("file:./config/"))).thenReturn(emptyResource);
 
         when(environment.getProperty(eq("easter-egg.file"), anyString()))
@@ -808,13 +835,12 @@ class AdminControllerTest {
         verify(dailyReleasesService).sendWeeklyDigest();
     }
 
-    // ========================= AUTO-RESPONSE =========================
-
     @Test
     void testAutoResponse_comMensagemValida_deveRetornarResposta() throws Exception {
         AutoResponseOverride response = new AutoResponseOverride("Resposta teste", null);
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
                 .andExpect(status().isOk())
@@ -829,6 +855,8 @@ class AdminControllerTest {
                 new AutoResponseOverride("Resposta com animação", "https://example.com/video.mp4");
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.of(response));
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
                 .andExpect(status().isOk());
@@ -844,6 +872,7 @@ class AdminControllerTest {
                 new AutoResponseOverride("Resposta com animação", "not_a_valid_url");
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
                 .andExpect(status().isOk());
@@ -857,12 +886,97 @@ class AdminControllerTest {
         AutoResponseOverride response = new AutoResponseOverride("Resposta", "");
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
                 .andExpect(status().isOk());
 
         verify(telegramFacade, never()).enviarMidia(anyLong(), anyString(), anyString());
         verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+    }
+
+    @Test
+    void testAutoResponse_comChatIdPersonalizado() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta teste", null);
+        when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("chatId", "999"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada para o chat 999")));
+
+        verify(telegramFacade).enviarMensagemHtml(eq(999L), anyString());
+    }
+
+    @Test
+    void testAutoResponse_comTimeSimulado() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta com horário", null);
+        when(autoResponseService.getResponseRule(any(), anyString(), any(LocalTime.class)))
+                .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("time", "14:30"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
+    }
+
+    @Test
+    void testAutoResponse_comTimeVazio_deveUsarHorarioAtual() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com horário atual", null);
+        when(autoResponseService.getResponseRule(any(), anyString(), isNull()))
+                .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("time", ""))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
+
+        verify(autoResponseService).getResponseRule(any(), anyString(), isNull());
+    }
+
+    @Test
+    void testAutoResponse_comTimeInvalido_deveUsarHorarioAtual() throws Exception {
+        AutoResponseOverride response =
+                new AutoResponseOverride("Resposta com horário atual", null);
+        when(autoResponseService.getResponseRule(any(), anyString(), isNull()))
+                .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(
+                        post("/admin/test-auto-response")
+                                .param("message", "teste")
+                                .param("time", "25:00"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
+
+        verify(autoResponseService).getResponseRule(any(), anyString(), isNull());
+    }
+
+    @Test
+    void testAutoResponse_comUserIdNull_deveMostrarNaoDefinido() throws Exception {
+        AutoResponseOverride response = new AutoResponseOverride("Resposta para usuário", null);
+        when(autoResponseService.getResponseRule(isNull(), anyString(), any()))
+                .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+
+        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
+
+        verify(autoResponseService).getResponseRule(isNull(), anyString(), any());
+        verify(telegramFacade)
+                .enviarMensagemHtml(anyLong(), argThat(msg -> msg.contains("NÃO DEFINIDO")));
     }
 
     @Test
@@ -877,9 +991,12 @@ class AdminControllerTest {
                                 HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
                 .when(telegramFacade)
                 .enviarMidia(eq(SHOWCASE_CHAT_ID), anyString(), anyString());
+        // Fallback de texto funciona → conta como sucesso
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
 
         verify(telegramFacade)
                 .enviarMidia(
@@ -897,9 +1014,12 @@ class AdminControllerTest {
         doThrow(new ResourceAccessException("Timeout"))
                 .when(telegramFacade)
                 .enviarMidia(eq(SHOWCASE_CHAT_ID), anyString(), anyString());
+        // Fallback de texto funciona → conta como sucesso
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada")));
 
         verify(telegramFacade)
                 .enviarMidia(
@@ -919,8 +1039,10 @@ class AdminControllerTest {
                 .when(telegramFacade)
                 .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
 
+        // 🔧 KI-001 fix: o método público agora responde 500 (fallback de texto não é "sucesso")
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
-                .andExpect(status().isOk());
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string(containsString("Falha ao enviar")));
 
         verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
     }
@@ -935,8 +1057,10 @@ class AdminControllerTest {
                 .when(telegramFacade)
                 .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
 
+        // 🔧 KI-001 fix: 500
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
-                .andExpect(status().isOk());
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string(containsString("Falha ao enviar")));
 
         verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
     }
@@ -955,85 +1079,6 @@ class AdminControllerTest {
     @Test
     void testAutoResponse_comParametroMessageAusente_retornaBadRequest() throws Exception {
         mockMvc.perform(post("/admin/test-auto-response")).andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void testAutoResponse_comChatIdPersonalizado() throws Exception {
-        AutoResponseOverride response = new AutoResponseOverride("Resposta teste", null);
-        when(autoResponseService.getResponseRule(any(), anyString(), any()))
-                .thenReturn(java.util.Optional.of(response));
-
-        mockMvc.perform(
-                        post("/admin/test-auto-response")
-                                .param("message", "teste")
-                                .param("chatId", "999"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Resposta enviada para o chat 999")));
-
-        verify(telegramFacade).enviarMensagemHtml(eq(999L), anyString());
-    }
-
-    @Test
-    void testAutoResponse_comTimeSimulado() throws Exception {
-        AutoResponseOverride response = new AutoResponseOverride("Resposta com horário", null);
-        when(autoResponseService.getResponseRule(any(), anyString(), any(LocalTime.class)))
-                .thenReturn(java.util.Optional.of(response));
-
-        mockMvc.perform(
-                        post("/admin/test-auto-response")
-                                .param("message", "teste")
-                                .param("time", "14:30"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Resposta enviada")));
-    }
-
-    @Test
-    void testAutoResponse_comTimeVazio_deveUsarHorarioAtual() throws Exception {
-        AutoResponseOverride response =
-                new AutoResponseOverride("Resposta com horário atual", null);
-        when(autoResponseService.getResponseRule(any(), anyString(), isNull()))
-                .thenReturn(java.util.Optional.of(response));
-
-        mockMvc.perform(
-                        post("/admin/test-auto-response")
-                                .param("message", "teste")
-                                .param("time", ""))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Resposta enviada")));
-
-        verify(autoResponseService).getResponseRule(any(), anyString(), isNull());
-    }
-
-    @Test
-    void testAutoResponse_comTimeInvalido_deveUsarHorarioAtual() throws Exception {
-        AutoResponseOverride response =
-                new AutoResponseOverride("Resposta com horário atual", null);
-        when(autoResponseService.getResponseRule(any(), anyString(), isNull()))
-                .thenReturn(java.util.Optional.of(response));
-
-        mockMvc.perform(
-                        post("/admin/test-auto-response")
-                                .param("message", "teste")
-                                .param("time", "25:00"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Resposta enviada")));
-
-        verify(autoResponseService).getResponseRule(any(), anyString(), isNull());
-    }
-
-    @Test
-    void testAutoResponse_comUserIdNull_deveMostrarNaoDefinido() throws Exception {
-        AutoResponseOverride response = new AutoResponseOverride("Resposta para usuário", null);
-        when(autoResponseService.getResponseRule(isNull(), anyString(), any()))
-                .thenReturn(java.util.Optional.of(response));
-
-        mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
-                .andExpect(status().isOk())
-                .andExpect(content().string(containsString("Resposta enviada")));
-
-        verify(autoResponseService).getResponseRule(isNull(), anyString(), any());
-        verify(telegramFacade)
-                .enviarMensagemHtml(anyLong(), argThat(msg -> msg.contains("NÃO DEFINIDO")));
     }
 
     @Test
@@ -1309,6 +1354,333 @@ class AdminControllerTest {
     }
 
     // =========================================================================
+    // 🆕 PODCAST — REENVIO POR SEXTA-FEIRA
+    // =========================================================================
+
+    @Nested
+    @DisplayName("POST /admin/podcast/resend")
+    class ResendPodcast {
+
+        @Test
+        @DisplayName("sem friday: usa última sexta e retorna 202")
+        void semFriday_usaUltimaSexta() throws Exception {
+            mockMvc.perform(post("/admin/podcast/resend").param("chatId", "999"))
+                    .andExpect(status().isAccepted())
+                    .andExpect(content().string(containsString("Reenvio de podcast agendado")))
+                    .andExpect(content().string(containsString("Chat: 999")));
+        }
+
+        @Test
+        @DisplayName("sem friday e sem chatId: usa showcase")
+        void semFriday_semChatId_usaShowcase() throws Exception {
+            mockMvc.perform(post("/admin/podcast/resend"))
+                    .andExpect(status().isAccepted())
+                    .andExpect(content().string(containsString("-1003703557250")));
+        }
+
+        @Test
+        @DisplayName("friday inválida: retorna 400")
+        void fridayInvalida_retornaBadRequest() throws Exception {
+            mockMvc.perform(post("/admin/podcast/resend").param("friday", "nao-e-data"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().string(containsString("Data inválida")));
+        }
+
+        @Test
+        @DisplayName("dia que não é sexta: retorna 400")
+        void diaNaoSexta_retornaBadRequest() throws Exception {
+            // 2026-10-13 é uma terça-feira
+            mockMvc.perform(
+                            post("/admin/podcast/resend")
+                                    .param("friday", "2026-10-13")
+                                    .param("chatId", "999"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().string(containsString("não é uma sexta-feira")));
+        }
+
+        @Test
+        @DisplayName("sexta 09/10/2026: retorna 202 e período 02/10 → 09/10")
+        void sextaValida_retornaPeriodoCorreto() throws Exception {
+            mockMvc.perform(
+                            post("/admin/podcast/resend")
+                                    .param("friday", "2026-10-09")
+                                    .param("chatId", "999"))
+                    .andExpect(status().isAccepted())
+                    .andExpect(content().string(containsString("2026-10-09")))
+                    .andExpect(content().string(containsString("2026-10-02")))
+                    .andExpect(content().string(containsString("12:00")))
+                    .andExpect(content().string(containsString("11:59")));
+        }
+
+        @Test
+        @SneakyThrows
+        @DisplayName("sexta válida: dispara async com from/to corretos")
+        void sextaValida_disparaAsync() {
+            mockMvc.perform(
+                            post("/admin/podcast/resend")
+                                    .param("friday", "2026-10-09")
+                                    .param("chatId", "999"))
+                    .andExpect(status().isAccepted());
+
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(podcastPublisherService, atLeastOnce())
+                                            .generateAndSendPodcast(
+                                                    LocalDate.of(2026, Month.OCTOBER, 2),
+                                                    LocalDate.of(2026, Month.OCTOBER, 9),
+                                                    999L,
+                                                    LocalDateTime.of(2026, Month.OCTOBER, 2, 12, 0),
+                                                    LocalDateTime.of(
+                                                            2026, Month.OCTOBER, 9, 11, 59, 59)));
+        }
+
+        @Test
+        @DisplayName("sexta válida sem chatId: usa showcase no async")
+        void sextaValida_semChatId_usaShowcase() throws Exception {
+            mockMvc.perform(post("/admin/podcast/resend").param("friday", "2026-10-09"))
+                    .andExpect(status().isAccepted())
+                    .andExpect(content().string(containsString("-1003703557250")));
+
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(podcastPublisherService, atLeastOnce())
+                                            .generateAndSendPodcast(
+                                                    any(),
+                                                    any(),
+                                                    eq(SHOWCASE_CHAT_ID),
+                                                    any(),
+                                                    any()));
+        }
+
+        @Test
+        @DisplayName("erro no async: envia mensagem de erro no chat")
+        void erroAsync_enviaMensagem() throws Exception {
+            doThrow(new RuntimeException("boom"))
+                    .when(podcastPublisherService)
+                    .generateAndSendPodcast(any(), any(), anyLong(), any(), any());
+
+            mockMvc.perform(
+                            post("/admin/podcast/resend")
+                                    .param("friday", "2026-10-09")
+                                    .param("chatId", "999"))
+                    .andExpect(status().isAccepted());
+
+            Awaitility.await()
+                    .atMost(java.time.Duration.ofSeconds(2))
+                    .untilAsserted(
+                            () ->
+                                    verify(telegramFacade, atLeastOnce())
+                                            .enviarMensagem(eq(999L), contains("Erro")));
+        }
+
+        @Test
+        @DisplayName("erro no async + erro ao enviar mensagem: não propaga")
+        void erroAsync_erroEnvioMensagem_naoLanca() throws Exception {
+            doThrow(new RuntimeException("boom"))
+                    .when(podcastPublisherService)
+                    .generateAndSendPodcast(any(), any(), anyLong());
+            doThrow(new RuntimeException("falha"))
+                    .when(telegramFacade)
+                    .enviarMensagem(anyLong(), anyString());
+
+            // Não deve lançar
+            mockMvc.perform(
+                            post("/admin/podcast/resend")
+                                    .param("friday", "2026-10-09")
+                                    .param("chatId", "999"))
+                    .andExpect(status().isAccepted());
+        }
+    }
+
+    // =========================================================================
+    // 🆕 HELPERS — AdminUtils
+    // =========================================================================
+
+    @Nested
+    @DisplayName("AdminUtils.calcularPeriodoPodcast")
+    class CalcularPeriodoPodcast {
+
+        @Test
+        @DisplayName("sexta 09/10/2026: retorna 02/10T12:00 → 09/10T11:59:59")
+        void sexta_09_10_2026() {
+            LocalDate friday = LocalDate.of(2026, Month.OCTOBER, 9);
+            LocalDateTime[] p = AdminUtils.calcularPeriodoPodcast(friday);
+
+            assertThat(p[0]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 2, 12, 0, 0));
+            assertThat(p[1]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 9, 11, 59, 59));
+        }
+
+        @Test
+        @DisplayName("sexta 16/10/2026: retorna 09/10T12:00 → 16/10T11:59:59")
+        void sexta_16_10_2026() {
+            LocalDate friday = LocalDate.of(2026, Month.OCTOBER, 16);
+            LocalDateTime[] p = AdminUtils.calcularPeriodoPodcast(friday);
+
+            assertThat(p[0]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 9, 12, 0, 0));
+            assertThat(p[1]).isEqualTo(LocalDateTime.of(2026, Month.OCTOBER, 16, 11, 59, 59));
+        }
+
+        @Test
+        @DisplayName("null: lança IllegalArgumentException")
+        void null_lanca() {
+            assertThatThrownBy(() -> AdminUtils.calcularPeriodoPodcast(null))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("não pode ser nulo");
+        }
+
+        @Test
+        @DisplayName("terça 13/10: lança IllegalArgumentException")
+        void terca_lanca() {
+            LocalDate terca = LocalDate.of(2026, Month.OCTOBER, 13);
+
+            assertThatThrownBy(() -> AdminUtils.calcularPeriodoPodcast(terca))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("sexta-feira");
+        }
+
+        @Test
+        @DisplayName("domingo: lança IllegalArgumentException")
+        void domingo_lanca() {
+            LocalDate domingo = LocalDate.of(2026, Month.OCTOBER, 11);
+
+            assertThatThrownBy(() -> AdminUtils.calcularPeriodoPodcast(domingo))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("AdminUtils.ultimaSexta")
+    class UltimaSexta {
+
+        @Test
+        @DisplayName("terça 13/10/2026: retorna sexta 09/10")
+        void terca_retornaSextaAnterior() {
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 13)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
+        }
+
+        @Test
+        @DisplayName("sexta 09/10/2026: retorna ela mesma")
+        void sexta_retornaElaMesma() {
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 9)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
+        }
+
+        @Test
+        @DisplayName("sábado 10/10/2026: retorna sexta 09/10")
+        void sabado_retornaSextaAnterior() {
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 10)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
+        }
+
+        @Test
+        @DisplayName("domingo 11/10/2026: retorna sexta 09/10")
+        void domingo_retornaSextaAnterior() {
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 11)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
+        }
+
+        @Test
+        @DisplayName("segunda 12/10/2026: retorna sexta 09/10")
+        void segunda_retornaSextaAnterior() {
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 12)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 9));
+        }
+
+        @Test
+        @DisplayName("quinta 08/10/2026: retorna sexta 02/10")
+        void quinta_retornaSextaAnterior() {
+            assertThat(AdminUtils.ultimaSexta(LocalDate.of(2026, Month.OCTOBER, 8)))
+                    .isEqualTo(LocalDate.of(2026, Month.OCTOBER, 2));
+        }
+
+        @Test
+        @DisplayName("null: usa hoje em Brasília")
+        void null_usaHoje() {
+            LocalDate result = AdminUtils.ultimaSexta(null);
+            assertThat(result.getDayOfWeek()).isEqualTo(DayOfWeek.FRIDAY);
+        }
+    }
+
+    // =========================================================================
+    // 🆕 KI-001 residual — cobertura explícita dos fixes
+    // =========================================================================
+
+    @Nested
+    @DisplayName("KI-001 residual: enviarMidia retorna false E fallback falha → HTTP 500")
+    class Ki001Residual {
+
+        @Test
+        @DisplayName("falaT1000Tts: enviarMidia=false → 500")
+        void falaT1000Tts_midiaFalse_retorna500() throws Exception {
+            ReflectionTestUtils.setField(adminController, "ownerId", 42L);
+            when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
+            var temp = java.nio.file.Files.createTempFile("tts_", ".mp3");
+            when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
+            when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+            ResultActions result =
+                    mockMvc.perform(
+                            post("/admin/fala-t1000-tts")
+                                    .param("message", "olá")
+                                    .param("chatId", "100"));
+
+            result.andExpect(status().isInternalServerError())
+                    .andExpect(content().string(containsString("Falha ao enviar")));
+
+            verify(telegramFacade).enviarMidia(eq(100L), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("testAzureTts: enviarMidia=false → 500")
+        void testAzureTts_midiaFalse_retorna500() throws Exception {
+            ReflectionTestUtils.setField(adminController, "publishChatId", -200L);
+            when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
+
+            var temp = java.nio.file.Files.createTempFile("test_azure_", ".mp3");
+            when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
+            when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+
+            ResultActions result = mockMvc.perform(get("/admin/test-azure-tts"));
+
+            result.andExpect(status().isInternalServerError())
+                    .andExpect(content().string(containsString("Falha ao enviar")));
+
+            verify(telegramFacade).enviarMidia(eq(-200L), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("testAutoResponse: enviarMidia=false E fallback falha → 500")
+        void testAutoResponse_midiaFalse_retorna500() throws Exception {
+            AutoResponseOverride response =
+                    new AutoResponseOverride(
+                            "Resposta com animação", "https://example.com/video.mp4");
+            when(autoResponseService.getResponseRule(any(), anyString(), any()))
+                    .thenReturn(java.util.Optional.of(response));
+            when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
+            // Fallback de texto também falha → força 500
+            doThrow(new ResourceAccessException("Timeout"))
+                    .when(telegramFacade)
+                    .enviarMensagemHtml(anyLong(), anyString());
+
+            ResultActions result =
+                    mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"));
+
+            result.andExpect(status().isInternalServerError())
+                    .andExpect(content().string(containsString("Falha ao enviar")));
+
+            verify(telegramFacade)
+                    .enviarMidia(
+                            eq(SHOWCASE_CHAT_ID), eq("https://example.com/video.mp4"), anyString());
+            verify(telegramFacade).enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
+        }
+    }
+
+    // =========================================================================
     // 🧪 ONDA 3c — Cobertura do AdminController (REST)
     // =========================================================================
 
@@ -1329,7 +1701,7 @@ class AdminControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("999")));
 
-        verify(telegramFacade).enviarMensagemHtml(eq(999L), eq("olá mundo"));
+        verify(telegramFacade).enviarMensagemHtml(999L, "olá mundo");
     }
 
     @Test
@@ -1341,7 +1713,7 @@ class AdminControllerTest {
         mockMvc.perform(post("/admin/fala-t1000").param("message", "oi"))
                 .andExpect(status().isOk());
 
-        verify(telegramFacade).enviarMensagemHtml(eq(42L), eq("oi"));
+        verify(telegramFacade).enviarMensagemHtml(42L, "oi");
     }
 
     @Test
@@ -1356,7 +1728,7 @@ class AdminControllerTest {
                                 .param("parseMode", "TEXT"))
                 .andExpect(status().isOk());
 
-        verify(telegramFacade).enviarMensagem(eq(100L), eq("texto"));
+        verify(telegramFacade).enviarMensagem(100L, "texto");
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
 
@@ -1371,7 +1743,6 @@ class AdminControllerTest {
     @DisplayName("falaT1000 sem chatId e ownerId 0 retorna 400")
     void falaT1000_semChatIdNemOwner() throws Exception {
         ReflectionTestUtils.setField(adminController, "ownerId", 0L);
-        // Força digestChatIds vazio
         ReflectionTestUtils.setField(adminController, "digestChatIds", java.util.Set.of());
 
         mockMvc.perform(post("/admin/fala-t1000").param("message", "oi"))
@@ -1432,7 +1803,8 @@ class AdminControllerTest {
 
         var temp = java.nio.file.Files.createTempFile("test_azure_", ".mp3");
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
-        doNothing().when(telegramFacade).enviarMidia(anyLong(), anyString(), anyString());
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(get("/admin/test-azure-tts"))
                 .andExpect(status().isOk())
@@ -1452,7 +1824,8 @@ class AdminControllerTest {
         when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
         var temp = java.nio.file.Files.createTempFile("tts_", ".mp3");
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
-        doNothing().when(telegramFacade).enviarMidia(anyLong(), anyString(), anyString());
+        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(
                         post("/admin/fala-t1000-tts")
@@ -1515,7 +1888,6 @@ class AdminControllerTest {
                                 .param("end", "2026-09-07"))
                 .andExpect(status().isAccepted());
 
-        // Aguarda o CompletableFuture.runAsync executar (até 2s)
         org.awaitility.Awaitility.await()
                 .atMost(java.time.Duration.ofSeconds(2))
                 .untilAsserted(
@@ -1699,7 +2071,7 @@ class AdminControllerTest {
 
     @Test
     @DisplayName("initChatIds com string em branco não adiciona nada")
-    void initChatIds_stringVazia() throws Exception {
+    void initChatIds_stringVazia() {
         ReflectionTestUtils.setField(adminController, "digestChatIds", new java.util.HashSet<>());
         ReflectionTestUtils.setField(adminController, "digestChatIdsStr", "");
 
@@ -1714,7 +2086,7 @@ class AdminControllerTest {
 
     @Test
     @DisplayName("initChatIds com string null não adiciona nada")
-    void initChatIds_stringNull() throws Exception {
+    void initChatIds_stringNull() {
         ReflectionTestUtils.setField(adminController, "digestChatIds", new java.util.HashSet<>());
         ReflectionTestUtils.setField(adminController, "digestChatIdsStr", null);
 
@@ -1777,9 +2149,10 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/admin/test-worldcup-noon-showcase"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("-5283244164")));
+                .andExpect(
+                        content().string(org.hamcrest.Matchers.containsString("-1003703557250")));
 
-        verify(worldCupSchedulerService).sendNoonMatchesToChat(-5283244164L);
+        verify(worldCupSchedulerService).sendNoonMatchesToChat(-1003703557250L);
     }
 
     @Test
@@ -1789,9 +2162,10 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/admin/test-worldcup-evening-showcase"))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("-5283244164")));
+                .andExpect(
+                        content().string(org.hamcrest.Matchers.containsString("-1003703557250")));
 
-        verify(worldCupSchedulerService).sendEveningMatchesToChat(-5283244164L);
+        verify(worldCupSchedulerService).sendEveningMatchesToChat(-1003703557250L);
     }
 
     @Test
@@ -1799,12 +2173,13 @@ class AdminControllerTest {
     void testWorldCupResultsShowcase_semChatId() throws Exception {
         doNothing()
                 .when(worldCupSchedulerService)
-                .sendResultsToChat(eq(-5283244164L), any(LocalDate.class));
+                .sendResultsToChat(eq(-1003703557250L), any(LocalDate.class));
 
         mockMvc.perform(post("/admin/test-worldcup-results-showcase").param("dateParam", "hoje"))
                 .andExpect(status().isOk());
 
-        verify(worldCupSchedulerService).sendResultsToChat(eq(-5283244164L), any(LocalDate.class));
+        verify(worldCupSchedulerService)
+                .sendResultsToChat(eq(-1003703557250L), any(LocalDate.class));
     }
 
     // -------------------------------------------------------------------------
@@ -1817,15 +2192,17 @@ class AdminControllerTest {
         AutoResponseOverride response = new AutoResponseOverride("Resposta", "nao-e-url-valida");
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.of(response));
+        doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(
                         post("/admin/test-auto-response")
                                 .param("message", "teste")
                                 .param("chatId", "999"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Resposta enviada para o chat 999")));
 
         verify(telegramFacade, never()).enviarMidia(anyLong(), anyString(), anyString());
-        verify(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
+        verify(telegramFacade).enviarMensagemHtml(eq(999L), anyString());
     }
 
     // -------------------------------------------------------------------------
@@ -1845,5 +2222,140 @@ class AdminControllerTest {
                 .andExpect(jsonPath("$.found").value(true))
                 .andExpect(jsonPath("$.response").value("Resposta"))
                 .andExpect(jsonPath("$.animation").value("https://exemplo.com/anim.gif"));
+    }
+
+    // =========================================================================
+    // RECARREGAMENTO ADICIONAL
+    // =========================================================================
+
+    @Test
+    @DisplayName("reloadTmdbAliases chama tmdbClient.reloadAliases")
+    void reloadTmdbAliases_chamaClient() throws Exception {
+        doNothing().when(tmdbClient).reloadAliases();
+
+        mockMvc.perform(post("/admin/reload-tmdb-aliases"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Atalhos TMDB recarregados")));
+
+        verify(tmdbClient).reloadAliases();
+    }
+
+    @Test
+    @DisplayName("reloadWorldCupTeams chama teamsService.reload")
+    void reloadWorldCupTeams_chamaService() throws Exception {
+        doNothing().when(teamsService).reload();
+
+        mockMvc.perform(post("/admin/reload-worldcup-teams"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Times da Copa recarregados")));
+
+        verify(teamsService).reload();
+    }
+
+    @Test
+    @DisplayName("reloadTelegramErrors chama telegramExceptionHandler.reload")
+    void reloadTelegramErrors_chamaHandler() throws Exception {
+        doNothing().when(telegramExceptionHandler).reload();
+
+        mockMvc.perform(post("/admin/reload-telegram-errors"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Regras de erro do Telegram")));
+
+        verify(telegramExceptionHandler).reload();
+    }
+
+    @Test
+    @DisplayName("reloadAdminConfig chama adminConfigService.reload")
+    void reloadAdminConfig_chamaService() throws Exception {
+        doNothing().when(adminConfigService).reload();
+
+        mockMvc.perform(post("/admin/reload-admin-config"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("admin-config.json recarregado")));
+
+        verify(adminConfigService).reload();
+    }
+
+    // =========================================================================
+    // PARAMETRIZADO — todos os status de migração
+    // =========================================================================
+
+    @ParameterizedTest
+    @ValueSource(strings = {"SUCCESS", "PARTIAL", "FAILED"})
+    @DisplayName("migrateFromSqlite mapeia todos os status para HTTP corretos")
+    void migrateFromSqlite_todosStatus(String status) throws Exception {
+        MigrationResult result;
+        int expectedStatus;
+
+        switch (status) {
+            case "SUCCESS" -> {
+                result =
+                        MigrationResult.success(
+                                java.time.Instant.now(), java.time.Instant.now(), Map.of());
+                expectedStatus = 200;
+            }
+            case "PARTIAL" -> {
+                result =
+                        MigrationResult.partial(
+                                java.time.Instant.now(),
+                                java.time.Instant.now(),
+                                Map.of(),
+                                List.of("erro"));
+                expectedStatus = 207;
+            }
+            default -> {
+                result =
+                        MigrationResult.failed(
+                                java.time.Instant.now(), java.time.Instant.now(), List.of("erro"));
+                expectedStatus = 500;
+            }
+        }
+
+        when(migrationService.migrateAll(false)).thenReturn(result);
+
+        mockMvc.perform(post("/admin/migrate-sqlite").param("dryRun", "false"))
+                .andExpect(status().is(expectedStatus));
+    }
+
+    @Test
+    @DisplayName("customDigest: flag 'ai.digest.custom-period.enabled' off → 503")
+    void customDigest_flagDesabilitada_retorna503() throws Exception {
+        when(featureFlagAdminService.isEnabled("ai.digest.custom-period.enabled"))
+                .thenReturn(false);
+
+        mockMvc.perform(
+                        get("/admin/custom-digest")
+                                .param("start", "2026-05-07")
+                                .param("end", "2026-05-08"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(content().string(containsString("Custom digest desabilitado")));
+
+        verifyNoInteractions(dailyDigestService);
+    }
+
+    @Test
+    @DisplayName("customDigest: flag on → executa normalmente")
+    void customDigest_flagHabilitada_executa() throws Exception {
+        when(featureFlagAdminService.isEnabled("ai.digest.custom-period.enabled")).thenReturn(true);
+
+        mockMvc.perform(
+                        get("/admin/custom-digest")
+                                .param("start", "2026-05-07")
+                                .param("end", "2026-05-08"))
+                .andExpect(status().isOk());
+
+        verify(dailyDigestService).generateDigestCustom(any(), any(), isNull());
+    }
+
+    @Test
+    @DisplayName("debugCache: flag 'admin.debug-cache.enabled' off → 404 com mensagem")
+    void debugCache_flagDesabilitada_retorna404() throws Exception {
+        when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled")).thenReturn(false);
+
+        mockMvc.perform(get("/admin/debug/cache/file-id"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.erro").value("Debug cache desabilitado por feature flag"));
+
+        verifyNoInteractions(fileTranscriptionCacheService);
     }
 }

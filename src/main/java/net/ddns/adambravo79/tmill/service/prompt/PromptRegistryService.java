@@ -1,0 +1,233 @@
+/* (c) 2026 | 30/09/2026 */
+package net.ddns.adambravo79.tmill.service.prompt;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+
+@Slf4j
+@Service
+public class PromptRegistryService {
+
+    private static final String RULES = "rules";
+    private static final String SYSTEM_PROMPT = "systemPrompt";
+    private final JsonConfigLoader jsonConfigLoader;
+    private static final String DEFAULT_PROMPTS_RESOURCE = "prompts/digest-personas.json";
+    private static final String PODCAST_SYSTEM_RESOURCE = "prompts/podcast-system.json";
+    private static final String PODCAST_CONFIG_RESOURCE = "prompts/podcast-config.json";
+
+    private final String overridePath;
+    private final String podcastSystemOverridePath;
+    private final String podcastConfigOverridePath;
+
+    private final Map<String, Object> promptCache = new ConcurrentHashMap<>();
+
+    public PromptRegistryService(
+            JsonConfigLoader jsonConfigLoader,
+            @Value("${t1000.prompts.override-path:#{null}}") String overridePath,
+            @Value("${t1000.prompts.podcast-system.override-path:#{null}}")
+                    String podcastSystemOverridePath,
+            @Value("${t1000.prompts.podcast-config.override-path:#{null}}")
+                    String podcastConfigOverridePath) {
+        this.jsonConfigLoader = jsonConfigLoader;
+        this.overridePath = overridePath;
+        this.podcastSystemOverridePath = podcastSystemOverridePath;
+        this.podcastConfigOverridePath = podcastConfigOverridePath;
+        loadPrompts();
+    }
+
+    /**
+     * Carrega os prompts usando o JsonConfigLoader (suporta overridePath e fallback no classpath).
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public synchronized void loadPrompts() {
+        log.info("🔄 Carregando configurações de prompts e personas...");
+
+        Optional<Map> loadedMap =
+                jsonConfigLoader.loadConfig(
+                        DEFAULT_PROMPTS_RESOURCE,
+                        Map.class,
+                        overridePath != null && !overridePath.isBlank()
+                                ? overridePath
+                                : "config/prompts/digest-personas.json");
+
+        promptCache.clear();
+
+        if (loadedMap.isPresent()) {
+            promptCache.putAll(loadedMap.get());
+            log.info(
+                    "✅ Prompts carregados com sucesso. Total de chaves topo: {}",
+                    promptCache.size());
+        } else {
+            log.warn(
+                    "⚠️ Nenhum arquivo de prompt/persona foi encontrado no override ou classpath.");
+        }
+    }
+
+    /**
+     * Executa o recarregamento síncrono dos prompts do disco/classpath.
+     */
+    public void reload() {
+        loadPrompts();
+    }
+
+    /**
+     * Retorna o mapa completo de prompts carregados (unmodifiable).
+     */
+    public Map<String, Object> getAllPrompts() {
+        return Collections.unmodifiableMap(promptCache);
+    }
+
+    /**
+     * Obtém um prompt específico do mapa pelo seu nome/chave.
+     */
+    public <T> Optional<T> getPrompt(String key, Class<T> targetType) {
+        Object val = promptCache.get(key);
+        if (val == null) {
+            return Optional.empty();
+        }
+        if (targetType.isInstance(val)) {
+            return Optional.of(targetType.cast(val));
+        }
+        return Optional.empty();
+    }
+
+    // =========================================================================
+    // MÉTODOS DE CONVENIÊNCIA (Mapeamento dos testes de paridade)
+    // =========================================================================
+
+    /**
+     * Constrói o System Prompt de uma persona do Digest aplicando o contexto do período.
+     */
+    @SuppressWarnings("unchecked")
+    public String getDigestSystemPrompt(String personaName, String periodLabel) {
+        Map<String, Object> personas = (Map<String, Object>) promptCache.get("personas");
+        String basePrompt = "";
+
+        if (personas != null && personas.containsKey(personaName)) {
+            Map<String, Object> personaMap = (Map<String, Object>) personas.get(personaName);
+            basePrompt = (String) personaMap.get(SYSTEM_PROMPT);
+        }
+
+        String context = getPeriodContext(periodLabel);
+        if (context.isBlank()) {
+            return basePrompt;
+        }
+        return basePrompt + "\n\n\n" + context;
+    }
+
+    /**
+     * Formata o User Prompt do Digest substituindo as mensagens no template configurado.
+     */
+    public String getDigestUserPrompt(String messages) {
+        String template = (String) promptCache.get("userPromptTemplate");
+        if (template == null) {
+            return messages;
+        }
+        return String.format(template, messages);
+    }
+
+    /**
+     * Obtém a persona ativa definida no arquivo JSON.
+     * Caso não definida, retorna o fallback "T1000".
+     */
+    public String getActivePersonaName() {
+        Object active = promptCache.get("activePersona");
+        if (active instanceof String personaName && !personaName.isBlank()) {
+            return personaName;
+        }
+        return "T1000";
+    }
+
+    /**
+     * Carrega e combina o System Prompt do Podcast com a linha de encerramento configurada.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public String getPodcastSystemPrompt() {
+        Optional<Map> systemMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_SYSTEM_RESOURCE, Map.class, podcastSystemOverridePath);
+        Optional<Map> configMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_CONFIG_RESOURCE, Map.class, podcastConfigOverridePath);
+
+        String baseSystemPrompt = "";
+        if (systemMap.isPresent() && systemMap.get().containsKey(SYSTEM_PROMPT)) {
+            baseSystemPrompt = (String) systemMap.get().get(SYSTEM_PROMPT);
+        }
+
+        String closingLine = "E caso eu não veja vocês, bom dia, boa tarde e boa noite!";
+        if (configMap.isPresent() && configMap.get().containsKey(RULES)) {
+            Map<String, Object> rules = (Map<String, Object>) configMap.get().get(RULES);
+            if (rules != null && rules.get("closingLine") != null) {
+                closingLine = (String) rules.get("closingLine");
+            }
+        }
+
+        return baseSystemPrompt + "\n- Encerre com: \"" + closingLine + "\"";
+    }
+
+    /**
+     * Obtém o User Prompt do Podcast combinando o texto base configurado com as mensagens.
+     */
+    @SuppressWarnings("rawtypes")
+    public String getPodcastUserPrompt(String combinedMessages) {
+        Optional<Map> systemMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_SYSTEM_RESOURCE, Map.class, podcastSystemOverridePath);
+
+        String baseUserPrompt = "Aqui estão as mensagens da semana passada:\n\n";
+
+        if (systemMap.isPresent() && systemMap.get().containsKey("userPrompt")) {
+            baseUserPrompt = (String) systemMap.get().get("userPrompt");
+        }
+
+        return baseUserPrompt + combinedMessages;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String getPeriodContext(String periodLabel) {
+        Map<String, Object> contexts = (Map<String, Object>) promptCache.get("periodContexts");
+        if (contexts == null) {
+            return "";
+        }
+
+        if (periodLabel != null && periodLabel.contains("MADRUGADA")) {
+            return (String) contexts.getOrDefault("MADRUGADA", "");
+        }
+        return (String) contexts.getOrDefault("DEFAULT", "");
+    }
+
+    /** Obtém o CRON dinâmico do Podcast. Se ausente, usa o padrão (Sexta, 12h). */
+    @SuppressWarnings("rawtypes")
+    public String getPodcastCron() {
+        Optional<Map> configMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_CONFIG_RESOURCE, Map.class, podcastConfigOverridePath);
+        return configMap.map(m -> (String) m.get("cron")).orElse("0 0 12 * * 5");
+    }
+
+    /** Obtém a temperatura dinâmica do Groq para o Podcast. Padrão: 0.7. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public double getPodcastTemperature() {
+        Optional<Map> configMap =
+                jsonConfigLoader.loadConfig(
+                        PODCAST_CONFIG_RESOURCE, Map.class, podcastConfigOverridePath);
+        return configMap
+                .map(
+                        m -> {
+                            Map<String, Object> rules = (Map<String, Object>) m.get(RULES);
+                            return rules != null && rules.get("temperature") != null
+                                    ? ((Number) rules.get("temperature")).doubleValue()
+                                    : 0.7;
+                        })
+                .orElse(0.7);
+    }
+}

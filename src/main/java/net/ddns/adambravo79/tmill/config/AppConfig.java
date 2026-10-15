@@ -13,6 +13,7 @@ import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @Slf4j
 @Configuration
@@ -43,6 +44,6 @@ public class AppConfig {
 
     @Bean
     public ObjectMapper toolsObjectMapper() {
-        return new ObjectMapper();
+        return JsonMapper.builder().build();
     }
 }

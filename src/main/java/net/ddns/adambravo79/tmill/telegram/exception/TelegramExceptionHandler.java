@@ -1,37 +1,93 @@
 package net.ddns.adambravo79.tmill.telegram.exception;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.pengrad.telegrambot.TelegramException;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramSender;
 
 @Slf4j
 @Component
 public class TelegramExceptionHandler {
 
-    // Mapeamento de padrões de erro para mensagens amigáveis
-    private static final Map<Predicate<String>, String> ERROR_MESSAGES =
-            Map.of(
-                    msg -> msg.contains("429"),
-                            "⏳ Muitas requisições. Tente novamente em alguns segundos.",
-                    msg -> msg.contains("timeout"),
-                            "⏱️ O servidor demorou a responder. Tente novamente em instantes.",
-                    msg -> msg.contains("unauthorized"),
-                            "🔑 Token inválido ou expirado. Verifique suas credenciais.",
-                    msg -> msg.contains("chat not found"),
-                            "❌ Não consegui encontrar este chat. Verifique se o ID está correto.",
-                    msg -> msg.contains("file is too big"),
-                            "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho.",
-                    msg -> msg.contains("wrong file type"),
-                            "🛑 Formato de arquivo não suportado. Envie em outro formato.");
+    private final JsonConfigLoader jsonConfigLoader;
+
+    @Value("${telegram.error-messages.file:classpath:telegram-error-messages.json}")
+    private String errorMessagesFile;
+
+    /** Referência atômica para a lista imutável de regras. Thread-safe por construção. */
+    private final AtomicReference<List<ErrorRule>> errorRulesRef = new AtomicReference<>(List.of());
+
+    public TelegramExceptionHandler(JsonConfigLoader jsonConfigLoader) {
+        this.jsonConfigLoader = jsonConfigLoader;
+    }
+
+    @PostConstruct
+    public void init() {
+        reload();
+    }
+
+    /** Recarrega as regras de erro do JSON. Em caso de falha, mantém o estado anterior. */
+    public synchronized void reload() {
+        try {
+            var loaded =
+                    jsonConfigLoader.loadConfig(
+                            "telegram-error-messages.json",
+                            Map.class,
+                            errorMessagesFile != null && !errorMessagesFile.isBlank()
+                                    ? errorMessagesFile
+                                    : null);
+
+            if (loaded.isEmpty()) {
+                log.warn("⚠️ Nenhum arquivo de mensagens de erro do Telegram encontrado.");
+                return;
+            }
+
+            Object rulesNode = loaded.get().get("rules");
+            if (!(rulesNode instanceof List<?> rawList)) {
+                log.warn("⚠️ Chave 'rules' ausente ou inválida.");
+                return;
+            }
+
+            List<ErrorRule> novas =
+                    rawList.stream()
+                            .filter(Map.class::isInstance)
+                            .map(Map.class::cast)
+                            .map(
+                                    m -> {
+                                        String contains = optString(m, "contains");
+                                        String message = optString(m, "message");
+                                        return (contains != null && message != null)
+                                                ? new ErrorRule(contains.toLowerCase(), message)
+                                                : null;
+                                    })
+                            .filter(Objects::nonNull)
+                            .toList();
+
+            errorRulesRef.set(novas);
+            log.info("✅ Telegram: {} regras de erro carregadas", errorRulesRef.get().size());
+        } catch (Exception e) {
+            log.error("❌ Falha ao carregar regras de erro do Telegram", e);
+        }
+    }
+
+    private static String optString(Map<?, ?> m, String key) {
+        Object v = m.get(key);
+        return v != null ? v.toString() : null;
+    }
 
     public void handle(Exception e, long chatId, TelegramSender sender) {
         log.error("Erro no fluxo Telegram - chatId={}", chatId, e);
@@ -44,7 +100,6 @@ public class TelegramExceptionHandler {
     }
 
     private String mapearMensagem(Exception e) {
-        // Exceções customizadas do projeto
         if (e instanceof TelegramFileException) {
             return "⚠️ Não consegui baixar o áudio.";
         }
@@ -57,13 +112,9 @@ public class TelegramExceptionHandler {
         if (e instanceof org.springframework.web.client.ResourceAccessException) {
             return "⏱️ Timeout na comunicação com o servidor. Tente novamente.";
         }
-
-        // Exceções do Telegram usando pattern matching
         if (e instanceof TelegramException te) {
             return mapearPorMensagem(te.getMessage());
         }
-
-        // Fallback genérico
         return mapearPorMensagem(e.getMessage());
     }
 
@@ -71,13 +122,42 @@ public class TelegramExceptionHandler {
         if (msg == null) {
             return BotMessages.ERRO_GENERICO;
         }
-
         String lower = msg.toLowerCase();
-        for (Map.Entry<Predicate<String>, String> entry : ERROR_MESSAGES.entrySet()) {
-            if (entry.getKey().test(lower)) {
-                return entry.getValue();
+        for (ErrorRule rule : errorRulesRef.get()) {
+            if (lower.contains(rule.contains())) {
+                return rule.message();
             }
         }
         return "⚠️ Ocorreu um erro inesperado: " + msg;
+    }
+
+    /**
+     * Exposto para testes: retorna a mensagem mapeada para um texto bruto, ou
+     * {@link Optional#empty()} se nenhuma regra casar (ou se {@code rawMessage} for
+     * {@code null}).
+     *
+     * <p>Este método <b>não lança</b> NPE em entrada nula — é seguro para uso
+     * defensivo em testes e diagnósticos.
+     */
+    Optional<String> getMappedMessageFor(String rawMessage) {
+        if (rawMessage == null) {
+            return Optional.empty();
+        }
+        String lower = rawMessage.toLowerCase();
+        return errorRulesRef.get().stream()
+                .filter(r -> lower.contains(r.contains()))
+                .map(TelegramExceptionHandler::extrairMensagem)
+                .findFirst();
+    }
+
+    /** Exposto para testes: retorna as regras atualmente carregadas. */
+    List<ErrorRule> getErrorRules() {
+        return errorRulesRef.get();
+    }
+
+    public record ErrorRule(String contains, String message) {}
+
+    private static String extrairMensagem(ErrorRule rule) {
+        return rule.message();
     }
 }
