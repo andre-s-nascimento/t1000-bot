@@ -7,8 +7,8 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -20,9 +20,13 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +37,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.model.Birthday;
 import net.ddns.adambravo79.tmill.repository.BirthdayRepository;
+import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.GroupAuthorizationService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -44,6 +49,7 @@ class BirthdayServiceTest {
     @Mock private TelegramFacade telegramFacade;
     @Mock private GroupAuthorizationService groupAuthorizationService;
     @Mock private MetricsService metricsService;
+    @Mock private FeatureFlagAdminService featureFlags;
 
     @InjectMocks private BirthdayService service;
 
@@ -51,6 +57,14 @@ class BirthdayServiceTest {
 
     private void setGif() {
         ReflectionTestUtils.setField(service, "gifUrl", GIF);
+    }
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(featureFlags.isEnabled("birthday.enabled")).thenReturn(true);
+        lenient()
+                .when(featureFlags.isEnabled("birthday.group-notification.enabled"))
+                .thenReturn(true);
     }
 
     // =========================
@@ -89,26 +103,13 @@ class BirthdayServiceTest {
         verify(repository).upsert(1L, "Fulano", 5, 10);
     }
 
-    @Test
-    @DisplayName("registrar: texto vazio retorna formato inválido")
-    void registrar_textoVazio_retornaFormatoInvalido() {
-        String resp = service.registrar(1L, "Fulano", "");
-        assertThat(resp).isEqualTo(BotMessages.ANIVERSARIO_FORMATO_INVALIDO);
-        verifyNoInteractions(repository, metricsService);
-    }
+    @ParameterizedTest(name = "registrar: entrada inválida [{index}] → formato inválido")
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "qualquer coisa", "abc123"})
+    @DisplayName("registrar: entradas sem data válida retornam formato inválido")
+    void registrar_entradaInvalida_retornaFormatoInvalido(String dataTexto) {
+        String resp = service.registrar(1L, "Fulano", dataTexto);
 
-    @Test
-    @DisplayName("registrar: texto nulo retorna formato inválido")
-    void registrar_textoNulo_retornaFormatoInvalido() {
-        String resp = service.registrar(1L, "Fulano", null);
-        assertThat(resp).isEqualTo(BotMessages.ANIVERSARIO_FORMATO_INVALIDO);
-        verifyNoInteractions(repository, metricsService);
-    }
-
-    @Test
-    @DisplayName("registrar: texto sem data retorna formato inválido")
-    void registrar_textoSemData_retornaFormatoInvalido() {
-        String resp = service.registrar(1L, "Fulano", "qualquer coisa");
         assertThat(resp).isEqualTo(BotMessages.ANIVERSARIO_FORMATO_INVALIDO);
         verifyNoInteractions(repository, metricsService);
     }
@@ -174,6 +175,9 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L, -200L));
 
+        // 🔧 Onda 3.4: enviarMidia retorna boolean
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
         int enviados = service.enviarParabensPara(5, 10);
 
         assertThat(enviados).isEqualTo(1);
@@ -194,6 +198,9 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of());
 
+        // 🔧 Onda 3.4: enviarMidia retorna boolean (sem stub, retorna false → teste falha)
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
         int enviados = service.enviarParabensPara(5, 10);
 
         assertThat(enviados).isEqualTo(1);
@@ -208,12 +215,14 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
 
+        // Privado falha com Forbidden; grupo tem sucesso
         doThrow(
                         HttpClientErrorException.create(
                                 HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
                 .when(telegramFacade)
                 .enviarMidia(eq(100L), anyString(), anyString());
-        doNothing().when(telegramFacade).enviarMidia(eq(-100L), anyString(), anyString());
+        // 🔧 Onda 3.4: grupo retorna true
+        when(telegramFacade.enviarMidia(eq(-100L), anyString(), anyString())).thenReturn(true);
 
         int enviados = service.enviarParabensPara(5, 10);
 
@@ -230,11 +239,11 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L, -200L));
 
-        doNothing().when(telegramFacade).enviarMidia(eq(100L), anyString(), anyString());
-        doNothing().when(telegramFacade).enviarMidia(eq(-200L), anyString(), anyString());
-        doThrow(new RuntimeException("boom"))
-                .when(telegramFacade)
-                .enviarMidia(eq(-100L), anyString(), anyString());
+        // Privado + grupo -200: sucesso
+        when(telegramFacade.enviarMidia(eq(100L), anyString(), anyString())).thenReturn(true);
+        when(telegramFacade.enviarMidia(eq(-200L), anyString(), anyString())).thenReturn(true);
+        // Grupo -100: falha (retorna false)
+        when(telegramFacade.enviarMidia(eq(-100L), anyString(), anyString())).thenReturn(false);
 
         int enviados = service.enviarParabensPara(5, 10);
 
@@ -254,9 +263,8 @@ class BirthdayServiceTest {
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
 
-        doThrow(new RuntimeException("boom"))
-                .when(telegramFacade)
-                .enviarMidia(anyLong(), anyString(), anyString());
+        // Ambos retornam false
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
 
         assertThatCode(() -> service.enviarParabensPara(5, 10)).doesNotThrowAnyException();
 
@@ -327,6 +335,7 @@ class BirthdayServiceTest {
         Birthday b2 = new Birthday(2L, 200L, "Beltrano", 5, 10, null);
         when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b1, b2));
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         int enviados = service.enviarParabensPara(5, 10);
 
@@ -345,10 +354,8 @@ class BirthdayServiceTest {
         when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of());
 
         // Fulano: sucesso; Beltrano: falha
-        doNothing().when(telegramFacade).enviarMidia(eq(100L), anyString(), anyString());
-        doThrow(new RuntimeException("boom"))
-                .when(telegramFacade)
-                .enviarMidia(eq(200L), anyString(), anyString());
+        when(telegramFacade.enviarMidia(eq(100L), anyString(), anyString())).thenReturn(true);
+        when(telegramFacade.enviarMidia(eq(200L), anyString(), anyString())).thenReturn(false);
 
         service.enviarParabensPara(5, 10);
 
@@ -393,5 +400,49 @@ class BirthdayServiceTest {
                 .contains("Marilyn Monroe")
                 .contains("1962")
                 .contains("HAPPY BIRTHDAY");
+    }
+
+    @Test
+    @DisplayName("enviarParabensPara: flag 'birthday.enabled' off → retorna 0 e não consulta repo")
+    void enviarParabensPara_flagDesabilitada_pula() {
+        when(featureFlags.isEnabled("birthday.enabled")).thenReturn(false);
+
+        int enviados = service.enviarParabensPara(5, 10);
+
+        assertThat(enviados).isZero();
+        verifyNoInteractions(repository, telegramFacade, groupAuthorizationService);
+    }
+
+    @Test
+    @DisplayName("enviarParabensPara: sub-flag de grupo off → envia só no privado")
+    void enviarParabensPara_grupoOff_soPrivado() {
+        when(featureFlags.isEnabled("birthday.group-notification.enabled")).thenReturn(false);
+        setGif();
+        Birthday b = new Birthday(1L, 100L, "Fulano", 5, 10, null);
+        when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
+        int enviados = service.enviarParabensPara(5, 10);
+
+        assertThat(enviados).isEqualTo(1);
+        verify(telegramFacade, times(1)).enviarMidia(eq(100L), eq(GIF), anyString());
+        verify(groupAuthorizationService, never()).getAllowedGroups();
+    }
+
+    @Test
+    @DisplayName("enviarParabensPara: sub-flag de grupo on → envia no privado e nos grupos")
+    void enviarParabensPara_grupoOn_privadoEGrupos() {
+        when(featureFlags.isEnabled("birthday.group-notification.enabled")).thenReturn(true);
+        setGif();
+        Birthday b = new Birthday(1L, 100L, "Fulano", 5, 10, null);
+        when(repository.findByDayAndMonth(5, 10)).thenReturn(List.of(b));
+        when(groupAuthorizationService.getAllowedGroups()).thenReturn(Set.of(-100L));
+        when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
+
+        int enviados = service.enviarParabensPara(5, 10);
+
+        assertThat(enviados).isEqualTo(1);
+        verify(telegramFacade).enviarMidia(eq(100L), eq(GIF), anyString());
+        verify(telegramFacade).enviarMidia(eq(-100L), eq(GIF), anyString());
     }
 }

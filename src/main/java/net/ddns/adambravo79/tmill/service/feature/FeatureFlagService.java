@@ -1,4 +1,4 @@
-/* (c) 2026 | 26/09/2026 */
+/* (c) 2026 | 04/10/2026 */
 package net.ddns.adambravo79.tmill.service.feature;
 
 import java.io.IOException;
@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -54,7 +55,6 @@ public class FeatureFlagService {
 
     private final ConcurrentHashMap<String, FeatureFlagState> states = new ConcurrentHashMap<>();
 
-    // FeatureFlagService.java
     public void init() {
         if (persistEnabled) {
             loadFromDisk();
@@ -124,9 +124,7 @@ public class FeatureFlagService {
 
     /** Lista todas as flags, ordenadas por chave. */
     public List<FeatureFlagState> list() {
-        return states.values().stream()
-                .sorted(Comparator.comparing(FeatureFlagState::key))
-                .toList();
+        return states.values().stream().sorted(Comparator.comparing(s -> s.key())).toList();
     }
 
     /**
@@ -135,10 +133,10 @@ public class FeatureFlagService {
      */
     public Map<String, Map<String, Object>> listAsMap() {
         return states.values().stream()
-                .sorted(Comparator.comparing(FeatureFlagState::key))
+                .sorted(Comparator.comparing(s -> s.key()))
                 .collect(
                         Collectors.toMap(
-                                FeatureFlagState::key,
+                                s -> s.key(),
                                 s -> {
                                     Map<String, Object> m = new LinkedHashMap<>();
                                     m.put("enabled", s.enabled());
@@ -204,46 +202,17 @@ public class FeatureFlagService {
 
             Map<String, FeatureFlagState> loaded = objectMapper.readValue(json, mapType);
 
-            int aplicadas = 0;
-            int ignoradasReadOnly = 0;
+            // stats[0] = aplicadas, stats[1] = ignoradasReadOnly
+            int[] stats = new int[2];
 
             for (Map.Entry<String, FeatureFlagState> entry : loaded.entrySet()) {
-                String key = entry.getKey();
-                FeatureFlagState persisted = entry.getValue();
-
-                if (persisted == null) {
-                    log.warn("⚠️ Flag '{}' presente no disco com valor null. Ignorando.", key);
-                    continue;
-                }
-
-                // Só aplica se a flag já foi registrada (ou será registrada depois) e não é RO
-                FeatureFlagState current = states.get(key);
-                boolean isReadOnly =
-                        (current != null && current.readOnly())
-                                || (persisted != null && persisted.readOnly());
-
-                if (isReadOnly) {
-                    ignoradasReadOnly++;
-                    continue;
-                }
-
-                // Aplica o valor do disco (sobrescreve o default)
-                states.put(
-                        key,
-                        new FeatureFlagState(
-                                key,
-                                persisted.enabled(),
-                                persisted.description() != null
-                                        ? persisted.description()
-                                        : (current != null ? current.description() : ""),
-                                false));
-                aplicadas++;
+                applyPersistedFlag(entry.getKey(), entry.getValue(), stats);
             }
 
             log.info(
                     "🎛️ Feature flags carregadas do disco: {} aplicadas, {} read-only ignoradas",
-                    aplicadas,
-                    ignoradasReadOnly);
+                    stats[0],
+                    stats[1]);
         } catch (IOException | JacksonException e) {
             log.warn(
                     "⚠️ Falha ao ler feature flags de {}: {}. Usando defaults.",
@@ -252,20 +221,46 @@ public class FeatureFlagService {
         }
     }
 
+    // 🔧 FIX: Extraído para reduzir Complexidade Cognitiva do loadFromDisk (java:S3776)
+    private void applyPersistedFlag(String key, FeatureFlagState persisted, int[] stats) {
+        if (persisted == null) {
+            log.warn("⚠️ Flag '{}' presente no disco com valor null. Ignorando.", key);
+            return;
+        }
+
+        FeatureFlagState current = states.get(key);
+        boolean isReadOnly = (current != null && current.readOnly()) || persisted.readOnly();
+
+        if (isReadOnly) {
+            stats[1]++; // ignoradasReadOnly
+            return;
+        }
+
+        String newDesc = resolveDescription(persisted, current);
+        states.put(key, new FeatureFlagState(key, persisted.enabled(), newDesc, false));
+        stats[0]++; // aplicadas
+    }
+
+    private String resolveDescription(FeatureFlagState persisted, FeatureFlagState current) {
+        String persistedDesc = persisted.description();
+        if (!persistedDesc.isEmpty()) {
+            return persistedDesc;
+        }
+
+        if (current != null && !current.description().isEmpty()) {
+            return current.description();
+        }
+
+        return "";
+    }
+
     private void persistToDisk() {
         try {
             Files.createDirectories(persistPath.getParent());
 
-            // Snapshot ordenado para o JSON ficar estável
-            Map<String, FeatureFlagState> snapshot =
-                    states.entrySet().stream()
-                            .sorted(Map.Entry.comparingByKey())
-                            .collect(
-                                    Collectors.toMap(
-                                            Map.Entry::getKey,
-                                            Map.Entry::getValue,
-                                            (a, b) -> a,
-                                            LinkedHashMap::new));
+            // 🔧 FIX: TreeMap copia os dados e ordena automaticamente pelas chaves
+            // Resolvendo o conflito de Null Safety do JDT x java:S1612 do SonarQube
+            Map<String, FeatureFlagState> snapshot = new TreeMap<>(states);
 
             String json =
                     objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(snapshot);

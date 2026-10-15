@@ -1,13 +1,25 @@
 package net.ddns.adambravo79.tmill.telegram.exception;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,23 +32,68 @@ import org.springframework.web.client.ResourceAccessException;
 
 import com.pengrad.telegrambot.TelegramException;
 
-import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.exception.AudioProcessingException;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramSender;
 
 @ExtendWith(MockitoExtension.class)
 class TelegramExceptionHandlerTest {
 
     @Mock private TelegramSender sender;
+    @Mock private JsonConfigLoader jsonConfigLoader;
 
     private TelegramExceptionHandler handler;
 
+    private static final Map<String, Object> DEFAULT_RULES =
+            Map.of(
+                    "rules",
+                    List.of(
+                            Map.of(
+                                    "contains",
+                                    "429",
+                                    "message",
+                                    "⏳ Muitas requisições. Tente novamente em alguns segundos."),
+                            Map.of(
+                                    "contains",
+                                    "timeout",
+                                    "message",
+                                    "⏱️ O servidor demorou a responder. Tente novamente em"
+                                            + " instantes."),
+                            Map.of(
+                                    "contains",
+                                    "unauthorized",
+                                    "message",
+                                    "🔑 Token inválido ou expirado. Verifique suas credenciais."),
+                            Map.of(
+                                    "contains",
+                                    "chat not found",
+                                    "message",
+                                    "❌ Não consegui encontrar este chat. Verifique se o ID está"
+                                            + " correto."),
+                            Map.of(
+                                    "contains",
+                                    "file is too big",
+                                    "message",
+                                    "📂 O arquivo enviado é muito grande. Tente reduzir o"
+                                            + " tamanho."),
+                            Map.of(
+                                    "contains",
+                                    "wrong file type",
+                                    "message",
+                                    "🛑 Formato de arquivo não suportado. Envie em outro"
+                                            + " formato.")));
+
     @BeforeEach
     void setUp() {
-        handler = new TelegramExceptionHandler();
+        doReturn(Optional.of(DEFAULT_RULES))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("telegram-error-messages.json"), eq(Map.class), any());
+
+        handler = new TelegramExceptionHandler(jsonConfigLoader);
+        handler.init();
     }
 
-    // ===================== TESTES DO MÉTODO handle() =====================
+    // ===================== handle() =====================
 
     @Test
     void handle_deveEnviarMensagemParaTelegramFileException() throws TelegramException {
@@ -128,40 +185,16 @@ class TelegramExceptionHandlerTest {
         verify(sender).enviar(eq(123L), anyString());
     }
 
-    // ===================== TESTES DO MÉTODO mapearPorMensagem (via reflexão) =====================
-
-    @Test
-    void mapearPorMensagem_deveRetornarGenericoParaNull() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearPorMensagem", String.class);
-        method.setAccessible(true);
-
-        String result = (String) method.invoke(handler, (Object) null);
-        assertThat(result).isEqualTo(BotMessages.ERRO_GENERICO);
-    }
-
-    @Test
-    void mapearPorMensagem_deveRetornarFallbackParaMensagemDesconhecida() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearPorMensagem", String.class);
-        method.setAccessible(true);
-
-        String result = (String) method.invoke(handler, "algo completamente diferente");
-        assertThat(result).isEqualTo("⚠️ Ocorreu um erro inesperado: algo completamente diferente");
-    }
+    // ===================== getMappedMessageFor (exposição para testes) =====================
 
     @ParameterizedTest
-    @MethodSource("mensagemParaMapeamentoProvider")
-    void mapearPorMensagem_deveMapearCorretamente(String input, String expected) throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearPorMensagem", String.class);
-        method.setAccessible(true);
-
-        String result = (String) method.invoke(handler, input);
-        assertThat(result).isEqualTo(expected);
+    @MethodSource("mappedMessagesProvider")
+    @DisplayName("getMappedMessageFor: mapeia conforme regras do JSON")
+    void getMappedMessageFor_corretamente(String input, String expected) {
+        assertThat(handler.getMappedMessageFor(input)).contains(expected);
     }
 
-    static Stream<Arguments> mensagemParaMapeamentoProvider() {
+    static Stream<Arguments> mappedMessagesProvider() {
         return Stream.of(
                 Arguments.of(
                         "429 Too Many Requests",
@@ -183,72 +216,107 @@ class TelegramExceptionHandlerTest {
                         "🛑 Formato de arquivo não suportado. Envie em outro formato."));
     }
 
-    // ===================== TESTES DO MÉTODO mapearMensagem (via reflexão) =====================
-
     @Test
-    void mapearMensagem_deveMapearTelegramFileException() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearMensagem", Exception.class);
-        method.setAccessible(true);
-
-        Exception ex = new TelegramFileException("Erro", null);
-        String result = (String) method.invoke(handler, ex);
-        assertThat(result).isEqualTo("⚠️ Não consegui baixar o áudio.");
+    @DisplayName("getMappedMessageFor: null retorna vazio")
+    void getMappedMessageFor_null() {
+        assertThat(handler.getMappedMessageFor(null)).isEmpty();
     }
 
     @Test
-    void mapearMensagem_deveMapearAudioProcessingException() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearMensagem", Exception.class);
-        method.setAccessible(true);
+    @DisplayName("getMappedMessageFor: mensagem desconhecida retorna vazio")
+    void getMappedMessageFor_desconhecida() {
+        assertThat(handler.getMappedMessageFor("algo completamente diferente")).isEmpty();
+    }
 
-        Exception ex = new AudioProcessingException("Erro");
-        String result = (String) method.invoke(handler, ex);
-        assertThat(result).isEqualTo("🎧 Erro ao processar o áudio.");
+    // ===================== reload =====================
+
+    @Test
+    @DisplayName("reload: substitui regras")
+    void reload_substitui() {
+        // Limpa o stub do @BeforeEach para evitar UnnecessaryStubbingException
+        reset(jsonConfigLoader);
+
+        doReturn(
+                        Optional.of(
+                                Map.of(
+                                        "rules",
+                                        List.of(
+                                                Map.of(
+                                                        "contains",
+                                                        "nova",
+                                                        "message",
+                                                        "Nova mensagem")))))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("telegram-error-messages.json"), eq(Map.class), any());
+
+        handler.reload();
+
+        assertThat(handler.getMappedMessageFor("nova ocorrência")).contains("Nova mensagem");
+        assertThat(handler.getMappedMessageFor("429")).isEmpty(); // regra antiga removida
+        assertThat(handler.getErrorRules()).hasSize(1);
     }
 
     @Test
-    void mapearMensagem_deveMapearIOException() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearMensagem", Exception.class);
-        method.setAccessible(true);
+    @DisplayName("reload: JSON ausente mantém regras")
+    void reload_jsonAusente_mantem() {
+        reset(jsonConfigLoader);
 
-        Exception ex = new IOException("Erro");
-        String result = (String) method.invoke(handler, ex);
-        assertThat(result).isEqualTo("📡 Problema de comunicação com o servidor.");
+        doReturn(Optional.empty())
+                .when(jsonConfigLoader)
+                .loadConfig(eq("telegram-error-messages.json"), eq(Map.class), any());
+
+        handler.reload();
+
+        assertThat(handler.getMappedMessageFor("429")).isPresent();
+        assertThat(handler.getErrorRules()).hasSize(6);
     }
 
     @Test
-    void mapearMensagem_deveMapearResourceAccessException() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearMensagem", Exception.class);
-        method.setAccessible(true);
+    @DisplayName("reload: JSON com 'rules' inválido mantém regras")
+    void reload_rulesInvalido_mantem() {
+        reset(jsonConfigLoader);
 
-        Exception ex = new ResourceAccessException("Timeout");
-        String result = (String) method.invoke(handler, ex);
-        assertThat(result).isEqualTo("⏱️ Timeout na comunicação com o servidor. Tente novamente.");
+        doReturn(Optional.of(Map.of("rules", "não é lista")))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("telegram-error-messages.json"), eq(Map.class), any());
+
+        handler.reload();
+
+        assertThat(handler.getMappedMessageFor("429")).isPresent();
+        assertThat(handler.getErrorRules()).hasSize(6);
     }
 
     @Test
-    void mapearMensagem_deveMapearTelegramException() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearMensagem", Exception.class);
-        method.setAccessible(true);
+    @DisplayName("reload: lista com entradas inválidas é filtrada")
+    void reload_entradasInvalidas_filtra() {
+        reset(jsonConfigLoader);
 
-        TelegramException ex = mock(TelegramException.class);
-        when(ex.getMessage()).thenReturn("429 Too Many Requests");
-        String result = (String) method.invoke(handler, ex);
-        assertThat(result).isEqualTo("⏳ Muitas requisições. Tente novamente em alguns segundos.");
+        doReturn(
+                        Optional.of(
+                                Map.of(
+                                        "rules",
+                                        List.of(
+                                                Map.of(
+                                                        "contains",
+                                                        "valida",
+                                                        "message",
+                                                        "Mensagem válida"),
+                                                Map.of("contains", "sem-mensagem"),
+                                                Map.of("message", "sem-contains"),
+                                                "não é mapa",
+                                                Map.of("contains", "ok", "message", "Ok")))))
+                .when(jsonConfigLoader)
+                .loadConfig(eq("telegram-error-messages.json"), eq(Map.class), any());
+
+        handler.reload();
+
+        // Apenas as 2 entradas válidas (com contains + message) devem permanecer
+        assertThat(handler.getErrorRules()).hasSize(2);
     }
 
     @Test
-    void mapearMensagem_deveMapearExcecaoGenerica() throws Exception {
-        Method method =
-                TelegramExceptionHandler.class.getDeclaredMethod("mapearMensagem", Exception.class);
-        method.setAccessible(true);
-
-        Exception ex = new RuntimeException("Erro qualquer");
-        String result = (String) method.invoke(handler, ex);
-        assertThat(result).isEqualTo("⚠️ Ocorreu um erro inesperado: Erro qualquer");
+    @DisplayName("init: carrega regras do JSON")
+    void init_carregaRegras() {
+        assertThat(handler.getErrorRules()).hasSize(6);
     }
 }

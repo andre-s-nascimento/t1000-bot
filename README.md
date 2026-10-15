@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.5.5** | Branch: `main` | Último build: 2026-09-30
+> **Versão atual: v2.6.0** | Branch: `main` | Último build: 2026-10-14
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
@@ -12,7 +12,7 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenA
 ![Tests](https://img.shields.io/badge/tests-passing-success)
 ![Coverage](https://img.shields.io/badge/coverage-90%25-yellowgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v2.5.5-blueviolet)
+![Status](https://img.shields.io/badge/status-v2.6.0-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
@@ -29,6 +29,7 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 - ⚽ Acompanhamento da Copa do Mundo 2026 (jogos, resultados e lembretes)
 - 📺 Notificações de lançamentos de streaming (TMDB + Watchmode)
 - 💡 Registro de ideias dos usuários (MongoDB)
+- 🎛️ **23 feature flags runtime** com persistência opcional em disco
 - ⚙️ Backend moderno com **Spring Boot 4.1.1**, **Java 21 (Virtual Threads)**, **Kafka**, **PostgreSQL**, **MongoDB** e **SQLite legado**
 
 ---
@@ -40,7 +41,7 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 - `t1000 buscar <nome>`
 - Retorna pôster, sinopse, elenco, diretor, nota, onde assistir (streaming) e easter eggs.
 - Desambiguação automática quando há vários resultados (botões inline).
-- Cache de detalhes por ID via `@Cacheable`.
+- Cache de detalhes por ID via `CacheManager` programático (controlado pela flag `tmdb.cache.enabled`).
 
 ### 🎙️ Transcrição de áudio
 
@@ -62,37 +63,40 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 - Coleta mensagens e transcrições do banco (PostgreSQL) e gera um resumo narrativo via Groq Llama.
 - Múltiplas personas: **T-1000**, **Bicentenário** e **Arquiteto da Matrix**.
 - Trunca prompts longos e sanitiza HTML para evitar erros de parse no Telegram.
-- Pode ser acionado manualmente via endpoints administrativos (`/admin/test-morning-digest`, `/admin/custom-digest`).
+- Pode ser acionado manualmente via endpoints administrativos (`/admin/test-morning-digest`, `/admin/custom-digest` — este último controlado pela flag `ai.digest.custom-period.enabled`).
 
 ### 🎧 Podcast semanal (Silas Cast)
 
 - Toda **sexta-feira às 12:00** (BRT), gera e publica um podcast semanal.
 - Roteiro gerado por LLM a partir das transcrições da semana.
 - Síntese via **Azure TTS** com compressão automática (FFmpeg) se o áudio ultrapassar 5 MB.
-- Fallback de envio como texto se o Telegram rejeitar o áudio.
+- Fallback de envio como texto se o Telegram rejeitar o áudio (controlado por `podcast.fallback-text.enabled`).
+- **Reenvio por sexta-feira**: endpoint `POST /admin/podcast/resend` permite republicar a edição de uma semana específica, respeitando o intervalo exato de **sexta 12:00 → sexta 11:59:59**.
 
 ### 🗓️ Lembrete semanal
 
 - Toda **quarta-feira às 16h** (BRT) envia uma mensagem nos grupos autorizados.
+- Controlado pela flag `weekly.reminder.enabled`.
 
 ### 🎂 Aniversários
 
 - `t1000 anotar aniversário DD/MM` — registra o aniversário do usuário.
 - Todo dia à **00:01** (BRT) envia parabéns no privado e nos grupos autorizados, com GIF temático e citação da Marilyn Monroe.
+- Duas flags: `birthday.enabled` (feature geral) e `birthday.group-notification.enabled` (envio nos grupos).
 
 ### ⚽ Copa do Mundo 2026
 
 - `t1000 jogos` / `t1000 copa` — jogos do dia.
 - `t1000 resultados [data]` — resultados de ontem/hoje/data específica.
 - Envio automático ao meio-dia e à noite.
-- Lembrete 30 minutos antes de cada jogo.
-- Atualização automática do JSON da Copa (opcional, via feature flag).
+- Lembrete 30 minutos antes de cada jogo (controlado por `worldcup.reminders30min.enabled`).
+- Atualização automática do JSON da Copa (opcional, via `worldcup.update.enabled`).
 
 ### 📺 Lançamentos de streaming
 
 - Verificação a cada 6 horas de novos lançamentos (filmes e séries).
 - Notificação com pôster, sinopse, nota e onde assistir (via Watchmode).
-- Giro semanal consolidado às quintas-feiras.
+- Giro semanal consolidado às quintas-feiras (controlado por `weekly.digest.enabled`).
 
 ### 🤖 Respostas automáticas (Auto-Response)
 
@@ -115,51 +119,101 @@ Para adicionar novos gatilhos, edite o arquivo `auto-responses.json` e recarregu
 curl -X POST http://localhost:8082/admin/reload-auto-responses
 ```
 
-### 🎛️ Feature Flags
+### 🎛️ Feature Flags (23 no total)
 
-Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via painel admin ou API:
+Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via painel admin ou API.
 
-| Flag | Descrição | Read-only |
-|------|-----------|-----------|
-| `worldcup.enabled` | Envio de jogos da Copa | ❌ |
-| `transcription.enabled` | Transcrição de áudio | ❌ |
-| `auto.response.enabled` | Respostas automáticas | ❌ |
-| `digest.enabled` | Digest diário | ❌ |
-| `worldcup.update.enabled` | Atualização automática do JSON da Copa | ❌ |
-| `migration.enabled` | Migração SQLite → Postgres/Mongo | ✅ |
+📖 **Documentação completa**: [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md)
+
+#### Alta prioridade — Onda 3.5.1
+
+| Flag                              | Default | Read-only | Descrição                                |
+| --------------------------------- | ------- | --------- | ---------------------------------------- |
+| `podcast.enabled`                 | ✅      | ❌        | Publicação automática do podcast semanal |
+| `weekly.reminder.enabled`         | ✅      | ❌        | Lembrete de quarta-feira                 |
+| `daily.releases.enabled`          | ✅      | ❌        | Notificação de lançamentos (6 em 6h)     |
+| `worldcup.reminders30min.enabled` | ✅      | ❌        | Aviso 30 min antes de cada jogo          |
+| `easter.eggs.enabled`             | ✅      | ❌        | Easter eggs nas buscas de filme          |
+| `admin.features.toggle-enabled`   | ✅      | ❌        | Habilita toggle via painel admin         |
+
+#### Média prioridade — Onda 3.5.2
+
+| Flag                                  | Default | Read-only | Descrição                                 |
+| ------------------------------------- | ------- | --------- | ----------------------------------------- |
+| `weekly.digest.enabled`               | ✅      | ❌        | Giro semanal dos streamings               |
+| `birthday.enabled`                    | ✅      | ❌        | Parabéns automáticos de aniversário       |
+| `birthday.group-notification.enabled` | ✅      | ❌        | Notificar aniversário nos grupos          |
+| `podcast.fallback-text.enabled`       | ✅      | ❌        | Enviar roteiro como texto se áudio falhar |
+| `ai.digest.custom-period.enabled`     | ✅      | ❌        | Custom digest com período arbitrário      |
+
+#### Baixa prioridade — Onda 3.5.3
+
+| Flag                              | Default | Read-only | Descrição                     |
+| --------------------------------- | ------- | --------- | ----------------------------- |
+| `metrics.prometheus.enabled`      | ✅      | ❌        | Expor `/actuator/prometheus`  |
+| `admin.debug-cache.enabled`       | ✅      | ❌        | Endpoints de debug de cache   |
+| `tmdb.cache.enabled`              | ✅      | ❌        | Cache de detalhes de filme    |
+| `telegram.error-fallback.enabled` | ✅      | ❌        | Fallback genérico do Telegram |
+| `kafka.audit.enabled`             | ❌      | ❌        | Audit trail no MongoDB        |
+
+#### Já existentes
+
+| Flag                       | Default | Read-only | Descrição                                         |
+| -------------------------- | ------- | --------- | ------------------------------------------------- |
+| `worldcup.enabled`         | ❌      | ❌        | Envio de jogos da Copa                            |
+| `transcription.enabled`    | ✅      | ❌        | Transcrição de áudio                              |
+| `auto.response.enabled`    | ✅      | ❌        | Respostas automáticas                             |
+| `digest.enabled`           | ✅      | ❌        | Digest diário                                     |
+| `worldcup.update.enabled`  | ❌      | ❌        | Auto-update do JSON da Copa                       |
+| `prompts.external.enabled` | ❌      | ❌        | Prompts/personas externos via JSON                |
+| `migration.enabled`        | ❌      | ✅        | Migração SQLite → Postgres/Mongo (requer restart) |
 
 ### 🔧 Administração (endpoints HTTP)
 
 **Painel Web (Thymeleaf):** `/admin-web` (autenticado via Google OAuth2)
 
 **API REST:**
-- `POST /admin/reload-easter-eggs` – recarrega frases especiais.
-- `POST /admin/reload-auto-responses` – recarrega a lista de auto-respostas.
-- `POST /admin/reload-worldcup` – recarrega dados da Copa.
-- `GET /admin/cache-stats` – estatísticas do cache de transcrições.
-- `GET /admin/custom-digest?start=yyyy-MM-dd&end=yyyy-MM-dd&chatId=xxx` – gera resumo sob demanda.
-- `GET /admin/features` – lista feature flags.
-- `POST /admin/features/{key}?enabled=true` – altera feature flag.
-- `POST /admin/migrate-sqlite?dryRun=true` – migra dados do SQLite legado.
-- `GET /admin/config-files` – inspeciona arquivos de configuração.
+
+| Endpoint                        | Método | Descrição                                                               |
+| ------------------------------- | ------ | ----------------------------------------------------------------------- |
+| `/admin/reload-easter-eggs`     | POST   | Recarrega frases especiais                                              |
+| `/admin/reload-auto-responses`  | POST   | Recarrega auto-respostas                                                |
+| `/admin/reload-worldcup`        | POST   | Recarrega dados da Copa                                                 |
+| `/admin/reload-worldcup-teams`  | POST   | Recarrega traduções de times                                            |
+| `/admin/reload-tmdb-aliases`    | POST   | Recarrega atalhos TMDB                                                  |
+| `/admin/reload-telegram-errors` | POST   | Recarrega regras de erro do Telegram                                    |
+| `/admin/reload-admin-config`    | POST   | Recarrega `admin-config.json`                                           |
+| `/admin/reload-prompts`         | POST   | Recarrega prompts e personas                                            |
+| `/admin/podcast/resend`         | POST   | Reenvia podcast por sexta-feira (`?friday=yyyy-MM-dd&chatId=xxx`)       |
+| `/admin/custom-digest`          | GET    | Gera resumo sob demanda (`?start=yyyy-MM-dd&end=yyyy-MM-dd&chatId=xxx`) |
+| `/admin/features`               | GET    | Lista feature flags                                                     |
+| `/admin/features/{key}`         | POST   | Altera feature flag (`?enabled=true`)                                   |
+| `/admin/cache-stats`            | GET    | Estatísticas do cache de transcrições                                   |
+| `/admin/debug/cache/{fileId}`   | GET    | Inspeciona conteúdo do cache (flag `admin.debug-cache.enabled`)         |
+| `/admin/migrate-sqlite`         | POST   | Migra dados do SQLite legado (`?dryRun=true`)                           |
+| `/admin/config-files`           | GET    | Inspeciona arquivos de configuração                                     |
+| `/admin/properties`             | GET    | Lista propriedades (tokens mascarados)                                  |
 
 ---
 
 ## 🏗️ Tecnologias
 
 ### Core
+
 - **Java 21** com virtual threads
 - **Spring Boot 4.1.1**
 - **Spring Security 7.1.1** (OAuth2 / Google)
 - **Gradle** com **Spotless** (google-java-format AOSP) e **JaCoCo**
 
 ### Mensageria e Persistência
+
 - **Apache Kafka** (Spring Kafka)
 - **PostgreSQL** + **Flyway** (dados estruturados)
 - **MongoDB** (logs, conversas, ideias)
 - **SQLite** (legado — em processo de migração)
 
 ### IA e APIs Externas
+
 - **Groq Cloud** (Whisper `whisper-large-v3`, Llama `llama-3.1-8b-instant`, `openai/gpt-oss-120b`)
 - **TMDB API** (filmes, séries, provedores de streaming)
 - **Watchmode API** (streaming nos EUA/BR)
@@ -167,6 +221,7 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 - **FFmpeg** (conversão e compressão de áudio)
 
 ### Integrações
+
 - **Telegram Bots** (ksilisk starter + Pengrad)
 - **Docker + GitHub Actions** (CI, build, release)
 - **SonarCloud** (análise estática)
@@ -179,23 +234,24 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 
 O projeto é organizado em serviços especializados. Veja abaixo cada um e como podem ser reutilizados ou estendidos.
 
-| Serviço | Responsabilidade | Como modularizar |
-|---------|------------------|------------------|
-| `MovieService` + `TmdbClient` | Busca filmes no TMDB e formata resposta. | Pode ser extraído como biblioteca independente. Cache `@Cacheable` para detalhes. |
-| `AudioPipelineService` + `AudioService` + `GroqClient` | Pipeline completo de transcrição (conversão → Whisper → refinamento). | Autocontido. O `GroqClient` é reutilizável para qualquer chamada LLM. |
-| `AudioWorkerService` | Consome `t1000.audio.received` do Kafka, processa e publica em `t1000.audio.processed`. | Escalável horizontalmente (múltiplas instâncias worker). |
-| `FileTranscriptionCacheService` | Cache em memória de transcrições por `fileId`. | Pode ser generalizado para qualquer cache chave-valor com TTL. |
-| `DailyDigestService` | Geração de resumos de conversas via Groq Llama. | Configurável via `DigestPromptFactory` e `DigestPersona` (T-1000, Bicentenário, Arquiteto). |
-| `EasterEggService` | Carrega frases de um JSON e as associa a IDs de filme. | Pode ser transformado em serviço genérico de "conteúdo extra". |
-| `PodcastScriptService` + `PodcastPublisherService` | Geração de roteiro + síntese TTS + envio. | Pipeline reutilizável para qualquer podcast automatizado. |
-| `DailyReleasesService` + `WeeklyReleasesService` | Notificações de lançamentos de streaming. | Usa `TmdbClient` + `WatchmodeClient` + cache Caffeine. |
-| `BirthdayService` + `BirthdayScheduler` | Registro e envio de parabéns. | Persistência via `BirthdayRepository` (JdbcTemplate). |
-| `WorldCupSchedulerService` + `StaticWorldCupService` + `WorldCupUpdaterService` | Jogos, resultados, lembretes e atualização. | Dados em JSON, com tradução PT-BR e bandeiras. |
-| `AutoResponseService` | Respostas automáticas configuráveis via JSON. | Suporta time-range, user-overrides e once-per-day. |
-| `FeatureFlagService` + `FeatureFlagAdminService` | Feature flags em runtime com persistência opcional. | Mapa `key → FeatureFlagState` + persistência em disco. |
-| `MigrationService` | Migração do SQLite legado para Postgres/Mongo. | Suporta `dryRun` e relatório por tabela. |
-| `TelegramFacade` / `TelegramSafeExecutor` | Camada de abstração da API do Telegram. | Pode ser usada como biblioteca comum para qualquer bot Telegram. |
-| `BotAnalyticsService` | Persistência de conversas, interações e ideias no MongoDB. | Três repositórios: `BotConversationRepository`, `InteractionLogRepository`, `UserIdeaRepository`. |
+| Serviço                                                                         | Responsabilidade                                                                        | Como modularizar                                                                                  |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `MovieService` + `TmdbClient`                                                   | Busca filmes no TMDB e formata resposta.                                                | Cache programático via `CacheManager` (flag `tmdb.cache.enabled`).                                |
+| `AudioPipelineService` + `AudioService` + `GroqClient`                          | Pipeline completo de transcrição (conversão → Whisper → refinamento).                   | Autocontido. O `GroqClient` é reutilizável para qualquer chamada LLM.                             |
+| `AudioWorkerService`                                                            | Consome `t1000.audio.received` do Kafka, processa e publica em `t1000.audio.processed`. | Escalável horizontalmente (múltiplas instâncias worker).                                          |
+| `FileTranscriptionCacheService`                                                 | Cache em memória de transcrições por `fileId`.                                          | Pode ser generalizado para qualquer cache chave-valor com TTL.                                    |
+| `DailyDigestService`                                                            | Geração de resumos de conversas via Groq Llama.                                         | Configurável via `DigestPromptFactory` e `DigestPersona` (T-1000, Bicentenário, Arquiteto).       |
+| `EasterEggService`                                                              | Carrega frases de um JSON e as associa a IDs de filme.                                  | Controlado por `easter.eggs.enabled`.                                                             |
+| `PodcastScriptService` + `PodcastPublisherService`                              | Geração de roteiro + síntese TTS + envio.                                               | Respeita intervalo `12:00 → 11:59:59`. Suporta reenvio por sexta-feira.                           |
+| `DailyReleasesService` + `WeeklyReleasesService`                                | Notificações de lançamentos de streaming.                                               | Usa `TmdbClient` + `WatchmodeClient` + cache Caffeine.                                            |
+| `BirthdayService` + `BirthdayScheduler`                                         | Registro e envio de parabéns.                                                           | Duas flags: geral + notificação em grupos.                                                        |
+| `WorldCupSchedulerService` + `StaticWorldCupService` + `WorldCupUpdaterService` | Jogos, resultados, lembretes e atualização.                                             | Dados em JSON, com tradução PT-BR e bandeiras.                                                    |
+| `AutoResponseService`                                                           | Respostas automáticas configuráveis via JSON.                                           | Suporta time-range, user-overrides e once-per-day.                                                |
+| `FeatureFlagService` + `FeatureFlagAdminService`                                | 23 feature flags em runtime com persistência opcional.                                  | Mapa `key → FeatureFlagState` + persistência em disco.                                            |
+| `MigrationService`                                                              | Migração do SQLite legado para Postgres/Mongo.                                          | Suporta `dryRun` e relatório por tabela.                                                          |
+| `TelegramFacade` / `TelegramSafeExecutor`                                       | Camada de abstração da API do Telegram.                                                 | Fallback configurável via `telegram.error-fallback.enabled`.                                      |
+| `BotAnalyticsService`                                                           | Persistência de conversas, interações e ideias no MongoDB.                              | Três repositórios: `BotConversationRepository`, `InteractionLogRepository`, `UserIdeaRepository`. |
+| `PrometheusFeatureFlagFilter`                                                   | Intercepta `/actuator/prometheus` e bloqueia se flag off.                               | `OncePerRequestFilter` — desacoplado do Actuator.                                                 |
 
 ### 💡 Como criar um novo serviço (exemplo: módulo de enquete)
 
@@ -204,6 +260,8 @@ O projeto é organizado em serviços especializados. Veja abaixo cada um e como 
 3. No `TelegramController`, adicione um handler para comandos como `/poll`.
 4. Registre uma feature flag (`poll.enabled`) no `FeatureFlagAdminService`.
 5. Pronto: o novo serviço fica isolado, testável e controlável via feature flag.
+
+📖 Documentação: [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md)
 
 ---
 
@@ -256,21 +314,21 @@ docker run \
 
 ## ⚙️ Variáveis de ambiente obrigatórias
 
-| Variável | Descrição |
-|----------|-----------|
-| `TELEGRAM_BOT_TOKEN` | Token do bot (BotFather). |
-| `GROQ_API_KEY` | Chave da API Groq. |
-| `TMDB_READ_TOKEN` | Token de leitura da API TMDB (v3 auth). |
-| `TELEGRAM_OWNER_ID` | Seu ID de usuário do Telegram (para receber ideias). |
-| `WATCHMODE_API_KEY` | Chave da API Watchmode (streaming). |
-| `AZURE_SPEECH_KEY` | Chave do Azure Speech (TTS). |
-| `AZURE_SPEECH_REGION` | Região do Azure Speech (ex.: `brazilsouth`). |
-| `PODCAST_PUBLISH_CHAT_ID` | Chat ID onde o podcast semanal será publicado. |
-| `POSTGRES_DATABASE_URL` | URL JDBC do PostgreSQL. |
-| `POSTGRES_DATABASE_USER` | Usuário do PostgreSQL. |
-| `POSTGRES_DATABASE_PASSWORD` | Senha do PostgreSQL. |
-| `MONGODB_URI` | URI do MongoDB. |
-| `KAFKA_BOOTSTRAP_SERVERS` | Endereço do broker Kafka. |
+| Variável                     | Descrição                                            |
+| ---------------------------- | ---------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`         | Token do bot (BotFather).                            |
+| `GROQ_API_KEY`               | Chave da API Groq.                                   |
+| `TMDB_READ_TOKEN`            | Token de leitura da API TMDB (v3 auth).              |
+| `TELEGRAM_OWNER_ID`          | Seu ID de usuário do Telegram (para receber ideias). |
+| `WATCHMODE_API_KEY`          | Chave da API Watchmode (streaming).                  |
+| `AZURE_SPEECH_KEY`           | Chave do Azure Speech (TTS).                         |
+| `AZURE_SPEECH_REGION`        | Região do Azure Speech (ex.: `brazilsouth`).         |
+| `PODCAST_PUBLISH_CHAT_ID`    | Chat ID onde o podcast semanal será publicado.       |
+| `POSTGRES_DATABASE_URL`      | URL JDBC do PostgreSQL.                              |
+| `POSTGRES_DATABASE_USER`     | Usuário do PostgreSQL.                               |
+| `POSTGRES_DATABASE_PASSWORD` | Senha do PostgreSQL.                                 |
+| `MONGODB_URI`                | URI do MongoDB.                                      |
+| `KAFKA_BOOTSTRAP_SERVERS`    | Endereço do broker Kafka.                            |
 
 Opcionais:
 
@@ -288,6 +346,12 @@ Opcionais:
 - `TRANSCRIPTION_ENABLED` – `true`/`false`.
 - `CACHE_TRANSCRIPTION_TTL_SECONDS` – TTL do cache de transcrições (padrão: 86400).
 - `MIGRATION_SQLITE_PATH` – Caminho do SQLite legado para migração.
+
+**Feature flags via env var** (todas as 23 suportam override):
+
+- `PODCAST_ENABLED`, `WEEKLY_REMINDER_ENABLED`, `DAILY_RELEASES_ENABLED`, etc.
+
+📖 Ver [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md) para a lista completa.
 
 ---
 
@@ -347,21 +411,17 @@ Telegram → Interceptors → Handlers → Services → Clients → APIs externa
                     PostgreSQL + MongoDB
 ```
 
-📌 Documentação detalhada da arquitetura está disponível em:
-[🏗️ Arquitetura de Pacotes](./dev-guide/arquitetura.md)
+---
 
 ## 📚 Documentação de Desenvolvimento
 
-Toda a documentação técnica e guias estão centralizados em:
-[Dev Guide](./dev-guide/README.md)
+Toda a documentação técnica está em [`docs/dev-guide/`](./docs/dev-guide/):
 
-Inclui:
+- 📖 [Dev Guide — Índice](./docs/dev-guide/README.md)
+- 🎛️ [Feature Flags](./docs/dev-guide/feature-flags.md) — 23 flags runtime, catálogo, como adicionar e usar
+- ⚙️ [Arquivos de Configuração](./docs/dev-guide/config-files.md) — todos os JSONs do projeto (audio, groq, refinement, admin, worldcup, tmdb-aliases, feature-flags, prompts)
 
-- Guia de Logging Estruturado
-- Guia de Arquitetura de Pacotes
-- Guia de Rebase, PRs e Proteção da Branch Develop
-- Configuração do Spotless
-- Reversão Segura na Branch Develop
+---
 
 ## 📦 Estrutura
 
@@ -381,6 +441,7 @@ src/main/java/net/ddns/adambravo79/tmill
 ├── repository
 ├── service
 │   ├── cache
+│   ├── config
 │   ├── feature
 │   └── kafka
 ├── telegram
@@ -427,7 +488,9 @@ src/main/java/net/ddns/adambravo79/tmill
 ### 🧩 `PodcastPublisherService` + `PodcastScriptService`
 
 - **O que faz**: gera roteiro semanal a partir das transcrições, sintetiza via Azure TTS, comprime se >5MB e publica no Telegram.
+- **Intervalo preciso**: respeita exatamente `sexta 12:00 → sexta 11:59:59`, evitando capturar mensagens da edição seguinte.
 - **Fallback**: se o TTS falhar ou o áudio for rejeitado, envia o roteiro como texto (dividido em partes de 4000 chars).
+- **Reenvio**: o endpoint `POST /admin/podcast/resend` permite republicar qualquer sexta-feira anterior.
 - **Nome do arquivo**: `SilasCast-Semana-XX-do-Mes-XX-do-Ano-YYYY.mp3`.
 
 ### 🧩 `AutoResponseService`
@@ -442,10 +505,12 @@ src/main/java/net/ddns/adambravo79/tmill
 
 ### 🧩 `FeatureFlagService` + `FeatureFlagAdminService`
 
-- **O que faz**: gerencia feature flags em runtime com persistência opcional em disco.
+- **O que faz**: gerencia 23 feature flags em runtime com persistência opcional em disco.
 - **Modelo híbrido**: estado em memória (`ConcurrentHashMap`) + persistência em `./config/feature-flags.json`.
 - **Ordem de precedência no boot**: defaults do `application.properties` → valores do JSON (exceto read-only).
 - **Flags read-only**: `migration.enabled` (requer restart).
+- **Guarda-chuva**: `admin.features.toggle-enabled` permite congelar o painel em cenários de auditoria.
+- 📖 Ver [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md).
 
 ### 🧩 `MigrationService`
 
@@ -454,11 +519,12 @@ src/main/java/net/ddns/adambravo79/tmill
 - **Relatório**: retorna `MigrationResult` com contadores por tabela, erros e duração.
 - **Idempotência**: **não é idempotente** — rode uma única vez em ambiente limpo.
 
-### 🧩 `TelegramFacade`
+### 🧩 `TelegramFacade` / `TelegramSafeExecutor`
 
 - **Camada de abstração da API do Telegram**. Todos os métodos que enviam mensagens ou gerenciam arquivos passam por ela.
 - **Vantagem**: se um dia você migrar para webhook em vez de long polling, ou trocar a biblioteca Telegram, só precisa alterar essa classe.
 - **Timeouts configuráveis**: `connect`, `read` e `write` via `application.properties`.
+- **Fallback configurável**: `telegram.error-fallback.enabled` permite silenciar erros do Telegram sem perder o log.
 
 ### 🧩 Serviços de log e persistência
 
@@ -469,11 +535,12 @@ src/main/java/net/ddns/adambravo79/tmill
 ### 🧩 `EasterEggService`
 
 - **Muito simples e bem isolado**. Carrega um JSON e retorna `Optional<String>`.
+- **Controlado por flag**: `easter.eggs.enabled`.
 - **Modularização**: poderia ser transformado em um serviço genérico `ContentEnricher`.
 
 ### 🧩 `WorldCupSchedulerService` + `StaticWorldCupService` + `WorldCupUpdaterService`
 
-- **Scheduler**: envia jogos ao meio-dia e à noite, lembretes 30min antes, resultados sob demanda.
+- **Scheduler**: envia jogos ao meio-dia e à noite, lembretes 30min antes (controlado por flag), resultados sob demanda.
 - **Static service**: carrega o JSON da Copa e agrupa jogos por data.
 - **Updater**: baixa JSON atualizado de uma URL configurável (opcional, via feature flag).
 - **Tradução**: mapas PT-BR para nomes de times e bandeiras em emoji.
@@ -481,8 +548,14 @@ src/main/java/net/ddns/adambravo79/tmill
 ### 🧩 `BirthdayService` + `BirthdayScheduler`
 
 - **Scheduler**: roda todo dia à 00:01 BRT e dispara parabéns.
-- **Service**: envia no privado e nos grupos autorizados; se o usuário não iniciou o bot, loga warn e segue.
+- **Service**: envia no privado e nos grupos autorizados (se `birthday.group-notification.enabled`); se o usuário não iniciou o bot, loga warn e segue.
 - **Idempotência**: `last_sent_year` evita duplicação anual.
+
+### 🧩 `PrometheusFeatureFlagFilter`
+
+- **O que faz**: intercepta `/actuator/prometheus` e retorna 404 se `metrics.prometheus.enabled` estiver desabilitada.
+- **Por que existe**: o endpoint do Actuator é habilitado por `application.properties`, e não dá para desligá-lo em runtime sem um filtro.
+- **Testável isoladamente**: `PrometheusFeatureFlagFilterTest` cobre todos os paths.
 
 ---
 
@@ -496,13 +569,44 @@ Andre Nascimento
 
 ---
 
-## 📋 Changelog resumido (2.1.x → 2.5.5)
+## 📋 Changelog resumido
 
-### 🆕 Novas funcionalidades
+### 🆕 v2.6.0 — Onda 3: Feature Flags & Documentação
+
+**Feature flags (23 no total):**
+
+- ✅ **6 flags de alta prioridade** (podcast, lembretes, releases, worldcup reminders, easter eggs, admin toggle)
+- ✅ **5 flags de média prioridade** (weekly digest, aniversário, notificação em grupos, podcast fallback, custom digest)
+- ✅ **5 flags de baixa prioridade** (prometheus, debug-cache, tmdb cache, telegram fallback, kafka audit)
+
+**Documentação:**
+
+- ✅ `docs/dev-guide/README.md` — índice do dev guide
+- ✅ `docs/dev-guide/feature-flags.md` — catálogo completo das 23 flags
+- ✅ `docs/dev-guide/config-files.md` — schema dos JSONs externos
+
+**Novos endpoints:**
+
+- ✅ `POST /admin/podcast/resend` — reenvio de podcast por sexta-feira com intervalo preciso
+- ✅ `POST /admin/reload-tmdb-aliases` — recarrega atalhos TMDB
+- ✅ `POST /admin/reload-worldcup-teams` — recarrega traduções de times
+- ✅ `POST /admin/reload-telegram-errors` — recarrega regras de erro
+- ✅ `POST /admin/reload-admin-config` — recarrega `admin-config.json`
+
+**Melhorias:**
+
+- ✅ `PodcastScriptService` respeita intervalo `12:00 → 11:59:59`
+- ✅ `TelegramSafeExecutor` com flag de supressão de fallback
+- ✅ `MovieService` migrou de `@Cacheable` para `CacheManager` programático
+- ✅ `PrometheusFeatureFlagFilter` para controlar `/actuator/prometheus` em runtime
+- ✅ `AudioResultConsumer` com audit trail opcional no MongoDB
+- ✅ KI-001 residual: propagação de falha de `enviarMidia` em TTS/auto-response
+
+### 🆕 v2.5.5 — Onda 2: Estabilidade & Testes
+
 - ✅ Pipeline assíncrono com **Kafka** para processamento de áudio
 - ✅ **Podcast semanal** ("Silas Cast") com Azure TTS
 - ✅ **Digest com múltiplas personas** (T-1000, Bicentenário, Arquiteto)
-- ✅ **Feature flags** em runtime com persistência
 - ✅ **Notificações de lançamentos** de streaming (TMDB + Watchmode)
 - ✅ **Copa do Mundo 2026** (jogos, resultados, lembretes)
 - ✅ **Aniversários** com GIF temático
@@ -510,16 +614,13 @@ Andre Nascimento
 - ✅ **Painel admin** em Thymeleaf com Google OAuth2
 - ✅ **Auto-response** com time-range e user-overrides
 - ✅ **Observabilidade** com Micrometer + Prometheus + Actuator
+- ✅ Cobertura mínima de **90%** global, **70%** por classe
 
-### 🔄 Mudanças arquiteturais
+### 🔄 Mudanças arquiteturais (v2.1.x → v2.6.0)
+
 - 🔀 Migração de **SQLite** para **PostgreSQL** (dados estruturados) + **MongoDB** (documentos)
 - 🔀 Processamento de áudio movido para **workers Kafka** (escalável horizontalmente)
 - 🔀 **Virtual Threads** habilitados (`spring.threads.virtual.enabled=true`)
 - 🔀 **Spring Boot 4.1.1** + **Spring Security 7.1.1** + **Java 21**
 - 🔀 **Spotless** + **JaCoCo** + **SonarCloud** no CI
-
-### 🧪 Testes
-- ✅ Cobertura mínima de **90%** global, **70%** por classe
-- ✅ **Testcontainers** para PostgreSQL, MongoDB e Kafka
-- ✅ **MockWebServer** para testes de clientes HTTP
-- ✅ Testes parametrizados (`@ParameterizedTest`) para casos de borda
+- 🔀 **Feature flags runtime** com persistência em disco e UI no painel admin

@@ -1,3 +1,4 @@
+/* (c) 2026 | 01/10/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import java.io.IOException;
@@ -14,25 +15,28 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
+import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 
 @Slf4j
 @Component
 public class AzureTtsClient {
 
+    private static final String USR_BIN_FFMPEG = "/usr/bin/ffmpeg";
+
     private final RestClient restClient;
     private final Path tempDir;
-
-    // 🔥 Tamanho máximo antes de comprimir (5MB)
-    private static final long MAX_AUDIO_SIZE_BYTES = 5 * 1024 * 1024;
+    private final AudioConfigService audioConfig;
 
     public AzureTtsClient(
             @Value("${azure.speech.key}") String subscriptionKey,
             @Value("${azure.speech.region}") String region,
-            @Value("${app.temp.dir:./temp}") String tempDirPath)
+            @Value("${app.temp.dir:./temp}") String tempDirPath,
+            AudioConfigService audioConfig)
             throws Exception {
 
         this.tempDir = Paths.get(tempDirPath).toAbsolutePath().normalize();
         Files.createDirectories(this.tempDir);
+        this.audioConfig = audioConfig;
         log.info("📁 Diretório temporário configurado: {}", this.tempDir);
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -78,28 +82,35 @@ public class AzureTtsClient {
         }
 
         if (audioParts.size() == 1) {
-            byte[] result = audioParts.get(0);
-            // 🔥 Comprime se necessário
-            return compressIfNeeded(result);
+            return compressIfNeeded(audioParts.get(0));
         }
 
         byte[] concatenated = concatenateMp3s(audioParts);
-        // 🔥 Comprime se necessário
         return compressIfNeeded(concatenated);
     }
 
-    /** 🔥 Comprime o áudio se for maior que o limite (5MB) Usa bitrate de 64kbps, mono, 22.05kHz */
+    /**
+     * Comprime o áudio se ultrapassar {@code tts.max-audio-size-bytes}.
+     *
+     * <p>Todos os parâmetros de compressão (bitrate, canais, sample rate, timeout) vêm do
+     * {@link AudioConfigService}, permitindo ajuste em runtime via {@code audio-config.json}.
+     */
     private byte[] compressIfNeeded(byte[] audioData) {
-        if (audioData == null || audioData.length <= MAX_AUDIO_SIZE_BYTES) {
+        AudioConfigService.TtsConfig cfg = audioConfig.getTts();
+        long maxBytes = cfg.maxAudioSizeBytes();
+
+        if (audioData == null || audioData.length <= maxBytes) {
+            long sizeInBytes = audioData != null ? audioData.length : 0;
             log.debug(
-                    "Áudio com {} bytes, abaixo do limite de {} MB. Não comprimindo.",
-                    audioData.length,
-                    MAX_AUDIO_SIZE_BYTES / 1024 / 1024);
+                    "Áudio com {} bytes, abaixo do limite de {} bytes. Não comprimindo.",
+                    sizeInBytes,
+                    maxBytes);
             return audioData;
         }
 
         double sizeMb = audioData.length / 1024.0 / 1024.0;
-        log.info("🔊 Áudio grande ({:.2f} MB), comprimindo...", sizeMb);
+        double limitMb = maxBytes / 1024.0 / 1024.0;
+        log.info("🔊 Áudio grande ({:.2f} MB > {:.2f} MB), comprimindo...", sizeMb, limitMb);
 
         Path inputFile = null;
         Path outputFile = null;
@@ -109,18 +120,17 @@ public class AzureTtsClient {
 
             outputFile = Files.createTempFile(tempDir, "compress_output_", ".mp3");
 
-            // Comprime para 64kbps (qualidade aceitável, tamanho reduzido)
             String[] cmd = {
-                "ffmpeg",
+                USR_BIN_FFMPEG,
                 "-y",
                 "-i",
                 inputFile.toAbsolutePath().toString(),
                 "-b:a",
-                "64k",
+                cfg.compressBitrate(),
                 "-ac",
-                "1", // Mono
+                String.valueOf(cfg.compressChannels()),
                 "-ar",
-                "22050", // 22.05kHz
+                String.valueOf(cfg.compressSampleRate()),
                 outputFile.toAbsolutePath().toString()
             };
 
@@ -130,8 +140,7 @@ public class AzureTtsClient {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            // Aguarda até 120 segundos
-            boolean finished = process.waitFor(120, TimeUnit.SECONDS);
+            boolean finished = process.waitFor(cfg.compressTimeoutSeconds(), TimeUnit.SECONDS);
             int exitCode = finished ? process.exitValue() : 1;
 
             if (exitCode == 0 && Files.exists(outputFile) && Files.size(outputFile) > 0) {
@@ -141,11 +150,17 @@ public class AzureTtsClient {
                         "✅ Compressão concluída: {} -> {} bytes ({:.1f}% redução)",
                         audioData.length, compressed.length, reduction);
                 return compressed;
-            } else {
-                log.warn("⚠️ FFmpeg falhou com código {}, mantendo áudio original", exitCode);
-                return audioData;
             }
 
+            log.warn(
+                    "⚠️ FFmpeg falhou (código {}) ou não gerou saída — mantendo áudio original",
+                    exitCode);
+            return audioData;
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("⚠️ Processo de compressão interrompido. Mantendo áudio original.");
+            return audioData;
         } catch (Exception e) {
             log.warn("⚠️ Falha na compressão: {}. Mantendo áudio original.", e.getMessage());
             return audioData;
@@ -170,8 +185,6 @@ public class AzureTtsClient {
                 "SSML enviado (primeiros 500 chars): {}",
                 ssml.length() > 500 ? ssml.substring(0, 500) + "..." : ssml);
 
-        // 🔥 Só salva se a propriedade debug.tts.save-ssml for true (desativado por
-        // padrão)
         if (Boolean.parseBoolean(System.getProperty("ajuste.debug.tts.save-ssml", "false"))) {
             try {
                 Path ssmlFile = Files.createTempFile(tempDir, "ssml_", ".xml");
@@ -281,11 +294,14 @@ public class AzureTtsClient {
                 return false;
             }
 
-            // Aguarda a conclusão
-            boolean finished = process.waitFor(120, TimeUnit.SECONDS);
+            boolean finished =
+                    process.waitFor(
+                            audioConfig.getTts().compressTimeoutSeconds(), TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
-                log.error("❌ FFmpeg timeout após 120 segundos.");
+                log.error(
+                        "❌ FFmpeg timeout após {}s.",
+                        audioConfig.getTts().compressTimeoutSeconds());
                 return false;
             }
 
@@ -305,10 +321,9 @@ public class AzureTtsClient {
         }
     }
 
-    /** Verifica se o FFmpeg está disponível no sistema. */
     private boolean isFfmpegAvailable() {
         try {
-            ProcessBuilder checkPb = new ProcessBuilder("/usr/bin/ffmpeg", "-version");
+            ProcessBuilder checkPb = new ProcessBuilder(USR_BIN_FFMPEG, "-version");
             Process checkProcess = checkPb.start();
             boolean finished = checkProcess.waitFor(60, TimeUnit.SECONDS);
             if (!finished) {
@@ -327,7 +342,6 @@ public class AzureTtsClient {
         }
     }
 
-    /** Cria o arquivo de lista para concatenação. */
     private Path createFileList(List<Path> inputs) throws Exception {
         Path fileList = Files.createTempFile(tempDir, "filelist_", ".txt");
         List<String> lines =
@@ -345,11 +359,10 @@ public class AzureTtsClient {
         return fileList;
     }
 
-    /** Executa o FFmpeg para concatenar os áudios. */
     private Process executeFfmpeg(Path fileList, Path output) throws Exception {
         ProcessBuilder pb =
                 new ProcessBuilder(
-                        "/usr/bin/ffmpeg",
+                        USR_BIN_FFMPEG,
                         "-y",
                         "-f",
                         "concat",
@@ -365,7 +378,6 @@ public class AzureTtsClient {
         log.info("⚙️ Executando FFmpeg: {}", String.join(" ", pb.command()));
         Process process = pb.start();
 
-        // Consome a saída em thread separada
         Thread outputReader = new Thread(() -> consumeOutput(process));
         outputReader.setDaemon(true);
         outputReader.start();
@@ -373,7 +385,6 @@ public class AzureTtsClient {
         return process;
     }
 
-    /** Consome a saída do processo para evitar bloqueio. */
     private void consumeOutput(Process process) {
         try (var reader =
                 new java.io.BufferedReader(
@@ -387,7 +398,6 @@ public class AzureTtsClient {
         }
     }
 
-    /** Limpeza de recursos. */
     private void cleanup(Path fileList, Process process) {
         if (fileList != null) {
             try {

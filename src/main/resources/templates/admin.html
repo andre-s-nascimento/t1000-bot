@@ -240,6 +240,13 @@
         [data-bs-theme="dark"] .card-header { background: #2b3035; }
         [data-bs-theme="dark"] .status-bar { background: #212529; }
         [data-bs-theme="dark"] .result-box { background: #2b3035; }
+
+        /* 🆕 Reenvio de podcast — destaque sutil */
+        .podcast-resend {
+            border-left: 3px solid var(--bs-warning);
+            padding-left: 0.75rem;
+            margin-top: 1rem;
+        }
     </style>
 </head>
 
@@ -786,7 +793,7 @@
         <!-- ==================== ABA ADMIN ==================== -->
         <div class="tab-pane fade" id="admin" role="tabpanel" aria-labelledby="tab-admin">
 
-            <!-- Limpeza -->
+            <!-- Limpeza e Recarregamentos -->
             <div class="btn-group-vertical-mobile mb-2 mt-2" role="group" aria-label="Ações administrativas">
                 <form th:action="@{/admin-web/clear-releases}" method="post"
                       onsubmit="return confirm('Tem certeza que deseja limpar a tabela de releases?')"
@@ -800,6 +807,11 @@
                       class="d-inline-block">
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-database-x" aria-hidden="true"></i> Limpar Todos os Dados
+                    </button>
+                </form>
+                <form th:action="@{/admin-web/reload-prompts}" method="post" class="d-inline-block">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Recarregar Prompts
                     </button>
                 </form>
                 <form th:action="@{/admin-web/reload-auto-responses}" method="post" class="d-inline-block">
@@ -858,6 +870,51 @@
                             <button type="submit" class="btn btn-outline-dark btn-sm">
                                 <i class="bi bi-calendar-range" aria-hidden="true"></i> N dias
                             </button>
+                        </form>
+                    </div>
+
+                    <!-- 🆕 Reenvio de podcast por sexta-feira -->
+                    <div class="podcast-resend">
+                        <h6 class="mb-2">
+                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+                            Reenviar Podcast por Semana
+                        </h6>
+                        <p class="text-muted small mb-2">
+                            Escolha a <b>sexta-feira de referência</b> e o sistema gera o podcast
+                            do período de <b>sexta anterior 12:00</b> até <b>sexta escolhida 11:59</b>.
+                            Deixe em branco para usar a <b>última sexta-feira</b>.
+                            Útil quando o envio automático falha.
+                        </p>
+
+                        <form th:action="@{/admin-web/podcast/resend}" method="post"
+                              class="row g-2 align-items-center"
+                              onsubmit="return confirm('Reenviar o podcast da semana escolhida?')">
+
+                            <div class="col-auto">
+                                <label for="resendFriday" class="form-label small mb-0">
+                                    Sexta de referência
+                                </label>
+                                <input type="date" class="form-control" id="resendFriday" name="friday"
+                                       placeholder="2026-10-09">
+                                <div class="form-text small">
+                                    Em branco = última sexta
+                                </div>
+                            </div>
+
+                            <div class="col-auto">
+                                <label for="resendChat" class="form-label small mb-0">Chat destino</label>
+                                <select class="form-select" name="chatId" id="resendChat">
+                                    <option value="">-- Vazio (Padrão) --</option>
+                                    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
+                                </select>
+                            </div>
+
+                            <div class="col-auto align-self-end">
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+                                    Reenviar Podcast da Semana
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>

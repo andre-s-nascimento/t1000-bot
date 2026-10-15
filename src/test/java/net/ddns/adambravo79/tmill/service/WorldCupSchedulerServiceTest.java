@@ -6,7 +6,9 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -20,25 +22,29 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.Trigger;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
+import org.springframework.scheduling.support.SimpleTriggerContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.model.Goal;
 import net.ddns.adambravo79.tmill.model.Score;
 import net.ddns.adambravo79.tmill.model.WorldCupMatch;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
+import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
@@ -51,14 +57,51 @@ class WorldCupSchedulerServiceTest {
     @Mock private WorldCupUpdaterService worldCupUpdaterService;
     @Mock private MetricsService metricsService;
     @Mock private FeatureFlagAdminService featureFlags;
+    @Mock private JsonConfigLoader jsonConfigLoader;
+    @Mock private WorldCupTeamsService teamsService;
 
     @InjectMocks private WorldCupSchedulerService service;
 
     @BeforeEach
     void setUp() {
-        // Flag da Copa habilitada por padrão em todos os testes.
-        // lenient() evita UnnecessaryStubbingException nos testes que não consultam a flag.
+        // Flag mestra da Copa habilitada por padrão
         lenient().when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(true);
+        // 🆕 Nova flag: reminders 30min habilitada por padrão
+        lenient().when(featureFlags.isEnabled("worldcup.reminders30min.enabled")).thenReturn(true);
+
+        // Como o WorldCupSchedulerService delega para WorldCupTeamsService,
+        // configuramos respostas determinísticas para os times usados nos testes.
+        lenient()
+                .when(teamsService.translateTeam(anyString()))
+                .thenAnswer(
+                        i -> {
+                            String team = i.getArgument(0);
+                            if (team == null || team.isBlank()) return "?";
+                            return switch (team.toLowerCase()) {
+                                case "brazil" -> "Brasil";
+                                case "argentina" -> "Argentina";
+                                case "england" -> "Inglaterra";
+                                case "united states", "usa" -> "Estados Unidos";
+                                case "dr congo" -> "Republica Democratica do Congo";
+                                default -> team;
+                            };
+                        });
+
+        lenient()
+                .when(teamsService.flagEmoji(anyString()))
+                .thenAnswer(
+                        i -> {
+                            String team = i.getArgument(0);
+                            if (team == null || team.isBlank()) return "🏳️";
+                            return switch (team.toLowerCase()) {
+                                case "brazil" -> "🇧🇷";
+                                case "argentina" -> "🇦🇷";
+                                case "france" -> "🇫🇷";
+                                case "united states", "usa" -> "🇺🇸";
+                                case "dr congo" -> "🇨🇩";
+                                default -> "🏳️";
+                            };
+                        });
 
         Set<Long> mutableAllowedGroups = new HashSet<>();
         mutableAllowedGroups.add(-100L);
@@ -68,64 +111,84 @@ class WorldCupSchedulerServiceTest {
         service.init();
     }
 
-    // ============================================================
-    // TRADUÇÃO E BANDEIRAS
-    // ============================================================
+    // =========================================================================
+    // 🆕 FEATURE FLAG — worldcup.reminders30min.enabled
+    // =========================================================================
 
     @Test
-    @DisplayName("translateTeam: traduz times conhecidos")
-    void translateTeam_conhecidos() throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("translateTeam", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, "brazil")).isEqualTo("Brasil");
-        assertThat(m.invoke(service, "england")).isEqualTo("Inglaterra");
-        assertThat(m.invoke(service, "unknown")).isEqualTo("unknown");
-    }
+    @DisplayName("checkThirtyMinutes: flag 'worldcup.reminders30min.enabled' off → pula")
+    void checkThirtyMinutos_reminders30minOff_pula() {
+        when(featureFlags.isEnabled("worldcup.reminders30min.enabled")).thenReturn(false);
 
-    @ParameterizedTest
-    @MethodSource("translateTeamProvider")
-    void translateTeam_parametrizado(String input, String expected) throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("translateTeam", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, input)).isEqualTo(expected);
-    }
+        service.checkThirtyMinutesBeforeEachMatch();
 
-    static Stream<Arguments> translateTeamProvider() {
-        return Stream.of(
-                Arguments.of(null, "?"),
-                Arguments.of("", "?"),
-                Arguments.of("brazil", "Brasil"),
-                Arguments.of("United States of America", "Estados Unidos"),
-                Arguments.of("DR Congo", "Republica Democratica do Congo"),
-                Arguments.of("unknown", "unknown"));
+        verifyNoInteractions(worldCupService, telegramFacade, metricsService);
     }
 
     @Test
-    @DisplayName("flagEmoji: bandeira para time conhecido")
-    void flagEmoji_conhecido() throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("flagEmoji", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, "brazil")).isEqualTo("🇧🇷");
-        assertThat(m.invoke(service, "france")).isEqualTo("🇫🇷");
-        assertThat(m.invoke(service, "unknown")).isEqualTo("🏳️");
+    @DisplayName("checkThirtyMinutes: flag 'worldcup.enabled' off → pula mesmo com reminders on")
+    void checkThirtyMinutos_worldcupOff_pula() {
+        when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
+
+        service.checkThirtyMinutesBeforeEachMatch();
+
+        verifyNoInteractions(worldCupService, telegramFacade, metricsService);
+        // worldcup.enabled foi consultada (pelo init + pelo método)
+        verify(featureFlags, atLeastOnce()).isEnabled("worldcup.enabled");
+        verify(featureFlags, never()).isEnabled("worldcup.reminders30min.enabled");
     }
 
-    @ParameterizedTest
-    @MethodSource("flagEmojiProvider")
-    void flagEmoji_parametrizado(String input, String expected) throws Exception {
-        Method m = WorldCupSchedulerService.class.getDeclaredMethod("flagEmoji", String.class);
-        m.setAccessible(true);
-        assertThat(m.invoke(service, input)).isEqualTo(expected);
+    @Test
+    @DisplayName("checkThirtyMinutes: flag 'worldcup.reminders30min.enabled' on → envia lembrete")
+    void checkThirtyMinutos_reminders30minOn_envia() {
+        ZoneId zone = ZoneId.of("America/Sao_Paulo");
+        // 2026-07-01 11:30:01 BRT = 14:30:01 UTC
+        Clock fixed = Clock.fixed(Instant.parse("2026-07-01T14:30:01Z"), zone);
+
+        WorldCupSchedulerService serviceWithClock =
+                new WorldCupSchedulerService(
+                        worldCupService,
+                        telegramFacade,
+                        worldCupUpdaterService,
+                        fixed,
+                        metricsService,
+                        featureFlags,
+                        jsonConfigLoader,
+                        teamsService);
+
+        Set<Long> groups = new HashSet<>();
+        groups.add(-100L);
+        ReflectionTestUtils.setField(serviceWithClock, "allowedGroups", groups);
+        ReflectionTestUtils.setField(serviceWithClock, "allowedChatsStr", "");
+
+        LocalDate date = LocalDate.now(fixed);
+        WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
+
+        serviceWithClock.checkThirtyMinutesBeforeEachMatch();
+
+        verify(telegramFacade).enviarMensagemHtml(eq(-100L), contains("Faltam 30 minutos"));
+        verify(metricsService).success("worldcup_lembrete_30min_enviado");
     }
 
-    static Stream<Arguments> flagEmojiProvider() {
-        return Stream.of(
-                Arguments.of(null, "🏳️"),
-                Arguments.of("", "🏳️"),
-                Arguments.of("BRAZIL", "🇧🇷"),
-                Arguments.of("xyzzz", "🏳️"),
-                Arguments.of("United States of America", "🇺🇸"),
-                Arguments.of("DR Congo", "🇨🇩"));
+    @Test
+    @DisplayName("Reminders 30min desabilitada: noon/evening seguem funcionando")
+    void reminders30minOff_noonEEveningFuncionam() {
+        // NÃO stuba 'worldcup.reminders30min.enabled':
+        // noon/evening só olham 'worldcup.enabled' (que está true no setUp)
+
+        LocalDate today = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        WorldCupMatch match = criarMatch(today, "Brazil", "Argentina", "12:00 UTC-3");
+        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
+
+        service.sendNoonMatches();
+        service.sendEveningMatches();
+
+        verify(telegramFacade, times(2)).enviarMensagemHtml(eq(-100L), anyString());
+        verify(metricsService, times(2)).success("worldcup_jogos_enviados");
+        verify(metricsService, never()).success("worldcup_lembrete_30min_enviado");
+        // Prova explícita: nenhuma das chamadas consultou a flag de reminders
+        verify(featureFlags, never()).isEnabled("worldcup.reminders30min.enabled");
     }
 
     // ============================================================
@@ -147,7 +210,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendMatchesMessage (privado, broadcast)
+    // sendMatchesMessage (privado, broadcast)
     // ============================================================
 
     @Test
@@ -214,7 +277,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendThirtyMinuteReminder
+    // sendThirtyMinuteReminder
     // ============================================================
 
     @Test
@@ -234,7 +297,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendResultsToChat
+    // sendResultsToChat
     // ============================================================
 
     @Test
@@ -366,7 +429,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendMatchesToChat (público)
+    // sendMatchesToChat
     // ============================================================
 
     @Test
@@ -411,7 +474,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendMatchesMessageToChat (privado)
+    // sendMatchesMessageToChat
     // ============================================================
 
     @Test
@@ -479,7 +542,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — métodos *ToChat (noon/evening/manual)
+    // *ToChat (noon/evening/manual)
     // ============================================================
 
     @Test
@@ -549,7 +612,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // MÉTRICAS — sendManualTest (broadcast)
+    // sendManualTest (broadcast)
     // ============================================================
 
     @Test
@@ -584,41 +647,8 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // LEMBRETES 30 MIN — checkThirtyMinutesBeforeEachMatch
+    // LEMBRETES 30 MIN (com Clock fixo)
     // ============================================================
-
-    @Test
-    @DisplayName("checkThirtyMinutesBeforeEachMatch: 11:30 dispara lembrete e registra métrica")
-    void checkThirtyMinutos_disparaRegistraMetrica() {
-        ZoneId zone = ZoneId.of("America/Sao_Paulo");
-        // 2026-07-01 11:30:01 BRT = 14:30:01 UTC
-        Clock fixed = Clock.fixed(Instant.parse("2026-07-01T14:30:01Z"), zone);
-
-        // Reconstrói o serviço com o Clock fixo (o campo é final, não pode ser alterado via
-        // reflection)
-        WorldCupSchedulerService serviceWithClock =
-                new WorldCupSchedulerService(
-                        worldCupService,
-                        telegramFacade,
-                        worldCupUpdaterService,
-                        fixed,
-                        metricsService,
-                        featureFlags);
-
-        Set<Long> groups = new HashSet<>();
-        groups.add(-100L);
-        ReflectionTestUtils.setField(serviceWithClock, "allowedGroups", groups);
-        ReflectionTestUtils.setField(serviceWithClock, "allowedChatsStr", "");
-
-        LocalDate date = LocalDate.now(fixed);
-        WorldCupMatch match = criarMatch(date, "Brazil", "Argentina", "12:00 UTC-3");
-        when(worldCupService.getMatchesForDay(any(LocalDate.class))).thenReturn(List.of(match));
-
-        serviceWithClock.checkThirtyMinutesBeforeEachMatch();
-
-        verify(telegramFacade).enviarMensagemHtml(eq(-100L), contains("Faltam 30 minutos"));
-        verify(metricsService).success("worldcup_lembrete_30min_enviado");
-    }
 
     @Test
     @DisplayName("checkThirtyMinutes: lembrete duplicado não reenvia")
@@ -638,15 +668,15 @@ class WorldCupSchedulerServiceTest {
     }
 
     @Test
-    @DisplayName("checkThirtyMinutes: disabled não faz nada")
-    void checkThirtyMinutos_disabled() {
+    @DisplayName("checkThirtyMinutes: worldcup desabilitado → pula")
+    void checkThirtyMinutos_worldcupDisabled() {
         when(featureFlags.isEnabled("worldcup.enabled")).thenReturn(false);
         service.checkThirtyMinutesBeforeEachMatch();
         verifyNoInteractions(worldCupService, telegramFacade, metricsService);
     }
 
     @Test
-    @DisplayName("checkThirtyMinutes: sem grupos não faz nada")
+    @DisplayName("checkThirtyMinutes: sem grupos → pula")
     void checkThirtyMinutos_semGrupos() {
         ReflectionTestUtils.setField(service, "allowedGroups", new HashSet<>());
         service.checkThirtyMinutesBeforeEachMatch();
@@ -654,7 +684,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // AGENDADOS
+    // sendNoonMatches / sendEveningMatches (broadcast)
     // ============================================================
 
     @Test
@@ -700,7 +730,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // CLEAN REMINDERS
+    // cleanReminders
     // ============================================================
 
     @Test
@@ -718,7 +748,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // RELOAD
+    // reloadWorldCup
     // ============================================================
 
     @Test
@@ -731,7 +761,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // INIT
+    // init
     // ============================================================
 
     @Test
@@ -755,7 +785,7 @@ class WorldCupSchedulerServiceTest {
     }
 
     // ============================================================
-    // CONTAGEM DE MÉTRICAS EM FLUXO COMPLEXO
+    // Fluxos complexos
     // ============================================================
 
     @Test
@@ -790,6 +820,42 @@ class WorldCupSchedulerServiceTest {
 
         verify(metricsService, times(1)).error("worldcup_sem_jogos");
         verify(metricsService, times(1)).success("worldcup_jogos_enviados");
+    }
+
+    // ============================================================
+    // configureTasks
+    // ============================================================
+
+    @Test
+    @DisplayName("configureTasks: deve registrar as tasks e invocar getCron cobrindo a lambda")
+    void configureTasks_deveRegistrarAsTasksECobrirLambda() {
+        lenient()
+                .when(jsonConfigLoader.loadConfig(anyString(), eq(Map.class), anyString()))
+                .thenReturn(
+                        Optional.of(
+                                Map.of(
+                                        "cron", "0 0 12 * * *",
+                                        "updateCron", "0 0 12 * * *",
+                                        "hourlyCron", "0 0 12 * * *",
+                                        "weeklyCron", "0 0 12 * * *",
+                                        "morningCron", "0 0 12 * * *",
+                                        "eveningCron", "0 0 12 * * *",
+                                        "noonCron", "0 0 12 * * *",
+                                        "checkCron", "0 0 12 * * *",
+                                        "cleanCron", "0 0 12 * * *")));
+
+        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
+
+        service.configureTasks(taskRegistrar);
+
+        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
+        verify(taskRegistrar, atLeastOnce())
+                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
+
+        SimpleTriggerContext ctx = new SimpleTriggerContext();
+        for (Trigger trigger : triggerCaptor.getAllValues()) {
+            trigger.nextExecution(ctx);
+        }
     }
 
     // ============================================================

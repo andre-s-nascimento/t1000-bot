@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,11 +15,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.constant.BotMessages;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverMovieResponse;
 import net.ddns.adambravo79.tmill.dto.TmdbDiscoverTvResponse;
 import net.ddns.adambravo79.tmill.model.*;
+import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
 @Slf4j
@@ -30,21 +34,28 @@ public class TmdbClient {
 
     private static final String LANGUAGE = "language";
 
-    private static final Map<String, String> ATALHOS =
-            Map.of(
-                    "duna", "Dune 2021",
-                    "dune", "Dune 2021",
-                    "batman", "The Batman 2022",
-                    "o poderoso chefao", "The Godfather 1972");
-
     private final RestClient restClient;
+    private final JsonConfigLoader jsonConfigLoader;
+
+    /**
+     * Atalhos carregados do JSON. {@link AtomicReference} garante visibilidade e
+     * atomicidade das trocas — o SonarQube não reclama de {@code java:S3077} porque
+     * reconhece o tipo como thread-safe. O conteúdo interno é sempre um mapa imutável
+     * ({@link Map#copyOf}), portanto nunca é mutado após a publicação.
+     */
+    private final AtomicReference<Map<String, String>> atalhosRef = new AtomicReference<>(Map.of());
+
+    /** Path do JSON de atalhos (override via property). */
+    @Value("${tmdb.aliases.file:classpath:tmdb-aliases.json}")
+    private String aliasesFile;
 
     @Autowired
     public TmdbClient(
             @Value("${tmdb.token}") String tmdbToken,
             @Value("${tmdb.api.url}") String apiUrl,
             @Value("${groq.connect-timeout:5s}") Duration connectTimeout,
-            @Value("${groq.read-timeout:30s}") Duration readTimeout) {
+            @Value("${groq.read-timeout:30s}") Duration readTimeout,
+            JsonConfigLoader jsonConfigLoader) {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
@@ -57,11 +68,63 @@ public class TmdbClient {
                         .defaultHeader("accept", "application/json")
                         .requestFactory(factory)
                         .build();
+        this.jsonConfigLoader = jsonConfigLoader;
     }
 
-    // Construtor para testes
+    /** Construtor para testes — mantém assinatura antiga sem JSON loader. */
     public TmdbClient(RestClient restClient) {
         this.restClient = restClient;
+        this.jsonConfigLoader = null;
+    }
+
+    @PostConstruct
+    public void init() {
+        if (jsonConfigLoader != null) {
+            reloadAliases();
+        }
+    }
+
+    /**
+     * Recarrega os atalhos do JSON. Pode ser chamado em runtime via endpoint admin. Mantém o
+     * valor anterior em caso de falha.
+     *
+     * <p>Não é mais {@code synchronized}: a troca do mapa é atômica via {@link
+     * AtomicReference#set}, e o cálculo local usa um {@link ConcurrentHashMap} próprio.
+     */
+    public void reloadAliases() {
+        if (jsonConfigLoader == null) {
+            return;
+        }
+        try {
+            var loaded =
+                    jsonConfigLoader.loadConfig(
+                            "tmdb-aliases.json",
+                            Map.class,
+                            aliasesFile != null && !aliasesFile.isBlank() ? aliasesFile : null);
+
+            if (loaded.isEmpty()) {
+                log.warn("⚠️ Nenhum arquivo de atalhos TMDB encontrado — usando mapa vazio.");
+                return;
+            }
+
+            Object aliasesNode = loaded.get().get("aliases");
+            if (aliasesNode instanceof Map<?, ?> rawMap) {
+                Map<String, String> novo = new ConcurrentHashMap<>();
+                rawMap.forEach(
+                        (k, v) -> {
+                            if (k != null && v != null) {
+                                novo.put(k.toString().toLowerCase(), v.toString());
+                            }
+                        });
+                Map<String, String> imutavel = Map.copyOf(novo);
+                atalhosRef.set(imutavel);
+                log.info("✅ TMDB: {} atalhos carregados de {}", imutavel.size(), aliasesFile);
+            } else {
+                log.warn("⚠️ Chave 'aliases' ausente ou inválida no JSON de atalhos.");
+            }
+        } catch (Exception e) {
+            log.error("❌ Falha ao carregar atalhos TMDB — mantendo os anteriores", e);
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -76,7 +139,8 @@ public class TmdbClient {
             maxDelay = 5000)
     public MovieSearchResponse pesquisarFilme(String query) {
         String queryNormalizada = query.trim().toLowerCase();
-        String queryFinal = ATALHOS.getOrDefault(queryNormalizada, query);
+        Map<String, String> atalhos = atalhosRef.get();
+        String queryFinal = atalhos.getOrDefault(queryNormalizada, query);
         if (!queryFinal.equals(query)) {
             log.info(
                     "🎬 TMDB: Atalho aplicado '{}' -> '{}'",
@@ -198,7 +262,6 @@ public class TmdbClient {
 
     // ------------------------------------------------------------------------
     // NOVOS MÉTODOS PARA DESCOBERTA DE LANÇAMENTOS (sem filtro de provedores)
-    // Conforme API Reference: /discover/movie e /discover/tv
     // ------------------------------------------------------------------------
 
     /**
@@ -254,7 +317,6 @@ public class TmdbClient {
 
     // ------------------------------------------------------------------------
     // MÉTODOS PARA OBTER WATCH PROVIDERS (com tratamento de 404)
-    // Conforme API Reference: /movie/{id}/watch/providers e /tv/{id}/watch/providers
     // ------------------------------------------------------------------------
 
     /**
@@ -284,7 +346,6 @@ public class TmdbClient {
                 return INDISPONIVEL_NO_MOMENTO;
             }
 
-            // Verifica se existe entry para o Brasil
             if (response.results().containsKey("BR")) {
                 var brProviders = response.results().get("BR").flatrate();
                 if (brProviders != null && !brProviders.isEmpty()) {
@@ -310,10 +371,6 @@ public class TmdbClient {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // MÉTODO OPCIONAL: LISTAR PROVEDORES DISPONÍVEIS NO BRASIL
-    // Útil para debug ou para obter IDs atualizados
-    // ------------------------------------------------------------------------
     public WatchProvidersResponse listarProvedoresFilmes() {
         return restClient
                 .get()

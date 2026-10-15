@@ -4,13 +4,16 @@ package net.ddns.adambravo79.tmill.controller;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAdjusters;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,11 +30,12 @@ import tools.jackson.databind.ObjectMapper;
  * <p>Centraliza:
  *
  * <ul>
- *   <li>Constantes comuns (ex.: {@link #SHOWCASE_CHAT_ID})
+ *   <li>Constantes comuns (ex.: {@link #BRAZIL_ZONE})
  *   <li>Mascaramento de tokens para exibição segura em logs/JSON
  *   <li>Parseamento tolerante de datas ({@code "hoje"}, {@code "ontem"}, {@code "20/06"}, {@code
  *       "20-06"}, {@code "2026-06-20"})
  *   <li>Parseamento de horário no formato {@code HH:mm}
+ *   <li>Cálculo de períodos para reenvio de podcast (semana completa sexta → sexta)
  *   <li>Validação de URLs HTTP/HTTPS
  *   <li>Carregamento de arquivos JSON de configuração (via propriedade, classpath, /app/config/ ou
  *       ./config/)
@@ -45,9 +49,6 @@ public final class AdminUtils {
     // =========================================================================
     // CONSTANTES
     // =========================================================================
-
-    /** Canal de showcase — usado como destino padrão em ações manuais. */
-    public static final long SHOWCASE_CHAT_ID = -5283244164L;
 
     /** Timezone de negócio (Brasília). */
     public static final String BRAZIL_ZONE = "America/Sao_Paulo";
@@ -229,6 +230,70 @@ public final class AdminUtils {
     }
 
     // =========================================================================
+    // PODCAST — CÁLCULO DE PERÍODO (REENVIO POR SEMANA)
+    // =========================================================================
+
+    /**
+     * Retorna a última sexta-feira anterior ou igual à data de referência. Se a data já for
+     * sexta-feira, retorna ela mesma.
+     *
+     * <p>Útil para o endpoint de reenvio de podcast: como o podcast é publicado toda sexta, o
+     * caso de uso mais comum é "reenviar a edição da última sexta".
+     *
+     * <p>Exemplos:
+     *
+     * <ul>
+     *   <li>Referência = 2026-10-13 (terça) → retorna 2026-10-09 (sexta anterior)
+     *   <li>Referência = 2026-10-09 (sexta) → retorna 2026-10-09 (ela mesma)
+     *   <li>Referência = 2026-10-10 (sábado) → retorna 2026-10-09 (sexta anterior)
+     *   <li>Referência = 2026-10-16 (sexta seguinte) → retorna 2026-10-16
+     * </ul>
+     *
+     * @param reference data de referência. Se {@code null}, usa {@link LocalDate#now(ZoneId)} no
+     *     fuso {@link #BRAZIL_ZONE}
+     * @return a sexta-feira alvo (nunca {@code null})
+     */
+    public static LocalDate ultimaSexta(LocalDate reference) {
+        LocalDate ref = (reference != null) ? reference : LocalDate.now(ZoneId.of(BRAZIL_ZONE));
+        return ref.with(TemporalAdjusters.previousOrSame(DayOfWeek.FRIDAY));
+    }
+
+    /**
+     * Calcula o período de uma semana completa de podcast que termina na sexta-feira informada.
+     *
+     * <p>Convenção: o podcast semanal cobre de <b>sexta-feira 12:00</b> (da semana anterior) até
+     * <b>sexta-feira 11:59:59</b> (da semana alvo). Ou seja, exclui a manhã da sexta alvo para
+     * não capturar mensagens que pertencem à próxima edição.
+     *
+     * <p>Exemplo: se {@code friday = 2026-10-09}, retorna:
+     *
+     * <ul>
+     *   <li>{@code from = 2026-10-02T12:00:00}
+     *   <li>{@code to   = 2026-10-09T11:59:59}
+     * </ul>
+     *
+     * <p>Os limites são calculados no fuso {@link #BRAZIL_ZONE} — como {@link LocalDateTime} não
+     * carrega fuso, o caller deve interpretá-los no mesmo fuso ao consultar o banco.
+     *
+     * @param friday sexta-feira de referência (não pode ser {@code null})
+     * @return array de 2 posições: {@code [from, to]}
+     * @throws IllegalArgumentException se {@code friday} for {@code null} ou não for sexta-feira
+     */
+    public static LocalDateTime[] calcularPeriodoPodcast(LocalDate friday) {
+        if (friday == null) {
+            throw new IllegalArgumentException("friday não pode ser nulo");
+        }
+        if (!friday.getDayOfWeek().equals(DayOfWeek.FRIDAY)) {
+            throw new IllegalArgumentException(
+                    "Data deve ser uma sexta-feira. Recebido: " + friday);
+        }
+
+        LocalDateTime from = friday.minusWeeks(1).atTime(12, 0, 0);
+        LocalDateTime to = friday.atTime(11, 59, 59);
+        return new LocalDateTime[] {from, to};
+    }
+
+    // =========================================================================
     // VALIDAÇÃO DE URL
     // =========================================================================
 
@@ -272,8 +337,8 @@ public final class AdminUtils {
      * <p>Isso garante que o controller leia o arquivo <b>do mesmo local que os services</b> (ex.:
      * {@code EasterEggService}, {@code AutoResponseService}, {@code StaticWorldCupService}).
      *
-     * <p><b>Robustez:</b> cada tentativa passa por {@link #tryLoad}, que trata {@code null} do {@link
-     * ResourceLoader} e {@code resource.exists() == false} sem lançar NPE.
+     * <p><b>Robustez:</b> cada tentativa passa por {@link #tryLoad}, que trata {@code null} do
+     * {@link ResourceLoader} e {@code resource.exists() == false} sem lançar NPE.
      *
      * @param resourceLoader loader do Spring
      * @param environment ambiente do Spring (para resolver a propriedade)
@@ -329,51 +394,6 @@ public final class AdminUtils {
     }
 
     /**
-     * Carrega um arquivo JSON apenas pelo nome, sem consultar propriedades do Spring.
-     *
-     * <p><b>Preferir a versão com {@code propertyKey}</b> — esta versão existe apenas por
-     * compatibilidade com chamadas legadas.
-     *
-     * <p>Ordem de busca:
-     *
-     * <ol>
-     *   <li>{@code classpath:<fileName>} (dentro do JAR)
-     *   <li>{@code file:/app/config/<fileName>} (container prod)
-     *   <li>{@code file:./config/<fileName>} (dev local)
-     * </ol>
-     *
-     * @param resourceLoader loader do Spring
-     * @param objectMapper mapper Jackson
-     * @param fileName nome do arquivo (ex.: {@code "easter-eggs.json"})
-     * @return conteúdo parseado como {@link Object}
-     * @throws IOException se o arquivo não for encontrado em nenhum local
-     * @deprecated usar {@link #loadConfigFile(ResourceLoader, Environment, ObjectMapper, String,
-     *     String, String)}
-     */
-    @Deprecated(since = "2.5.5")
-    public static Object loadConfigFile(
-            ResourceLoader resourceLoader, ObjectMapper objectMapper, String fileName)
-            throws IOException {
-
-        Object content = tryLoad(resourceLoader, objectMapper, "classpath:" + fileName);
-        if (content != null) {
-            return content;
-        }
-
-        content = tryLoad(resourceLoader, objectMapper, "file:/app/config/" + fileName);
-        if (content != null) {
-            return content;
-        }
-
-        content = tryLoad(resourceLoader, objectMapper, "file:./config/" + fileName);
-        if (content != null) {
-            return content;
-        }
-
-        throw new IOException("Arquivo não encontrado em nenhum local: " + fileName);
-    }
-
-    /**
      * Tenta carregar e parsear um recurso. Retorna {@code null} se:
      *
      * <ul>
@@ -382,9 +402,9 @@ public final class AdminUtils {
      *   <li>o {@code location} for {@code null} ou blank
      * </ul>
      *
-     * <p>Este método é a <b>única</b> fronteira segura para interagir com {@link ResourceLoader} —
-     * todo {@code loadConfigFile} passa por aqui. Isso evita NPE quando o loader é mal configurado
-     * (ex.: mock de teste que não cobre um path específico).
+     *     * to do o {@code loadConfigFile} passa por aqui. Isso evita NPE quando o loader é mal <p>Este método é a <b>única</b> fronteira segura para interagir com {@link ResourceLoader} —
+     * to do o {@code loadConfigFile} passa por aqui. Isso evita NPE quando o loader é mal
+     * configurado (ex.: mock de teste que não cobre um path específico).
      *
      * @param resourceLoader loader do Spring
      * @param objectMapper mapper Jackson
@@ -401,7 +421,7 @@ public final class AdminUtils {
         }
 
         Resource resource = resourceLoader.getResource(location);
-        if (resource == null || !resource.exists()) {
+        if (!resource.exists()) {
             return null;
         }
 

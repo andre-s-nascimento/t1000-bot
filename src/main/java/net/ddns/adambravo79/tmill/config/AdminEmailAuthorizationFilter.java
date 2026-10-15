@@ -1,4 +1,5 @@
 /* (c) 2026 | 15/09/2026 */
+/* (c) 2026 | 15/09/2026 */
 package net.ddns.adambravo79.tmill.config;
 
 import java.io.IOException;
@@ -24,15 +25,23 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
     @Value("${admin.allowed-emails:}")
     private String allowedEmailsStr;
 
+    // 🔧 Adicionado para suportar o bypass do filtro quando o modo dev estiver ativo
+    @Value("${admin.security.disabled:false}")
+    private boolean securityDisabled;
+
     private List<String> allowedEmails;
 
     @Override
+    @SuppressWarnings(
+            "null") // 🔧 FIX: Silencia o JDT Null Type Safety para priorizar o Method Reference do
+    // Sonar
     protected void initFilterBean() {
         allowedEmails =
                 (allowedEmailsStr == null || allowedEmailsStr.isBlank())
                         ? List.of()
                         : Arrays.stream(allowedEmailsStr.split(","))
-                                .map(String::trim)
+                                .map(String::trim) // 🔧 FIX: Restaurado para Method Reference
+                                // agradando o Sonar (java:S1612)
                                 .filter(s -> !s.isEmpty())
                                 .toList();
         log.info("🔧 AdminEmailAuthorizationFilter inicializado. allowedEmails={}", allowedEmails);
@@ -43,18 +52,22 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
             HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
 
+        // 🔧 FIX: Se a segurança estiver desabilitada (modo dev), ignora o filtro e deixa passar
+        if (securityDisabled) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String path = request.getRequestURI();
 
         // Não processa rotas de OAuth2/login/well-known
-        if (path.startsWith("/oauth2")
-                || path.startsWith("/login")
-                || path.startsWith("/.well-known")) {
+        if (isIgnoredPath(path)) {
             chain.doFilter(request, response);
             return;
         }
 
         // Só protege /admin e /admin-web
-        if (!path.startsWith("/admin") && !path.startsWith("/admin-web")) {
+        if (!isProtectedPath(path)) {
             chain.doFilter(request, response);
             return;
         }
@@ -62,18 +75,9 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
         // LOG DE DIAGNÓSTICO — sempre loga pra /admin e /admin-web
-        log.info(
-                "🔍 path={} auth={} sessionId={}",
-                path,
-                auth != null
-                        ? auth.getClass().getSimpleName()
-                                + "(authenticated="
-                                + auth.isAuthenticated()
-                                + ", principal="
-                                + auth.getPrincipal().getClass().getSimpleName()
-                                + ")"
-                        : "null",
-                request.getSession(false) != null ? request.getSession().getId() : "sem-sessão");
+        String sessionId =
+                request.getSession(false) != null ? request.getSession().getId() : "sem-sessão";
+        log.info("🔍 path={} auth={} sessionId={}", path, formatAuthDetails(auth), sessionId);
 
         if (auth == null || !auth.isAuthenticated()) {
             log.info("ℹ️ auth null ou não autenticado. Deixando o Spring Security tratar.");
@@ -89,18 +93,7 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
 
             if (!autorizado) {
                 log.warn("⛔ Bloqueando acesso em tempo real: email={} path={}", email, path);
-                SecurityContextHolder.clearContext();
-                if (request.getSession(false) != null) {
-                    request.getSession().invalidate();
-                }
-                // Remove o cookie JSESSIONID
-                Cookie cookie = new Cookie("JSESSIONID", null);
-                cookie.setMaxAge(0);
-                cookie.setPath("/");
-                response.addCookie(cookie);
-
-                // Redireciona direto pro Google, forçando a escolha de conta
-                response.sendRedirect("/oauth2/authorization/google");
+                handleUnauthorizedAccess(request, response);
                 return;
             }
 
@@ -112,5 +105,48 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
         }
 
         chain.doFilter(request, response);
+    }
+
+    // =========================================================================
+    // MÉTODOS AUXILIARES (Refatoração para java:S3776 - Complexidade Cognitiva)
+    // =========================================================================
+
+    private boolean isIgnoredPath(String path) {
+        return path.startsWith("/oauth2")
+                || path.startsWith("/login")
+                || path.startsWith("/.well-known");
+    }
+
+    private boolean isProtectedPath(String path) {
+        return path.startsWith("/admin") || path.startsWith("/admin-web");
+    }
+
+    private String formatAuthDetails(Authentication auth) {
+        if (auth == null) {
+            return "null";
+        }
+        return String.format(
+                "%s(authenticated=%s, principal=%s)",
+                auth.getClass().getSimpleName(),
+                auth.isAuthenticated(),
+                auth.getPrincipal().getClass().getSimpleName());
+    }
+
+    private void handleUnauthorizedAccess(HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+        SecurityContextHolder.clearContext();
+        if (request.getSession(false) != null) {
+            request.getSession().invalidate();
+        }
+
+        // Remove o cookie JSESSIONID
+        Cookie cookie = new Cookie("JSESSIONID", null);
+        cookie.setMaxAge(0);
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        response.addCookie(cookie);
+
+        // Redireciona direto pro Google, forçando a escolha de conta
+        response.sendRedirect("/oauth2/authorization/google");
     }
 }

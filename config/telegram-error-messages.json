@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "contains": "429",
+      "message": "⏳ Muitas requisições. Tente novamente em alguns segundos."
+    },
+    {
+      "contains": "timeout",
+      "message": "⏱️ O servidor demorou a responder. Tente novamente em instantes."
+    },
+    {
+      "contains": "unauthorized",
+      "message": "🔑 Token inválido ou expirado. Verifique suas credenciais."
+    },
+    {
+      "contains": "chat not found",
+      "message": "❌ Não consegui encontrar este chat. Verifique se o ID está correto."
+    },
+    {
+      "contains": "file is too big",
+      "message": "📂 O arquivo enviado é muito grande. Tente reduzir o tamanho."
+    },
+    {
+      "contains": "wrong file type",
+      "message": "🛑 Formato de arquivo não suportado. Envie em outro formato."
+    }
+  ]
+}

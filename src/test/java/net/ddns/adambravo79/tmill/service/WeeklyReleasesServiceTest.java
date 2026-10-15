@@ -35,8 +35,7 @@ import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 class WeeklyReleasesServiceTest {
 
     @Mock private TmdbClient tmdbClient;
-    @Mock private MetricsService metricsService; // 👈 NOVO
-
+    @Mock private MetricsService metricsService;
     private WeeklyReleasesService service;
 
     private static final LocalDate THURSDAY = LocalDate.of(2026, Month.JULY, 9);

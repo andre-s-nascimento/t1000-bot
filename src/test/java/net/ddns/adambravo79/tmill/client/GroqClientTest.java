@@ -10,8 +10,10 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -28,7 +30,10 @@ import net.ddns.adambravo79.tmill.model.Choice;
 import net.ddns.adambravo79.tmill.model.Message;
 import net.ddns.adambravo79.tmill.model.TranscriptionResponse;
 import net.ddns.adambravo79.tmill.prompt.DigestPersona;
-import net.ddns.adambravo79.tmill.prompt.DigestPromptFactory;
+import net.ddns.adambravo79.tmill.service.config.GroqConfigService;
+import net.ddns.adambravo79.tmill.service.config.RefinementConfigService;
+import net.ddns.adambravo79.tmill.service.digest.DigestPromptFactory;
+import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 
 @ExtendWith(MockitoExtension.class)
 class GroqClientTest {
@@ -37,20 +42,25 @@ class GroqClientTest {
     @Mock private RestClient.RequestBodyUriSpec uriSpec;
     @Mock private RestClient.RequestBodySpec bodySpec;
     @Mock private RestClient.ResponseSpec responseSpec;
+    @Mock private PromptRegistryService promptRegistryService;
+    // 🔧 Onda 3.4: novos mocks para os serviços de config
+    @Mock private GroqConfigService groqConfig;
+    @Mock private RefinementConfigService refinementConfig;
 
     private DigestPromptFactory promptFactory;
     private GroqClient groqClient;
 
     @BeforeEach
     void setUp() {
-        promptFactory = new DigestPromptFactory();
+        promptFactory = new DigestPromptFactory(promptRegistryService);
+        // 🔧 Onda 3.4: usa o construtor de teste — groqConfig/refinementConfig ficam null
+        // e os fallbacks internos do GroqClient assumem os valores default.
         groqClient = new GroqClient(restClient, 5000, promptFactory);
 
         ReflectionTestUtils.setField(groqClient, "transcriptionModel", "whisper-large-v3");
         ReflectionTestUtils.setField(groqClient, "refinementModel", "llama-3.1-8b-instant");
         ReflectionTestUtils.setField(
                 groqClient, "digestModel", "meta-llama/llama-4-scout-17b-16e-instruct");
-        ReflectionTestUtils.setField(groqClient, "refinementMaxTokens", 4000);
 
         lenient().when(restClient.post()).thenReturn(uriSpec);
         lenient().when(uriSpec.uri("/openai/v1/audio/transcriptions")).thenReturn(bodySpec);
@@ -82,7 +92,7 @@ class GroqClientTest {
     @Test
     void transcrever_deveLancarExcecaoQuandoRespostaNula() {
         when(responseSpec.body(TranscriptionResponse.class)).thenReturn(null);
-        File audioFile = new File("audio.wav"); // criado fora do lambda
+        File audioFile = new File("audio.wav");
 
         assertThatThrownBy(() -> groqClient.transcrever(audioFile))
                 .isInstanceOf(IllegalStateException.class)
@@ -135,15 +145,19 @@ class GroqClientTest {
 
         groqClient.refinarTexto("texto bruto");
 
+        // 🔧 Onda 3.4: com o construtor de teste, os fallbacks internos
+        // aplicam temperature=0.18 e maxTokens=4000.
         verify(bodySpec)
                 .body(
                         argThat(
                                 (ArgumentMatcher<Map<String, Object>>)
                                         payload ->
                                                 "llama-3.1-8b-instant".equals(payload.get("model"))
-                                                        && 4000
-                                                                == (int)
-                                                                        payload.get("max_tokens")));
+                                                        && 4000 == (int) payload.get("max_tokens")
+                                                        && 0.18
+                                                                == (double)
+                                                                        payload.get(
+                                                                                "temperature")));
     }
 
     // =========================
@@ -285,7 +299,6 @@ class GroqClientTest {
     @Test
     void refinarTexto_comRespostaVaziaGroq_usaTextoBrutoComoFallback() {
         stubChatUri();
-        // Groq devolve escolha com conteúdo VAZIO e finish_reason="stop"
         ChatCompletionResponse response =
                 new ChatCompletionResponse(
                         List.of(new Choice(new Message("assistant", ""), "stop")));
@@ -293,14 +306,12 @@ class GroqClientTest {
 
         String resultado = groqClient.refinarTexto("Texto bruto original");
 
-        // Fallback: usa o texto bruto quando o refinado é vazio
         assertThat(resultado).isEqualTo("Texto bruto original");
     }
 
     @Test
     void refinarTexto_comFinishReasonLength_usaTextoBrutoComoFallback() {
         stubChatUri();
-        // Groq trunca (finish_reason="length") e devolve vazio
         ChatCompletionResponse response =
                 new ChatCompletionResponse(
                         List.of(new Choice(new Message("assistant", ""), "length")));
@@ -319,7 +330,6 @@ class GroqClientTest {
                         List.of(new Choice(new Message("assistant", "Texto curto"), "length")));
         when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
 
-        // Não deve lançar — apenas logar aviso
         String result = groqClient.chatCompletion("system", "user", "llama", 0.5, 100);
         assertThat(result).isEqualTo("Texto curto");
     }
@@ -348,7 +358,160 @@ class GroqClientTest {
                         10000,
                         Duration.ofSeconds(5),
                         Duration.ofSeconds(30),
-                        new DigestPromptFactory());
+                        new DigestPromptFactory(promptRegistryService),
+                        groqConfig,
+                        refinementConfig);
         assertThat(client).isNotNull();
+    }
+
+    // =========================================================================
+    // 🆕 ONDA 3.4: configs externalizadas (temperature/maxTokens e regras de pipeline)
+    // =========================================================================
+
+    /**
+     * Cria um `GroqClient` **usando o construtor de teste** (`RestClient` mockado) e injeta os
+     * services de config via {@code ReflectionTestUtils}.
+     *
+     * <p>⚠️ **Importante**: não podemos usar o construtor de produção (com `String apiKey`), porque
+     * ele cria o próprio `RestClient` internamente — apontando para `api.groq.com` real. Os testes
+     * precisam usar o `restClient` mockado do `@BeforeEach`.
+     */
+    private GroqClient newGroqClientWithConfig(
+            GroqConfigService groqCfg, RefinementConfigService refinementCfg) {
+        GroqClient client = new GroqClient(restClient, 5000, promptFactory);
+
+        ReflectionTestUtils.setField(client, "transcriptionModel", "whisper-large-v3");
+        ReflectionTestUtils.setField(client, "refinementModel", "llama-3.1-8b-instant");
+        ReflectionTestUtils.setField(
+                client, "digestModel", "meta-llama/llama-4-scout-17b-16e-instruct");
+
+        // 🔧 Injeta os services de config por reflexão
+        ReflectionTestUtils.setField(client, "groqConfig", groqCfg);
+        ReflectionTestUtils.setField(client, "refinementConfig", refinementCfg);
+
+        return client;
+    }
+
+    @Test
+    @DisplayName("refinarTexto: temperature e maxTokens vêm do GroqConfigService")
+    void refinarTexto_usaTemperatureMaxTokensDoGroqConfig() {
+        stubChatUri();
+        when(groqConfig.getRefinementSpec())
+                .thenReturn(new GroqConfigService.RefinementSpec(0.42, 7777));
+        when(refinementConfig.getSpec())
+                .thenReturn(new RefinementConfigService.RefinementSpec(0.30, 200, 4000, 0.18));
+
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "ok"), "stop")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        GroqClient client = newGroqClientWithConfig(groqConfig, refinementConfig);
+
+        client.refinarTexto("texto bruto");
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(bodySpec).body(captor.capture());
+
+        // 🔧 FIX S5838: asserts individuais em vez de encadeamento
+        Map<String, Object> payload = captor.getValue();
+        assertThat(payload).containsEntry("temperature", 0.42).containsEntry("max_tokens", 7777);
+    }
+
+    @Test
+    @DisplayName("gerarResumoDigest: temperature e maxTokens vêm do GroqConfigService")
+    void gerarResumoDigest_usaTemperatureMaxTokensDoGroqConfig() {
+        stubChatUri();
+        when(groqConfig.getDigestSpec()).thenReturn(new GroqConfigService.DigestSpec(0.77, 1234));
+
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", "resumo"), "stop")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        GroqClient client = newGroqClientWithConfig(groqConfig, refinementConfig);
+
+        client.gerarResumoDigest("mensagens", DigestPersona.T1000, "manhã");
+
+        ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(bodySpec).body(captor.capture());
+
+        // 🔧 FIX S5838: asserts individuais em vez de encadeamento
+        Map<String, Object> payload = captor.getValue();
+        assertThat(payload).containsEntry("temperature", 0.77).containsEntry("max_tokens", 1234);
+    }
+
+    @Test
+    @DisplayName("refinarTexto: maxReducao customizado do RefinementConfigService é aplicado")
+    void refinarTexto_maxReducaoCustomizado_aplica() {
+        stubChatUri();
+        when(groqConfig.getRefinementSpec())
+                .thenReturn(new GroqConfigService.RefinementSpec(0.18, 4000));
+        // maxReducao = 10% e minLength = 50
+        when(refinementConfig.getSpec())
+                .thenReturn(new RefinementConfigService.RefinementSpec(0.10, 50, 4000, 0.18));
+
+        GroqClient client = newGroqClientWithConfig(groqConfig, refinementConfig);
+
+        String textoBruto = "a".repeat(200); // 200 chars
+        // Groq devolve 100 chars → redução de 50% > 10% → deve cair no fallback
+        String textoRefinado = "b".repeat(100);
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", textoRefinado), "stop")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String resultado = client.refinarTexto(textoBruto);
+
+        // Como a redução excedeu o maxReducao customizado, retorna o texto bruto
+        assertThat(resultado).isEqualTo(textoBruto);
+    }
+
+    @Test
+    @DisplayName("refinarTexto: minLength customizado — texto curto pula checagem de truncamento")
+    void refinarTexto_minLengthCustomizado_pulaChecagem() {
+        stubChatUri();
+        when(groqConfig.getRefinementSpec())
+                .thenReturn(new GroqConfigService.RefinementSpec(0.18, 4000));
+        // minLength = 500 → qualquer input < 500 chars não passa pela checagem
+        when(refinementConfig.getSpec())
+                .thenReturn(new RefinementConfigService.RefinementSpec(0.30, 500, 4000, 0.18));
+
+        GroqClient client = newGroqClientWithConfig(groqConfig, refinementConfig);
+
+        String textoBruto = "a".repeat(200); // 200 < 500 → pula checagem
+        String textoRefinado = "b".repeat(50); // redução de 75%, mas não é checada
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", textoRefinado), "stop")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String resultado = client.refinarTexto(textoBruto);
+
+        // Passa direto porque está abaixo do minLengthParaChecarTruncamento
+        assertThat(resultado).isEqualTo(textoRefinado);
+    }
+
+    @Test
+    @DisplayName("Construtor de teste (null configs): fallbacks preservam comportamento legado")
+    void construtorDeTeste_fallbacksPreservamLegado() {
+        stubChatUri();
+        // groqClient foi criado no @BeforeEach com o construtor de teste
+        // (groqConfig == null e refinementConfig == null), então:
+        //   - temperature = 0.18 (fallback)
+        //   - maxTokens   = 4000 (fallback)
+        //   - maxReducao  = 0.30 (fallback)
+        //   - minLength   = 200  (fallback)
+
+        String textoBruto = "a".repeat(1000);
+        String textoRefinado = "b".repeat(100); // redução de 90% > 30% → fallback do bruto
+        ChatCompletionResponse response =
+                new ChatCompletionResponse(
+                        List.of(new Choice(new Message("assistant", textoRefinado), "stop")));
+        when(responseSpec.body(ChatCompletionResponse.class)).thenReturn(response);
+
+        String resultado = groqClient.refinarTexto(textoBruto);
+
+        assertThat(resultado).isEqualTo(textoBruto);
     }
 }
