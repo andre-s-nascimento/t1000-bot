@@ -34,6 +34,7 @@ import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 @Service
 public class WorldCupSchedulerService implements SchedulingConfigurer {
 
+    private static final String CONFIG_WORLDCUP_CONFIG_JSON = "config/worldcup-config.json";
     private static final String WORLDCUP_DESABILITADO = "worldcup_desabilitado";
     private static final String WORLDCUP_ENABLED = "worldcup.enabled";
     private static final String WORLDCUP_REMINDERS_30MIN_ENABLED =
@@ -42,6 +43,12 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
     private static final String WORLDCUP_SEM_JOGOS = "worldcup_sem_jogos";
     private static final String POSICAO_PLACAR = "%s (%s) x (%s) %s - %s";
     private static final String FECHA_BOLD = "</b>\n\n";
+
+    // Defaults dos crons
+    private static final String DEFAULT_NOON_CRON = "0 0 12 * * *";
+    private static final String DEFAULT_EVENING_CRON = "0 30 18 * * *";
+    private static final String DEFAULT_CHECK_CRON = "0 * * * * *";
+    private static final String DEFAULT_CLEAN_CRON = "0 5 0 * * *";
 
     private final StaticWorldCupService worldCupService;
     private final TelegramFacade telegramFacade;
@@ -56,6 +63,12 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
 
     @Value(BotMessages.DEFAULT_BOT_ALLOWED_CHATS)
     private String allowedChatsStr;
+
+    // 🆕 Crons cacheados no @PostConstruct (lidos uma única vez)
+    private String noonCron;
+    private String eveningCron;
+    private String checkCron;
+    private String cleanCron;
 
     public WorldCupSchedulerService(
             StaticWorldCupService worldCupService,
@@ -78,6 +91,9 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
 
     @PostConstruct
     public void init() {
+        // 🆕 Carrega os crons UMA VEZ (evita I/O de arquivo a cada execução do scheduler)
+        loadCrons();
+
         if (!featureFlags.isEnabled(WORLDCUP_ENABLED)) return;
         if (allowedChatsStr != null && !allowedChatsStr.isBlank()) {
             for (String s : allowedChatsStr.split(",")) {
@@ -92,43 +108,44 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         log.info("🏆 Servico de Copa ativo para grupos: {}", allowedGroups);
     }
 
-    @Override
-    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
-        taskRegistrar.addTriggerTask(
-                this::sendNoonMatches,
-                ctx ->
-                        new CronTrigger(
-                                        getCron("noonCron", "0 0 12 * * *"),
-                                        ZoneId.of(BotMessages.BRAZIL_ZONE))
-                                .nextExecution(ctx));
-        taskRegistrar.addTriggerTask(
-                this::sendEveningMatches,
-                ctx ->
-                        new CronTrigger(
-                                        getCron("eveningCron", "0 30 18 * * *"),
-                                        ZoneId.of(BotMessages.BRAZIL_ZONE))
-                                .nextExecution(ctx));
-        taskRegistrar.addTriggerTask(
-                this::checkThirtyMinutesBeforeEachMatch,
-                ctx ->
-                        new CronTrigger(
-                                        getCron("checkCron", "0 * * * * *"),
-                                        ZoneId.of(BotMessages.BRAZIL_ZONE))
-                                .nextExecution(ctx));
-        taskRegistrar.addTriggerTask(
-                this::cleanReminders,
-                ctx ->
-                        new CronTrigger(
-                                        getCron("cleanCron", "0 5 0 * * *"),
-                                        ZoneId.of(BotMessages.BRAZIL_ZONE))
-                                .nextExecution(ctx));
+    /**
+     * Carrega todos os crons do arquivo de configuração. Chamado uma vez no {@code
+     * @PostConstruct}.
+     *
+     * <p>Os valores são armazenados em campos para que o {@link ScheduledTaskRegistrar} os leia em
+     * memória, não do disco, a cada disparo.
+     */
+    private void loadCrons() {
+        var config =
+                jsonConfigLoader.loadConfig(
+                        CONFIG_WORLDCUP_CONFIG_JSON, Map.class, CONFIG_WORLDCUP_CONFIG_JSON);
+
+        noonCron = config.map(m -> (String) m.get("noonCron")).orElse(DEFAULT_NOON_CRON);
+        eveningCron = config.map(m -> (String) m.get("eveningCron")).orElse(DEFAULT_EVENING_CRON);
+        checkCron = config.map(m -> (String) m.get("checkCron")).orElse(DEFAULT_CHECK_CRON);
+        cleanCron = config.map(m -> (String) m.get("cleanCron")).orElse(DEFAULT_CLEAN_CRON);
+
+        log.info(
+                "🏆 Crons da Copa carregados: noon={}, evening={}, check={}, clean={}",
+                noonCron,
+                eveningCron,
+                checkCron,
+                cleanCron);
     }
 
-    private String getCron(String key, String defaultCron) {
-        return jsonConfigLoader
-                .loadConfig("config/worldcup-config.json", Map.class, "config/worldcup-config.json")
-                .map(m -> (String) m.get(key))
-                .orElse(defaultCron);
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
+        ZoneId zone = ZoneId.of(BotMessages.BRAZIL_ZONE);
+        taskRegistrar.addTriggerTask(
+                this::sendNoonMatches, ctx -> new CronTrigger(noonCron, zone).nextExecution(ctx));
+        taskRegistrar.addTriggerTask(
+                this::sendEveningMatches,
+                ctx -> new CronTrigger(eveningCron, zone).nextExecution(ctx));
+        taskRegistrar.addTriggerTask(
+                this::checkThirtyMinutesBeforeEachMatch,
+                ctx -> new CronTrigger(checkCron, zone).nextExecution(ctx));
+        taskRegistrar.addTriggerTask(
+                this::cleanReminders, ctx -> new CronTrigger(cleanCron, zone).nextExecution(ctx));
     }
 
     public void sendNoonMatches() {
@@ -143,16 +160,6 @@ public class WorldCupSchedulerService implements SchedulingConfigurer {
         sendMatchesMessage(today, "🏆 RESUMO DOS JOGOS DE HOJE");
     }
 
-    /**
-     * Verifica se algum jogo começa em 30 minutos e envia aviso.
-     *
-     * <p>Roda a cada minuto (via {@code checkCron}). O aviso é enviado apenas uma vez por jogo,
-     * rastreado via {@link #remindersSent}.
-     *
-     * <p><b>Feature flag:</b> se {@code worldcup.reminders30min.enabled} estiver desabilitada, este
-     * método apenas retorna. Os jogos continuam sendo enviados nos horários agendados (noon/evening)
-     * — apenas os avisos individuais de 30 min são suprimidos.
-     */
     public void checkThirtyMinutesBeforeEachMatch() {
         if (!featureFlags.isEnabled(WORLDCUP_ENABLED)) return;
 

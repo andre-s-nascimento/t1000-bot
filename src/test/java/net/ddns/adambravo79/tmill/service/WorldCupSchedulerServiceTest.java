@@ -7,6 +7,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -856,6 +858,79 @@ class WorldCupSchedulerServiceTest {
         for (Trigger trigger : triggerCaptor.getAllValues()) {
             trigger.nextExecution(ctx);
         }
+    }
+
+    @Test
+    @DisplayName("init: lê o worldcup-config.json exatamente uma vez")
+    void init_leConfigUmaVez() {
+        // setUp já chamou service.init() no @BeforeEach
+        // O loadCrons() usa 1 chamada para ler o JSON (não 5)
+
+        verify(jsonConfigLoader, times(1))
+                .loadConfig(
+                        "config/worldcup-config.json", Map.class, "config/worldcup-config.json");
+    }
+
+    @Test
+    @DisplayName("configureTasks: não lê o JSON ao calcular a próxima execução")
+    void configureTasks_naoLerJsonAoCriarTrigger() {
+        clearInvocations(jsonConfigLoader); // zera o contador do init()
+
+        ScheduledTaskRegistrar taskRegistrar = mock(ScheduledTaskRegistrar.class);
+        service.configureTasks(taskRegistrar);
+
+        // Captura todas as triggers registradas
+        ArgumentCaptor<Trigger> triggerCaptor = ArgumentCaptor.forClass(Trigger.class);
+        verify(taskRegistrar, atLeastOnce())
+                .addTriggerTask(any(Runnable.class), triggerCaptor.capture());
+
+        // Invoca nextExecution várias vezes para simular o scheduler rodando
+        SimpleTriggerContext ctx = new SimpleTriggerContext();
+        for (int i = 0; i < 10; i++) {
+            for (Trigger trigger : triggerCaptor.getAllValues()) {
+                trigger.nextExecution(ctx);
+            }
+        }
+
+        // ✅ Nenhuma leitura de JSON deve ter acontecido durante o cálculo das triggers
+        verify(jsonConfigLoader, never()).loadConfig(anyString(), eq(Map.class), anyString());
+    }
+
+    @Test
+    @DisplayName("init: chave 'noonCron' ausente → usa default")
+    void init_noonCronAusente_usaDefault() {
+        // Stub do JSON sem "noonCron"
+        var configSemNoonCron =
+                Map.of(
+                        "eveningCron", "0 30 18 * * *",
+                        "checkCron", "0 * * * * *",
+                        "cleanCron", "0 5 0 * * *");
+
+        doReturn(Optional.of(configSemNoonCron))
+                .when(jsonConfigLoader)
+                .loadConfig(
+                        "config/worldcup-config.json", Map.class, "config/worldcup-config.json");
+
+        // Cria um Clock fixo para o novo serviço
+        ZoneId zone = ZoneId.of("America/Sao_Paulo");
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-07-01T14:30:01Z"), zone);
+
+        // Recria o serviço para o init() rodar com o novo stub
+        service =
+                new WorldCupSchedulerService(
+                        worldCupService,
+                        telegramFacade,
+                        worldCupUpdaterService,
+                        fixedClock,
+                        metricsService,
+                        featureFlags,
+                        jsonConfigLoader,
+                        teamsService);
+        service.init();
+
+        // Verifica que o default foi aplicado
+        String noonCronValue = (String) ReflectionTestUtils.getField(service, "noonCron");
+        assertThat(noonCronValue).isEqualTo("0 0 12 * * *");
     }
 
     // ============================================================
