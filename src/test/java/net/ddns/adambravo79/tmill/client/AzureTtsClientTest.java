@@ -2,6 +2,7 @@
 package net.ddns.adambravo79.tmill.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
@@ -63,7 +65,7 @@ class AzureTtsClientTest {
     }
 
     // =========================================================================
-    // TESTES ORIGINais (mantidos)
+    // TESTES ORIGINAIS
     // =========================================================================
 
     @Test
@@ -95,13 +97,15 @@ class AzureTtsClientTest {
     }
 
     @Test
-    @DisplayName("Deve tratar exceções da API REST graciosamente e retornar array vazio")
-    void synthesizeFullText_restException_returnsEmpty() {
-        when(bodySpecMock.retrieve()).thenThrow(new RuntimeException("API Error"));
+    @DisplayName("Deve PROPAGAR a exceção da API REST (Correção 2)")
+    void synthesizeFullText_restException_propaga() {
+        // 🔧 FIX (Correção 2): o AzureTtsClient não engole mais a exceção.
+        // O PodcastPublisherService é quem captura e aciona o fallback.
+        when(bodySpecMock.retrieve()).thenThrow(new ResourceAccessException("API Error"));
 
-        byte[] result = azureTtsClient.synthesizeFullText("Texto de teste com erro.");
-
-        assertThat(result).isEmpty();
+        assertThatThrownBy(() -> azureTtsClient.synthesizeFullText("Texto de teste com erro."))
+                .isInstanceOf(ResourceAccessException.class)
+                .hasMessageContaining("API Error");
     }
 
     @Test

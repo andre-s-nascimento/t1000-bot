@@ -1,17 +1,21 @@
-/* (c) 2026 | 01/10/2026 */
+/* (c) 2026 | 17/10/2026 */
 package net.ddns.adambravo79.tmill.client;
 
 import java.io.IOException;
+import java.net.http.HttpClient;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +26,9 @@ import net.ddns.adambravo79.tmill.service.config.AudioConfigService;
 public class AzureTtsClient {
 
     private static final String USR_BIN_FFMPEG = "/usr/bin/ffmpeg";
+
+    // 🔧 FIX (Correção 5): Azure TTS recomenda lotes menores.
+    private static final int MAX_SSML_CHARS_PER_PART = 3000;
 
     private final RestClient restClient;
     private final Path tempDir;
@@ -39,20 +46,34 @@ public class AzureTtsClient {
         this.audioConfig = audioConfig;
         log.info("📁 Diretório temporário configurado: {}", this.tempDir);
 
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);
-        factory.setReadTimeout(60000);
+        // 🔧 FIX (Correção 1A - Spring Boot 4): troca SimpleClientHttpRequestFactory por
+        // JdkClientHttpRequestFactory (java.net.http.HttpClient).
+        // OkHttp3 foi removido do Spring Boot 4. O HttpClient do JDK tem pool, keep-alive,
+        // HTTP/2 e é resiliente a quedas de conexão.
+        //
+        // Timeouts:
+        //  - connect 10s   (handshake TLS em rede instável)
+        //  - read    180s  (TTS sintetiza ANTES de enviar o stream; 60s era curto)
+        HttpClient httpClient =
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(180));
+
         this.restClient =
                 RestClient.builder()
                         .baseUrl("https://" + region + ".tts.speech.microsoft.com")
-                        .requestFactory(factory)
+                        .requestFactory(requestFactory)
                         .defaultHeader("Ocp-Apim-Subscription-Key", subscriptionKey)
                         .defaultHeader("Content-Type", "application/ssml+xml")
                         .defaultHeader(
                                 "X-Microsoft-OutputFormat", "audio-16khz-128kbitrate-mono-mp3")
                         .defaultHeader("User-Agent", "TmillBot")
                         .build();
-        log.info("✅ Azure TTS Client (REST) inicializado com região: {}", region);
+        log.info(
+                "✅ Azure TTS Client (JdkClient) inicializado com região: {} (connect=10s,"
+                        + " read=180s)",
+                region);
     }
 
     public byte[] synthesizeFullText(String fullText) {
@@ -61,7 +82,8 @@ public class AzureTtsClient {
             return new byte[0];
         }
 
-        List<String> parts = splitTextIntoParts(fullText, 5000);
+        // 🔧 FIX (Correção 5): usa 3000 em vez de 5000
+        List<String> parts = splitTextIntoParts(fullText, MAX_SSML_CHARS_PER_PART);
         List<byte[]> audioParts = new ArrayList<>();
 
         for (int i = 0; i < parts.size(); i++) {
@@ -89,12 +111,6 @@ public class AzureTtsClient {
         return compressIfNeeded(concatenated);
     }
 
-    /**
-     * Comprime o áudio se ultrapassar {@code tts.max-audio-size-bytes}.
-     *
-     * <p>Todos os parâmetros de compressão (bitrate, canais, sample rate, timeout) vêm do
-     * {@link AudioConfigService}, permitindo ajuste em runtime via {@code audio-config.json}.
-     */
     private byte[] compressIfNeeded(byte[] audioData) {
         AudioConfigService.TtsConfig cfg = audioConfig.getTts();
         long maxBytes = cfg.maxAudioSizeBytes();
@@ -174,7 +190,13 @@ public class AzureTtsClient {
         }
     }
 
-    private byte[] synthesizeSinglePart(String text) {
+    @Retryable(
+            includes = {ResourceAccessException.class, IOException.class},
+            maxRetries = 3,
+            delay = 3000,
+            multiplier = 2,
+            maxDelay = 30000)
+    public byte[] synthesizeSinglePart(String text) {
         String ssml =
                 "<speak version=\"1.0\" xmlns=\"http://www.w3.org/2001/10/synthesis\""
                         + " xml:lang=\"pt-BR\"><voice name=\"pt-BR-AntonioNeural\">"
@@ -195,21 +217,14 @@ public class AzureTtsClient {
             }
         }
 
-        try {
-            byte[] bodyBytes = ssml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            return restClient
-                    .post()
-                    .uri("/cognitiveservices/v1")
-                    .body(bodyBytes)
-                    .retrieve()
-                    .body(byte[].class);
-        } catch (Exception e) {
-            log.error("Erro ao sintetizar parte", e);
-            return new byte[0];
-        }
+        byte[] bodyBytes = ssml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return restClient
+                .post()
+                .uri("/cognitiveservices/v1")
+                .body(bodyBytes)
+                .retrieve()
+                .body(byte[].class);
     }
-
-    // ----- Métodos auxiliares (split e concatenação) -----
 
     private List<String> splitTextIntoParts(String text, int maxLength) {
         List<String> parts = new ArrayList<>();

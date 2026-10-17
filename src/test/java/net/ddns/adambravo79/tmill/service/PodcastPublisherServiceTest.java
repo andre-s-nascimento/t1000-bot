@@ -130,31 +130,39 @@ class PodcastPublisherServiceTest {
     }
 
     // ============================================================
-    // TTS VAZIO — 'podcast_tts_vazio'
+    // TTS VAZIO — 'podcast_tts_vazio' + FALLBACK DE TEXTO (Correção 4)
     // ============================================================
 
     @Test
-    @DisplayName("TTS vazio: registra 'podcast_tts_vazio'")
-    void ttsVazio_registraMetrica() {
+    @DisplayName("TTS vazio: registra 'podcast_tts_vazio' e ACIONA FALLBACK de texto")
+    void ttsVazio_registraMetricaEAcionaFallback() {
         when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro ok");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn(new byte[0]);
+        when(featureFlags.isEnabled("podcast.fallback-text.enabled")).thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
-        verify(telegramFacade).enviarMensagem(eq(CHAT_ID), contains("Erro ao gerar áudio"));
+        // 🔧 FIX (Correção 4): agora envia o roteiro como texto em vez de só logar erro
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), contains("Áudio indisponível"));
         verify(metricsService).error("podcast_tts_vazio");
-        verify(metricsService, never()).success(anyString());
+        verify(metricsService).success("podcast_fallback_texto");
+        verify(metricsService, never()).success("podcast_publicado");
     }
 
     @Test
-    @DisplayName("TTS null: registra 'podcast_tts_vazio'")
-    void ttsNulo_registraMetrica() {
+    @DisplayName("TTS null: registra 'podcast_tts_vazio' e ACIONA FALLBACK de texto")
+    void ttsNulo_registraMetricaEAcionaFallback() {
         when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro ok");
         when(ttsClient.synthesizeFullText(anyString())).thenReturn(null);
+        when(featureFlags.isEnabled("podcast.fallback-text.enabled")).thenReturn(true);
 
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
+        // 🔧 FIX (Correção 4): fallback de texto
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), contains("Áudio indisponível"));
         verify(metricsService).error("podcast_tts_vazio");
+        verify(metricsService).success("podcast_fallback_texto");
+        verify(metricsService, never()).success("podcast_publicado");
     }
 
     // ============================================================
@@ -172,7 +180,14 @@ class PodcastPublisherServiceTest {
         service.generateAndSendPodcast(START, END, CHAT_ID);
 
         verify(telegramFacade, times(1))
-                .enviarMidia(eq(CHAT_ID), anyString(), contains("Silas Cast"));
+                .enviarMidia(
+                        eq(CHAT_ID),
+                        anyString(),
+                        argThat(
+                                caption ->
+                                        caption.contains("Silas Cast")
+                                                && caption.contains("tg://user?id=5003155230")
+                                                && caption.contains("SilasCast-Semana")));
         verify(metricsService).success("podcast_compressao_pulada");
         verify(metricsService).success("podcast_publicado");
         verify(metricsService, never()).error(anyString());
@@ -266,13 +281,15 @@ class PodcastPublisherServiceTest {
     }
 
     // ============================================================
-    // ERRO NA SÍNTESE — fallback de texto
+    // ERRO NA SÍNTESE — fallback de texto (Correção 2 + 4)
     // ============================================================
 
     @Test
     @DisplayName("Exceção na síntese: fallback de texto, sem 'podcast_publicado'")
     void excecaoNaSintese_fallbackTexto() {
         when(scriptService.generateScript(START, END, null, null)).thenReturn("roteiro");
+        // 🔧 FIX (Correção 2): o AzureTtsClient agora PROPAGA exceções.
+        // O PodcastPublisherService captura no catch e aciona o fallback de texto.
         when(ttsClient.synthesizeFullText(anyString()))
                 .thenThrow(new RuntimeException("Azure down"));
 
