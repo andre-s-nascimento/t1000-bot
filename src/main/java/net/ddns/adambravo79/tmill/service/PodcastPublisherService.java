@@ -1,4 +1,4 @@
-/* (c) 2026 | 04/10/2026 */
+/* (c) 2026 | 17/10/2026 */
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.IOException;
@@ -49,7 +49,6 @@ public class PodcastPublisherService implements SchedulingConfigurer {
     @Value("${podcast.retry.delay-ms:5000}")
     private long retryDelayMs;
 
-    // Constante para formatação de data
     private static final DateTimeFormatter DATE_FORMATTER =
             DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -64,14 +63,6 @@ public class PodcastPublisherService implements SchedulingConfigurer {
                                 .nextExecution(ctx));
     }
 
-    /**
-     * Publicação semanal agendada via cron.
-     *
-     * <p><b>Feature flag:</b> se {@code podcast.enabled} estiver desabilitada, este método apenas
-     * loga e retorna sem fazer nada. O admin ainda pode disparar manualmente via {@link
-     * #generateAndSendPodcast(LocalDate, LocalDate, long)} (endpoints {@code /admin/test-podcast},
-     * {@code /admin/podcast/resend}).
-     */
     public void publishWeeklyPodcast() {
         if (!featureFlags.isEnabled("podcast.enabled")) {
             log.info("🎧 Podcast desabilitado por feature flag — pulando publicação semanal.");
@@ -87,32 +78,10 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         generateAndSendPodcast(startOfWeek, endOfWeek, publishChatId);
     }
 
-    // =========================================================================
-    // SOBRECARGA 1: dia inteiro (3 args)
-    // =========================================================================
-
-    /**
-     * Gera e envia o podcast para um intervalo de dias (00:00 → 23:59).
-     *
-     * <p>Usado pelos endpoints administrativos e pelo cron semanal. NÃO valida feature flags —
-     * chamadas administrativas explícitas devem funcionar independentemente de {@code
-     * podcast.enabled}.
-     */
     public void generateAndSendPodcast(LocalDate startDate, LocalDate endDate, long chatId) {
         generateAndSendPodcast(startDate, endDate, chatId, null, null);
     }
 
-    // =========================================================================
-    // SOBRECARGA 2: intervalo preciso (5 args)
-    // =========================================================================
-
-    /**
-     * Gera e envia o podcast respeitando um intervalo preciso de {@link LocalDateTime}.
-     *
-     * <p>Se {@code from} e {@code to} forem nulos, cai no comportamento antigo (dia inteiro). Usado
-     * pelo endpoint de reenvio por sexta-feira para respeitar o intervalo {@code sexta 12:00 →
-     * sexta 11:59:59}.
-     */
     public void generateAndSendPodcast(
             LocalDate startDate,
             LocalDate endDate,
@@ -158,10 +127,6 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         log.info("✅ Podcast finalizado em {}ms", System.currentTimeMillis() - start);
     }
 
-    // =========================================================================
-    // ETAPAS INTERNAS
-    // =========================================================================
-
     private byte[] generateAndProcessAudio(
             String script, long chatId, LocalDate startDate, LocalDate endDate) {
         log.info("🔊 Iniciando síntese de áudio...");
@@ -176,9 +141,11 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         }
 
         if (audioData == null || audioData.length == 0) {
-            log.error("❌ Áudio vazio.");
-            telegramFacade.enviarMensagem(chatId, "❌ Erro ao gerar áudio do podcast.");
+            log.error(
+                    "❌ Áudio vazio. Acionando fallback de texto (roteiro={} caracteres).",
+                    script.length());
             metricsService.error("podcast_tts_vazio");
+            enviarRoteiroComoTexto(chatId, script, startDate, endDate);
             return new byte[0];
         }
 
@@ -238,16 +205,22 @@ public class PodcastPublisherService implements SchedulingConfigurer {
             Path finalFile = tempFile.resolveSibling(fileName);
             Files.move(tempFile, finalFile);
 
+            // 🔧 FIX: Adiciona a menção ao Silas e o nome do arquivo
             String caption =
                     String.format(
                             """
                             <b>🎙️ Silas Cast</b>
                             📅 Período: %s a %s
-                            📊 Tamanho: %.1f MB\
+                            📊 Tamanho: %.1f MB
+
+                            <a href="tg://user?id=5003155230">Silas Bezerra</a>
+                            <code>%s</code>
+                            <i>Um Oferecimento Skynet</i>
                             """,
                             startDate.format(DATE_FORMATTER),
                             endDate.format(DATE_FORMATTER),
-                            audioData.length / 1024.0 / 1024.0);
+                            audioData.length / 1024.0 / 1024.0,
+                            fileName);
 
             log.info("📤 Enviando para o Telegram...");
 
@@ -278,8 +251,6 @@ public class PodcastPublisherService implements SchedulingConfigurer {
             }
         }
     }
-
-    // ===== COMPRESSÃO =====
 
     @SuppressWarnings(
             "java:S4036") // Ignorado propositalmente: uso do FFMPEG via PATH da imagem Docker
@@ -330,9 +301,9 @@ public class PodcastPublisherService implements SchedulingConfigurer {
             log.warn("⚠️ FFmpeg falhou com código {}, mantendo áudio original", exitCode);
             return audioData;
 
-        } catch (InterruptedException e) { // Captura específica de interrupção (SonarQube)
+        } catch (InterruptedException e) {
             log.warn("⚠️ Compressão interrompida. Mantendo áudio original.");
-            Thread.currentThread().interrupt(); // Restaura flag da Thread
+            Thread.currentThread().interrupt();
             return audioData;
         } catch (Exception e) {
             log.warn("⚠️ Falha na compressão: {}. Mantendo áudio original.", e.getMessage());
@@ -347,12 +318,7 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         }
     }
 
-    /**
-     * Tenta enviar o áudio até {@code maxRetryAttempts} vezes.
-     *
-     * <p><b>KI-001:</b> só faz retry se {@link TelegramFacade#enviarMidia} retornar {@code false} ou
-     * lançar exceção.
-     */
+    @SuppressWarnings("java:S2925") // Thread.sleep é intencional para backoff
     private boolean sendWithRetry(long chatId, Path file, String caption) {
         for (int attempt = 1; attempt <= maxRetryAttempts; attempt++) {
             log.info("📤 Tentativa {}/{} de enviar áudio", attempt, maxRetryAttempts);
@@ -381,8 +347,6 @@ public class PodcastPublisherService implements SchedulingConfigurer {
         }
         return false;
     }
-
-    // ===== FALLBACK DE TEXTO =====
 
     private void enviarRoteiroComoTexto(
             long chatId, String script, LocalDate startDate, LocalDate endDate) {
