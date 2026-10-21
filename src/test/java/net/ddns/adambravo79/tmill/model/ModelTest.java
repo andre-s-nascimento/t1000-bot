@@ -276,24 +276,51 @@ class ModelTest {
 
     @Test
     void deveCriarAutoResponseRule() {
+        List<ResponseAnimationPair> pares =
+                List.of(new ResponseAnimationPair("Texto R1", "https://example.com/pair1.gif"));
+
         AutoResponseRule rule =
                 new AutoResponseRule(
                         "Oi!",
                         "https://example.com/anim.gif",
+                        List.of("https://example.com/anim.gif"),
+                        pares,
                         LocalTime.of(8, 0),
                         LocalTime.of(18, 0),
                         Map.of(
                                 "1",
                                 new AutoResponseOverride(
                                         "Resposta 1", "https://example.com/anim1.gif")));
+
         assertThat(rule.response()).isEqualTo("Oi!");
         assertThat(rule.animation()).isEqualTo("https://example.com/anim.gif");
+        assertThat(rule.animacoes()).containsExactly("https://example.com/anim.gif");
+        assertThat(rule.responsePairs()).isEqualTo(pares);
         assertThat(rule.startTime()).isEqualTo(LocalTime.of(8, 0));
         assertThat(rule.endTime()).isEqualTo(LocalTime.of(18, 0));
         assertThat(rule.userOverrides()).hasSize(1);
         assertThat(rule.userOverrides().get("1").response()).isEqualTo("Resposta 1");
         assertThat(rule.userOverrides().get("1").animation())
                 .isEqualTo("https://example.com/anim1.gif");
+    }
+
+    // ===================== RESPONSE ANIMATION PAIR =====================
+
+    @Test
+    void deveCriarResponseAnimationPair() {
+        ResponseAnimationPair par =
+                new ResponseAnimationPair("Bom dia!", "https://example.com/bom-dia.gif");
+
+        assertThat(par.text()).isEqualTo("Bom dia!");
+        assertThat(par.animation()).isEqualTo("https://example.com/bom-dia.gif");
+    }
+
+    @Test
+    void deveCriarResponseAnimationPair_comCamposNulos() {
+        ResponseAnimationPair par = new ResponseAnimationPair(null, null);
+
+        assertThat(par.text()).isNull();
+        assertThat(par.animation()).isNull();
     }
 
     // ===================== WORLD CUP =====================
