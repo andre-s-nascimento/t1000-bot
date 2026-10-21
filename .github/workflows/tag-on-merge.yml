@@ -65,6 +65,17 @@ jobs:
               }
             }
 
+      # Dentro do tag-on-merge.yml, após criar a tag:
+      - name: Criar Release
+        if: steps.vars.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.vars.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+          --title "Release v${VERSION}" \
+          --generate-notes
+
       - name: No version detected
         if: steps.vars.outputs.version == ''
         run: echo "⏭️ Nenhuma versão vX.Y.Z encontrada no merge — pulando criação de tag"

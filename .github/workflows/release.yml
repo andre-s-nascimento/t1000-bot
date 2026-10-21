@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch: # 🆕 Permite disparo manual
+    inputs:
+      tag:
+        description: "Tag para criar a release (ex: v2.6.1)"
+        required: true
 
 permissions:
   contents: write
@@ -14,6 +19,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Determinar a tag
+        id: vars
+        run: |
+          # Se for workflow_dispatch, usa o input; senão, usa a tag do push
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Tag selecionada: $TAG"
 
       - name: Generate changelog
         id: changelog
@@ -28,7 +43,14 @@ jobs:
               ]
             }
 
-      - name: Create Release
+      - name: Criar Release no GitHub
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Release ${{ steps.vars.outputs.tag }}
           body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
