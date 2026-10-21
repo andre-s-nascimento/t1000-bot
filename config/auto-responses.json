@@ -32,8 +32,32 @@
         "bmda",
         "bodi"
       ],
-      "response": "BOOOOOM DIAAAAAA... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️",
-      "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif",
+      "responses": [
+        {
+          "text": "BOOOOOM DIAAAAAA... VIEEEETNÃÃÃÃÃÃÃÃ! ☀️ - Bom Dia. Vietnã (1987)",
+          "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/good-morning-vietnan.gif"
+        },
+        {
+          "text": "Oh, olhe. Outra manhã gloriosa. Isso me deixa doente! - Abracadabra (1993)",
+          "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-abracadabra.gif"
+        },
+        {
+          "text": "BOM DIA!! Caso eu não veja vocês, bom dia, boa tarde e boa noite! - O Show de Truman (1998)",
+          "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-truman.gif"
+        },
+        {
+          "text": "O que você quer dizer com isso? Está me desejando um bom dia, ou quer dizer que o dia está bom independentemente da minha vontade? - O Hobbit: Uma Jornada Inesperada (2012)",
+          "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-gandalf.gif"
+        },
+        {
+          "text": "Bom dia, Principesa - A Vida É Bela (1997)",
+          "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-principessa.gif"
+        },
+        {
+          "text": "Eu amo o cheiro de napalm pela manhã. - Apocalypse Now (1979)",
+          "animation": "https://andre-s-nascimento.github.io/t1000-bot/media/bom-dia-napalm.gif"
+        }
+      ],
       "timeRange": {
         "start": "05:00",
         "end": "11:59"

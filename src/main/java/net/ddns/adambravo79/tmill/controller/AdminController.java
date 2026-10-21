@@ -559,10 +559,22 @@ public class AdminController {
         result.put("found", responseOpt.isPresent());
 
         if (responseOpt.isPresent()) {
-            result.put("response", responseOpt.get().response());
-            result.put("animation", responseOpt.get().animation());
+            AutoResponseOverride override = responseOpt.get();
+            result.put("response", override.response());
+            result.put("animation", override.animation());
+
+            // 🆕 Facilita a visualização do sorteio no painel
+            result.put(
+                    "sorteio",
+                    Map.of(
+                            "texto", override.response() != null ? override.response() : "",
+                            "animacao",
+                                    override.animation() != null
+                                            ? override.animation()
+                                            : "Nenhuma"));
         } else {
             result.put("response", "Nenhuma regra encontrada");
+            result.put("animation", null);
         }
         return ResponseEntity.ok(result);
     }

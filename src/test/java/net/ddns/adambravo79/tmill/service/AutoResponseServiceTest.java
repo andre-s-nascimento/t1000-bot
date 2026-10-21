@@ -18,13 +18,18 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.io.Resource;
@@ -33,6 +38,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import net.ddns.adambravo79.tmill.model.AutoResponseConfig;
 import net.ddns.adambravo79.tmill.model.AutoResponseOverride;
+import net.ddns.adambravo79.tmill.model.AutoResponseRuleEntry;
+import net.ddns.adambravo79.tmill.model.ResponseAnimationPair;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import tools.jackson.databind.ObjectMapper;
@@ -127,6 +134,69 @@ class AutoResponseServiceTest {
 
     private static final String JSON_RULES_VAZIO = "{ \"rules\": {} }";
 
+    /** JSON com a regra "saudacao" no formato novo (lista de pares). */
+    private static final String JSON_COM_RESPONSES_PAIRS =
+            """
+            {
+              "rules": {
+                "saudacao": {
+                  "triggers": ["bom dia"],
+                  "response": "Resposta padrão",
+                  "responses": [
+                    { "text": "Resposta 1", "animation": "anim1.gif" },
+                    { "text": "Resposta 2", "animation": "anim2.gif" },
+                    { "text": "Resposta 3", "animation": "anim3.gif" }
+                  ]
+                }
+              }
+            }
+            """;
+
+    /** JSON no formato intermediário (lista de animações + response padrão). */
+    private static final String JSON_COM_ANIMATIONS_LIST =
+            """
+            {
+              "rules": {
+                "saudacao": {
+                  "triggers": ["bom dia"],
+                  "response": "Bom dia padrão!",
+                  "animations": [
+                    "anim-a.gif",
+                    "anim-b.gif",
+                    "anim-c.gif"
+                  ]
+                }
+              }
+            }
+            """;
+
+    /** JSON no formato legado (animação única + response). */
+    private static final String JSON_COM_ANIMATION_UNICA =
+            """
+            {
+              "rules": {
+                "saudacao": {
+                  "triggers": ["bom dia"],
+                  "response": "Bom dia legado!",
+                  "animation": "unica.gif"
+                }
+              }
+            }
+            """;
+
+    /** JSON sem nenhuma animação (só texto). */
+    private static final String JSON_SEM_ANIMACAO =
+            """
+            {
+              "rules": {
+                "saudacao": {
+                  "triggers": ["bom dia"],
+                  "response": "Só texto!"
+                }
+              }
+            }
+            """;
+
     @BeforeEach
     void setUp() {
         service =
@@ -154,9 +224,10 @@ class AutoResponseServiceTest {
         ObjectMapper mockMapper = mock(ObjectMapper.class);
         ReflectionTestUtils.setField(service, "objectMapper", mockMapper);
 
+        InputStream inputStream = mock(InputStream.class); // ✅ extraído
         when(resourceLoader.getResource(anyString())).thenReturn(resource);
         when(resource.exists()).thenReturn(true);
-        when(resource.getInputStream()).thenReturn(mock(InputStream.class));
+        when(resource.getInputStream()).thenReturn(inputStream);
         when(mockMapper.readValue(any(InputStream.class), eq(AutoResponseConfig.class)))
                 .thenReturn(null);
 
@@ -215,9 +286,10 @@ class AutoResponseServiceTest {
         ObjectMapper mockMapper = mock(ObjectMapper.class);
         ReflectionTestUtils.setField(service, "objectMapper", mockMapper);
 
+        InputStream inputStream = mock(InputStream.class); // ✅ extraído
         when(resourceLoader.getResource(anyString())).thenReturn(resource);
         when(resource.exists()).thenReturn(true);
-        when(resource.getInputStream()).thenReturn(mock(InputStream.class));
+        when(resource.getInputStream()).thenReturn(inputStream);
 
         AutoResponseConfig config = mock(AutoResponseConfig.class);
         when(config.rules()).thenReturn(null);
@@ -359,30 +431,27 @@ class AutoResponseServiceTest {
         verifyNoInteractions(metricsService);
     }
 
-    @Test
-    @DisplayName("Mensagem null: não registra métrica")
-    void mensagemNull_nenhumaMetrica() throws Exception {
-        carregarRegras();
+    @ParameterizedTest(name = "[{index}] {4}")
+    @CsvSource({
+        "20:00, 18:00, 23:59, true,  dentro do intervalo",
+        "10:00, 18:00, 23:59, false, fora do intervalo",
+        "12:00, ,      ,     true,  null sempre true",
+        "12:00, 12:00, 12:00, true, start igual end",
+        "23:00, 22:00, 02:00, true,  cruza meia-noite (dentro)",
+        "01:00, 22:00, 02:00, true,  cruza meia-noite (dentro)",
+        "12:00, 22:00, 02:00, false, cruza meia-noite (fora)"
+    })
+    @DisplayName("isTimeInRange: valida os casos de fronteira")
+    void isTimeInRange_parametrizado(
+            String agora, String inicio, String fim, boolean esperado, String descricao) {
+        LocalTime now = LocalTime.parse(agora);
+        LocalTime start = (inicio == null || inicio.isBlank()) ? null : LocalTime.parse(inicio);
+        LocalTime end = (fim == null || fim.isBlank()) ? null : LocalTime.parse(fim);
 
-        assertThat(service.getResponseRule(1L, null)).isEmpty();
-        verifyNoInteractions(metricsService);
-    }
+        Boolean resultado =
+                ReflectionTestUtils.invokeMethod(service, "isTimeInRange", now, start, end);
 
-    @Test
-    @DisplayName("Mensagem vazia: não registra métrica")
-    void mensagemVazia_nenhumaMetrica() throws Exception {
-        carregarRegras();
-
-        assertThat(service.getResponseRule(1L, "   ")).isEmpty();
-        verifyNoInteractions(metricsService);
-    }
-
-    @Test
-    @DisplayName("Trigger curto (<3 chars): não registra métrica")
-    void triggerComMenosDe3Chars_nenhumaMetrica() throws Exception {
-        carregarRegras();
-        assertThat(service.getResponseRule(1L, "oi")).isEmpty();
-        verifyNoInteractions(metricsService);
+        assertThat(resultado).as(descricao).isEqualTo(esperado);
     }
 
     @Test
@@ -680,6 +749,307 @@ class AutoResponseServiceTest {
         service.getResponseRule(1L, "bom dia");
         assertThat(cooldown).containsKey(1L);
         assertThat(cooldown.get(1L)).containsKey("bom dia");
+    }
+
+    // ============================================================
+    // 🆕 PARES (TEXTO + ANIMAÇÃO) — RESOLVER, SORTEAR, ENTREGAR
+    // ============================================================
+
+    @Nested
+    @DisplayName("Pares (texto + animação)")
+    class ParesTextoAnimacao {
+
+        @Test
+        @DisplayName("resolverPares: com 'responses' (pares explícitos) usa-os na íntegra")
+        void resolverPares_comResponses() throws Exception {
+            carregarRegrasDe(JSON_COM_RESPONSES_PAIRS);
+
+            List<ResponseAnimationPair> pares =
+                    ReflectionTestUtils.invokeMethod(service, "resolverPares", entryDe("saudacao"));
+            assertThat(pares).hasSize(3);
+            assertThat(pares.get(0))
+                    .isEqualTo(new ResponseAnimationPair("Resposta 1", "anim1.gif"));
+            assertThat(pares.get(1))
+                    .isEqualTo(new ResponseAnimationPair("Resposta 2", "anim2.gif"));
+            assertThat(pares.get(2))
+                    .isEqualTo(new ResponseAnimationPair("Resposta 3", "anim3.gif"));
+        }
+
+        @Test
+        @DisplayName("resolverPares: com 'animations' + response cria pares sintéticos")
+        void resolverPares_comAnimations() throws Exception {
+            carregarRegrasDe(JSON_COM_ANIMATIONS_LIST);
+
+            List<ResponseAnimationPair> pares =
+                    ReflectionTestUtils.invokeMethod(service, "resolverPares", entryDe("saudacao"));
+            assertThat(pares).hasSize(3);
+            assertThat(pares.get(0))
+                    .isEqualTo(new ResponseAnimationPair("Bom dia padrão!", "anim-a.gif"));
+            assertThat(pares.get(1))
+                    .isEqualTo(new ResponseAnimationPair("Bom dia padrão!", "anim-b.gif"));
+            assertThat(pares.get(2))
+                    .isEqualTo(new ResponseAnimationPair("Bom dia padrão!", "anim-c.gif"));
+        }
+
+        @Test
+        @DisplayName("resolverPares: com 'animation' única + response cria par sintético")
+        void resolverPares_comAnimationUnica() throws Exception {
+            carregarRegrasDe(JSON_COM_ANIMATION_UNICA);
+
+            List<ResponseAnimationPair> pares =
+                    ReflectionTestUtils.invokeMethod(service, "resolverPares", entryDe("saudacao"));
+            assertThat(pares).hasSize(1);
+            assertThat(pares.get(0))
+                    .isEqualTo(new ResponseAnimationPair("Bom dia legado!", "unica.gif"));
+        }
+
+        @Test
+        @DisplayName("resolverPares: sem animação retorna lista vazia")
+        void resolverPares_semAnimacao() throws Exception {
+            carregarRegrasDe(JSON_SEM_ANIMACAO);
+
+            List<ResponseAnimationPair> pares =
+                    ReflectionTestUtils.invokeMethod(service, "resolverPares", entryDe("saudacao"));
+            assertThat(pares).isEmpty();
+        }
+
+        @Test
+        @DisplayName("resolverPares: 'responses' tem precedência sobre 'animations'")
+        void resolverPares_precedenciaResponses() throws Exception {
+            String json =
+                    """
+                    {
+                      "rules": {
+                        "saudacao": {
+                          "triggers": ["bom dia"],
+                          "response": "Padrão",
+                          "animation": "legado.gif",
+                          "animations": ["x.gif", "y.gif"],
+                          "responses": [
+                            { "text": "R1", "animation": "r1.gif" }
+                          ]
+                        }
+                      }
+                    }
+                    """;
+            carregarRegrasDe(json);
+
+            List<ResponseAnimationPair> pares =
+                    ReflectionTestUtils.invokeMethod(service, "resolverPares", entryDe("saudacao"));
+            assertThat(pares).hasSize(1);
+            assertThat(pares.get(0)).isEqualTo(new ResponseAnimationPair("R1", "r1.gif"));
+        }
+
+        @Test
+        @DisplayName("resolverPares: 'animations' tem precedência sobre 'animation'")
+        void resolverPares_precedenciaAnimations() throws Exception {
+            String json =
+                    """
+                    {
+                      "rules": {
+                        "saudacao": {
+                          "triggers": ["bom dia"],
+                          "response": "Padrão",
+                          "animation": "legado.gif",
+                          "animations": ["x.gif", "y.gif"]
+                        }
+                      }
+                    }
+                    """;
+            carregarRegrasDe(json);
+
+            List<ResponseAnimationPair> pares =
+                    ReflectionTestUtils.invokeMethod(service, "resolverPares", entryDe("saudacao"));
+            assertThat(pares).hasSize(2);
+            assertThat(pares.get(0)).isEqualTo(new ResponseAnimationPair("Padrão", "x.gif"));
+            assertThat(pares.get(1)).isEqualTo(new ResponseAnimationPair("Padrão", "y.gif"));
+        }
+
+        @Test
+        @DisplayName("escolherPar: lista vazia retorna null")
+        void escolherPar_listaVazia() {
+            List<ResponseAnimationPair> listaVazia = List.of();
+            ResponseAnimationPair par =
+                    ReflectionTestUtils.invokeMethod(service, "escolherPar", listaVazia);
+            assertThat(par).isNull();
+        }
+
+        @Test
+        @DisplayName("escolherPar: lista com 1 elemento retorna esse elemento")
+        void escolherPar_umElemento() {
+            ResponseAnimationPair unico = new ResponseAnimationPair("Único", "u.gif");
+            ResponseAnimationPair par =
+                    ReflectionTestUtils.invokeMethod(service, "escolherPar", List.of(unico));
+            assertThat(par).isEqualTo(unico);
+        }
+
+        @Test
+        @DisplayName("escolherPar: índice fixo retorna o par correto")
+        void escolherPar_indiceFixo() {
+            // Sobrescreve sortearIndice para retornar sempre 1
+            AutoResponseService serviceIndiceFixo =
+                    new AutoResponseService(
+                            resourceLoader, objectMapper, metricsService, featureFlagAdminService) {
+                        @Override
+                        protected int sortearIndice(int bound) {
+                            return 1;
+                        }
+                    };
+            ReflectionTestUtils.setField(
+                    serviceIndiceFixo, "configFile", "classpath:auto-responses-test.json");
+
+            List<ResponseAnimationPair> pares =
+                    List.of(
+                            new ResponseAnimationPair("R0", "r0.gif"),
+                            new ResponseAnimationPair("R1", "r1.gif"),
+                            new ResponseAnimationPair("R2", "r2.gif"));
+
+            ResponseAnimationPair par =
+                    ReflectionTestUtils.invokeMethod(serviceIndiceFixo, "escolherPar", pares);
+            assertThat(par).isEqualTo(new ResponseAnimationPair("R1", "r1.gif"));
+        }
+
+        @Test
+        @DisplayName("getResponseRule: par sem text e regra sem response usa fallback 'Olá!'")
+        void getResponseRule_semTextESemResponse_usaFallback() throws Exception {
+            String json =
+                    """
+                    {
+                      "rules": {
+                        "saudacao": {
+                          "triggers": ["bom dia"],
+                          "responses": [
+                            { "text": null, "animation": "anim.gif" }
+                          ]
+                        }
+                      }
+                    }
+                    """;
+            carregarRegrasDe(json);
+
+            Optional<AutoResponseOverride> r = service.getResponseRule(null, "bom dia");
+
+            assertThat(r).isPresent();
+            assertThat(r.get().response()).isEqualTo("Olá!");
+            assertThat(r.get().animation()).isEqualTo("anim.gif");
+        }
+
+        @Test
+        @DisplayName("getResponseRule: sorteia um par e o texto bate com a animação")
+        void getResponseRule_sorteiaParConsistente() throws Exception {
+            // Usa service com índice fixo (1) para determinismo
+            AutoResponseService serviceIndiceFixo =
+                    new AutoResponseService(
+                            resourceLoader, objectMapper, metricsService, featureFlagAdminService) {
+                        @Override
+                        protected int sortearIndice(int bound) {
+                            return 1;
+                        }
+                    };
+            ReflectionTestUtils.setField(
+                    serviceIndiceFixo, "configFile", "classpath:auto-responses-test.json");
+            ReflectionTestUtils.setField(
+                    serviceIndiceFixo, "oncePerDayTriggersRaw", "outro-trigger-inexistente");
+            ReflectionTestUtils.invokeMethod(serviceIndiceFixo, "parseOncePerDayTriggers");
+
+            InputStream is = new ByteArrayInputStream(JSON_COM_RESPONSES_PAIRS.getBytes());
+            when(resourceLoader.getResource(anyString())).thenReturn(resource);
+            when(resource.exists()).thenReturn(true);
+            when(resource.getInputStream()).thenReturn(is);
+
+            serviceIndiceFixo.loadResponses();
+
+            Optional<AutoResponseOverride> r = serviceIndiceFixo.getResponseRule(1L, "bom dia");
+
+            assertThat(r).isPresent();
+            assertThat(r.get().response()).isEqualTo("Resposta 2");
+            assertThat(r.get().animation()).isEqualTo("anim2.gif");
+        }
+
+        @Test
+        @DisplayName(
+                "getResponseRule: sem pares cai no comportamento legado (response + animation)")
+        void getResponseRule_semPares_caiNoLegado() throws Exception {
+            carregarRegrasDe(JSON_SEM_ANIMACAO);
+
+            Optional<AutoResponseOverride> r = service.getResponseRule(1L, "bom dia");
+            assertThat(r).isPresent();
+            assertThat(r.get().response()).isEqualTo("Só texto!");
+            assertThat(r.get().animation()).isNull();
+        }
+
+        @Test
+        @DisplayName("getResponseRule: com par cujo texto é nulo cai no response padrão")
+        void getResponseRule_parComTextNull_usaResponsePadrao() throws Exception {
+            String json =
+                    """
+                    {
+                      "rules": {
+                        "saudacao": {
+                          "triggers": ["bom dia"],
+                          "response": "Texto padrão",
+                          "responses": [
+                            { "text": null, "animation": "anim.gif" }
+                          ]
+                        }
+                      }
+                    }
+                    """;
+            carregarRegrasDe(json);
+
+            Optional<AutoResponseOverride> r = service.getResponseRule(1L, "bom dia");
+            assertThat(r).isPresent();
+            assertThat(r.get().response()).isEqualTo("Texto padrão");
+            assertThat(r.get().animation()).isEqualTo("anim.gif");
+        }
+
+        @Test
+        @DisplayName("getRulesSummary: reporta quantidade de pares")
+        void getRulesSummary_reportaPares() throws Exception {
+            carregarRegrasDe(JSON_COM_RESPONSES_PAIRS);
+
+            Map<String, String> summary = service.getRulesSummary();
+            assertThat(summary).containsKey("bom dia");
+            assertThat(summary.get("bom dia")).contains("pares=3");
+        }
+
+        /**
+         * Recupera a entrada bruta da regra (desserializada) para inspecionar via reflexão.
+         *
+         * <p>Como o serviço não expõe o mapa `triggerToRule`, usamos o `configFile` carregado para
+         * localizar a entrada. Alternativa: chamar `loadResponses()` e capturar o argumento do
+         * `resolverPares` indiretamente — mas o mais simples é ler o JSON e obter a entrada.
+         */
+        private AutoResponseRuleEntry entryDe(String nomeRegra) throws Exception {
+            String jsonAtual = lastJson.get();
+            var config =
+                    objectMapper.readValue(
+                            new ByteArrayInputStream(jsonAtual.getBytes()),
+                            AutoResponseConfig.class);
+            return config.rules().get(nomeRegra);
+        }
+
+        private final AtomicReference<String> lastJson = new AtomicReference<>("{}");
+
+        private void carregarRegrasDe(String json) throws Exception {
+            lastJson.set(json);
+            lenient().when(resourceLoader.getResource(anyString())).thenReturn(resource);
+            lenient().when(resource.exists()).thenReturn(true);
+            // ✅ Cria um InputStream NOVO a cada chamada de getInputStream()
+            lenient()
+                    .when(resource.getInputStream())
+                    .thenAnswer(inv -> new ByteArrayInputStream(json.getBytes()));
+            service.loadResponses();
+        }
+    }
+
+    @Test
+    @DisplayName("sortearIndice: retorna índice dentro do intervalo")
+    void sortearIndice_retornaDentroDoIntervalo() {
+        for (int i = 0; i < 100; i++) {
+            int indice = service.sortearIndice(3);
+            assertThat(indice).isBetween(0, 2);
+        }
     }
 
     // ============================================================

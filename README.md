@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.6.0** | Branch: `main` | Último build: 2026-10-14
+> **Versão atual: v2.6.1** | Branch: `main` | Último build: 2026-10-21
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
@@ -12,7 +12,7 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenA
 ![Tests](https://img.shields.io/badge/tests-passing-success)
 ![Coverage](https://img.shields.io/badge/coverage-90%25-yellowgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v2.6.0-blueviolet)
+![Status](https://img.shields.io/badge/status-v2.6.1-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
@@ -105,9 +105,33 @@ O bot pode responder automaticamente a palavras‑chave ou frases específicas, 
 - **Gatilhos configuráveis** via arquivo `auto-responses.json` (montado como volume).
 - **Restrição de horário** (ex.: "bom dia" só entre 06h e 12h).
 - **Menção ao usuário** que acionou a resposta.
-- **Animações (GIFs)** com legenda.
+- **Múltiplas animações por regra** (sorteio aleatório no disparo, com pares texto+animação).
 - **Respostas por usuário** (`userOverrides`).
 - **Limite de uma resposta por dia** para gatilhos configuráveis (`once-per-day-triggers`).
+
+#### 🎲 Múltiplas animações (Sorteio)
+
+A partir da versão **2.6.1**, cada regra pode ter uma lista de pares `(texto, animação)`. A cada disparo, o bot sorteia um par inteiro. Formatos suportados (com precedência):
+
+1. `responses`: lista de pares `{"text": "...", "animation": "..."}` (recomendado).
+2. `animations`: lista de animações (texto fixo em `response`).
+3. `animation`: animação única (formato legado).
+
+```json
+{
+  "triggers": ["bom dia"],
+  "responses": [
+    {
+      "text": "Bom dia, Vietnã!",
+      "animation": "https://exemplo.com/vietnan.gif"
+    },
+    {
+      "text": "Acorda, campeão!",
+      "animation": "https://exemplo.com/campeao.gif"
+    }
+  ]
+}
+```
 
 **Exemplo de resposta:**
 
@@ -190,6 +214,7 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 | `/admin/features/{key}`         | POST   | Altera feature flag (`?enabled=true`)                                   |
 | `/admin/cache-stats`            | GET    | Estatísticas do cache de transcrições                                   |
 | `/admin/debug/cache/{fileId}`   | GET    | Inspeciona conteúdo do cache (flag `admin.debug-cache.enabled`)         |
+| `/admin/debug-auto-response`    | GET    | Debug do sorteio de auto-response (`?message=...&time=HH:mm`)           |
 | `/admin/migrate-sqlite`         | POST   | Migra dados do SQLite legado (`?dryRun=true`)                           |
 | `/admin/config-files`           | GET    | Inspeciona arquivos de configuração                                     |
 | `/admin/properties`             | GET    | Lista propriedades (tokens mascarados)                                  |
@@ -246,7 +271,7 @@ O projeto é organizado em serviços especializados. Veja abaixo cada um e como 
 | `DailyReleasesService` + `WeeklyReleasesService`                                | Notificações de lançamentos de streaming.                                               | Usa `TmdbClient` + `WatchmodeClient` + cache Caffeine.                                            |
 | `BirthdayService` + `BirthdayScheduler`                                         | Registro e envio de parabéns.                                                           | Duas flags: geral + notificação em grupos.                                                        |
 | `WorldCupSchedulerService` + `StaticWorldCupService` + `WorldCupUpdaterService` | Jogos, resultados, lembretes e atualização.                                             | Dados em JSON, com tradução PT-BR e bandeiras.                                                    |
-| `AutoResponseService`                                                           | Respostas automáticas configuráveis via JSON.                                           | Suporta time-range, user-overrides e once-per-day.                                                |
+| `AutoResponseService`                                                           | Respostas automáticas configuráveis via JSON.                                           | Suporta time-range, user-overrides, once-per-day e múltiplos pares texto+animação.                |
 | `FeatureFlagService` + `FeatureFlagAdminService`                                | 23 feature flags em runtime com persistência opcional.                                  | Mapa `key → FeatureFlagState` + persistência em disco.                                            |
 | `MigrationService`                                                              | Migração do SQLite legado para Postgres/Mongo.                                          | Suporta `dryRun` e relatório por tabela.                                                          |
 | `TelegramFacade` / `TelegramSafeExecutor`                                       | Camada de abstração da API do Telegram.                                                 | Fallback configurável via `telegram.error-fallback.enabled`.                                      |
@@ -501,6 +526,7 @@ src/main/java/net/ddns/adambravo79/tmill
   - `timeRange` (start/end em `HH:mm`)
   - `userOverrides` (resposta específica por userId)
   - `once-per-day-triggers` (só responde uma vez por dia por usuário)
+  - **Múltiplos pares texto+animação** sorteados aleatoriamente (formato `responses`)
 - **Ordenação**: triggers mais longos têm prioridade (evita conflito entre "bom dia" e "bom dia família").
 
 ### 🧩 `FeatureFlagService` + `FeatureFlagAdminService`
@@ -571,6 +597,22 @@ Andre Nascimento
 
 ## 📋 Changelog resumido
 
+### 🆕 v2.6.1 — Múltiplas animações no Auto-Response
+
+**Nova feature:**
+
+- ✅ Regras de auto-response podem ter **múltiplos pares `(texto, animação)`** via campo `responses`.
+- ✅ Sorteio aleatório do par inteiro a cada disparo, garantindo variação temática (ex.: "bom dia" com cenas de _Bom Dia, Vietnã_, _O Show de Truman_, _O Hobbit_, etc.).
+- ✅ Precedência clara: `responses` > `animations` > `animation` (retrocompatibilidade total com formatos anteriores).
+- ✅ Fallback `"Olá!"` quando o par não tem texto e a regra não tem `response`.
+- ✅ `AdminController.debugAutoResponse` exibe o par sorteado no JSON (campo `sorteio`).
+
+**Melhorias:**
+
+- ✅ Refatoração de `getResponseRule` para reduzir complexidade cognitiva (Sonar `S3776`).
+- ✅ Extração de `resolverPares` e `escolherPar` para testes determinísticos (sem mockar `ThreadLocalRandom`).
+- ✅ 13 novos testes unitários cobrindo todos os caminhos do sorteio.
+
 ### 🆕 v2.6.0 — Onda 3: Feature Flags & Documentação
 
 **Feature flags (23 no total):**
@@ -616,7 +658,7 @@ Andre Nascimento
 - ✅ **Observabilidade** com Micrometer + Prometheus + Actuator
 - ✅ Cobertura mínima de **90%** global, **70%** por classe
 
-### 🔄 Mudanças arquiteturais (v2.1.x → v2.6.0)
+### 🔄 Mudanças arquiteturais (v2.1.x → v2.6.1)
 
 - 🔀 Migração de **SQLite** para **PostgreSQL** (dados estruturados) + **MongoDB** (documentos)
 - 🔀 Processamento de áudio movido para **workers Kafka** (escalável horizontalmente)
