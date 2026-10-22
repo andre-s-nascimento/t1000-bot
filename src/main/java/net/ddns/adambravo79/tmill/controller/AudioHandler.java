@@ -378,7 +378,6 @@ public class AudioHandler {
         try {
             String mensagem = transcreverAudio(fileId, tipo, request);
             boolean entregue = safeSendTranscription(userId, mensagem, groupId);
-            // 🔧 FIX (KI-001): métrica real
             if (entregue) {
                 metricsService.success(METRIC_TRANSCRICAO_ENTREGUE);
                 log.info("✅ Transcrição enviada para userId={} tipo={}", userId, tipo);
@@ -412,7 +411,8 @@ public class AudioHandler {
             tratarErroTranscricao(e, userId, groupId);
             metricsService.error(METRIC_TRANSCRICAO_FALHA);
         } finally {
-            pendingRequests.entrySet().removeIf(entry -> entry.getValue().fileId().equals(fileId));
+            // 🔧 FIX: Não remover o token imediatamente após o processamento.
+            // O token deve expirar apenas pelo cleaner (7 dias).
         }
     }
 

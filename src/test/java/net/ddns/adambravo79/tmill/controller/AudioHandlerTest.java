@@ -898,7 +898,7 @@ class AudioHandlerTest {
                         () -> {
                             verify(telegramFacade)
                                     .enviarMensagem(eq(USER_ID), contains("Erro no processamento"));
-                            assertThat(pendingMap).doesNotContainKey("token456");
+                            assertThat(pendingMap).containsKey("token456");
                         });
     }
 
