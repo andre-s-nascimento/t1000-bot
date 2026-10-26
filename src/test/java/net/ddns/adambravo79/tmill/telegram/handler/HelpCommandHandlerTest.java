@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.util.Set;
+
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +36,7 @@ class HelpCommandHandlerTest {
     }
 
     @Test
+    @DisplayName("handle: deve enviar a mensagem de ajuda formatada")
     void handle_deveEnviarAjuda() {
         when(authService.isAuthorized(update)).thenReturn(true);
 
@@ -53,9 +57,19 @@ class HelpCommandHandlerTest {
     }
 
     @Test
+    @DisplayName("handle: não deve enviar se o grupo não for autorizado")
     void handle_naoAutorizado_naoEnvia() {
         when(authService.isAuthorized(update)).thenReturn(false);
+
         handler.handle(update);
+
         verify(executor, never()).execute(any());
+    }
+
+    @Test
+    @DisplayName("commands: deve retornar os comandos de ajuda")
+    void commands_deveRetornarLista() {
+        Set<String> cmds = handler.commands();
+        assertThat(cmds).containsExactlyInAnyOrder("/help", "/ajuda", "/start");
     }
 }

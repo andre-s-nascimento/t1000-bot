@@ -152,4 +152,44 @@ class MuteCommandHandlerTest {
         String textoEnviado = (String) captor.getValue().getParameters().get("text");
         assertThat(textoEnviado).contains("Falha ao silenciar");
     }
+
+    @Test
+    @DisplayName("handle: não deve fazer nada se for um comando desconhecido (ex: /ban)")
+    void handle_comandoDesconhecido_naoFazNada() {
+        when(message.text()).thenReturn("/ban");
+
+        handler.handle(update);
+
+        verify(moderationService, never()).muteUser(anyLong(), anyLong(), anyInt());
+        verify(moderationService, never()).unmuteUser(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("handle: deve avisar se o bot tentar mutar a si mesmo")
+    void handle_mutarBot() {
+        when(message.text()).thenReturn("/mute");
+        when(targetUser.id()).thenReturn(7900L); // ID do bot
+
+        handler.handle(update);
+
+        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
+        verify(executor).execute(captor.capture());
+        assertThat((String) captor.getValue().getParameters().get("text"))
+                .contains("não posso silenciar a mim mesmo");
+    }
+
+    @Test
+    @DisplayName("handle: deve mostrar erro se unmute falhar")
+    void handle_unmuteFalha() {
+        when(message.text()).thenReturn("/unmute");
+        when(moderationService.unmuteUser(anyLong(), anyLong())).thenReturn(false);
+
+        handler.handle(update);
+
+        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
+        verify(executor).execute(captor.capture());
+
+        String texto = (String) captor.getValue().getParameters().get("text");
+        assertThat(texto).contains("Falha ao remover o silenciamento");
+    }
 }
