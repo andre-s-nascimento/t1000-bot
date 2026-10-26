@@ -136,7 +136,7 @@ class TelegramModerationServiceTest {
                 ArgumentCaptor.forClass(RestrictChatMember.class);
         verify(telegramFacade).executar(captor.capture());
 
-        // O Pengrad pode omitir a chave se for 0, mas o seu código chamou o request.untilDate(0)
-        assertThat(captor.getValue().getParameters().containsKey("until_date")).isFalse();
+        // 🔧 FIX: Como o código chama request.untilDate(0), a chave existe e o valor é 0
+        assertThat(captor.getValue().getParameters()).containsEntry("until_date", 0);
     }
 }
