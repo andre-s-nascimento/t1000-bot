@@ -1581,4 +1581,28 @@ class AdminWebControllerTest {
 
         verifyNoInteractions(cacheService);
     }
+
+    @Test
+    @DisplayName("POST /admin-web/mute - Deve redirecionar com sucesso")
+    void muteUser_sucesso() {
+        when(telegramModerationService.muteUser(anyLong(), anyLong(), anyInt())).thenReturn(true);
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        String view = controller.muteUser(-100L, 123L, 60, attrs);
+
+        assertThat(view).isEqualTo("redirect:/admin-web");
+        assertThat(attrs.getFlashAttributes().get("success").toString()).contains("silenciado");
+    }
+
+    @Test
+    @DisplayName("POST /admin-web/unmute - Deve redirecionar com erro se falhar")
+    void unmuteUser_falha() {
+        when(telegramModerationService.unmuteUser(anyLong(), anyLong())).thenReturn(false);
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        String view = controller.unmuteUser(-100L, 123L, attrs);
+
+        assertThat(view).isEqualTo("redirect:/admin-web");
+        assertThat(attrs.getFlashAttributes().get("error").toString()).contains("Falha");
+    }
 }

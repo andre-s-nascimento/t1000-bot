@@ -121,4 +121,22 @@ class TelegramModerationServiceTest {
 
         assertThat(sucesso).isFalse();
     }
+
+    @Test
+    @DisplayName(
+            "muteUser: deve definir untilDate como 0 se duration for -1 (permanente explícito)")
+    void muteUser_permanenteExplicito() {
+        when(telegramFacade.executar(any(RestrictChatMember.class))).thenReturn(baseResponse);
+
+        boolean sucesso = service.muteUser(CHAT_ID, USER_ID, -1);
+
+        assertThat(sucesso).isTrue();
+
+        ArgumentCaptor<RestrictChatMember> captor =
+                ArgumentCaptor.forClass(RestrictChatMember.class);
+        verify(telegramFacade).executar(captor.capture());
+
+        // O Pengrad pode omitir a chave se for 0, mas o seu código chamou o request.untilDate(0)
+        assertThat(captor.getValue().getParameters().containsKey("until_date")).isFalse();
+    }
 }
