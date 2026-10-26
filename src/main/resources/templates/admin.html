@@ -446,6 +446,10 @@
                     aria-selected="false">⚙️ Admin</a>
             </li>
             <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-mod" data-bs-toggle="tab" href="#moderacao" role="tab"
+                    aria-controls="moderacao" aria-selected="false">🔨 Moderação</a>
+            </li>
+            <li class="nav-item" role="presentation">
                 <a class="nav-link" id="tab-monitor" data-bs-toggle="tab" href="#monitor" role="tab"
                     aria-controls="monitor" aria-selected="false">📊 Monitor</a>
             </li>
@@ -901,6 +905,77 @@
                         Alterações aplicam-se imediatamente, sem reiniciar a aplicação.
                         Flags marcadas como <span class="badge text-bg-warning">read-only</span>
                         só podem ser alteradas no <code>application.properties</code> e exigem restart.
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== ABA MODERAÇÃO ==================== -->
+            <div class="tab-pane fade" id="moderacao" role="tabpanel" aria-labelledby="tab-mod">
+                <div class="row g-3 mt-1">
+                    <div class="col-12 col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-mic-mute" aria-hidden="true"></i> Silenciar Usuário (Mute)
+                            </div>
+                            <div class="card-body">
+                                <form th:action="@{/admin-web/mute}" method="post">
+                                    <div class="mb-2">
+                                        <label for="muteChatId" class="form-label">Chat ID do Grupo</label>
+                                        <select class="form-select" name="chatId" id="muteChatId" required>
+                                            <option value="">-- Selecione --</option>
+                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="muteUserId" class="form-label">User ID do Alvo</label>
+                                        <input type="number" class="form-control" name="userId" id="muteUserId" required
+                                            placeholder="ex: 1400513378">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="muteDuration" class="form-label">Duração (Minutos)</label>
+                                        <select class="form-select" name="durationMinutes" id="muteDuration">
+                                            <option value="0">Permanente</option>
+                                            <option value="60">1 Hora</option>
+                                            <option value="1440">24 Horas</option>
+                                            <option value="10080">7 Dias</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-danger w-100"
+                                        onclick="return confirm('Silenciar este usuário?')">
+                                        <i class="bi bi-mic-mute" aria-hidden="true"></i> Aplicar Silenciamento
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="bi bi-mic" aria-hidden="true"></i> Remover Silenciamento (Unmute)
+                            </div>
+                            <div class="card-body">
+                                <form th:action="@{/admin-web/unmute}" method="post">
+                                    <div class="mb-2">
+                                        <label for="unmuteChatId" class="form-label">Chat ID do Grupo</label>
+                                        <select class="form-select" name="chatId" id="unmuteChatId" required>
+                                            <option value="">-- Selecione --</option>
+                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="unmuteUserId" class="form-label">User ID do Alvo</label>
+                                        <input type="number" class="form-control" name="userId" id="unmuteUserId"
+                                            required placeholder="ex: 1400513378">
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100" style="margin-top: 31px;"
+                                        onclick="return confirm('Remover silenciamento deste usuário?')">
+                                        <i class="bi bi-mic" aria-hidden="true"></i> Remover Restrição
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

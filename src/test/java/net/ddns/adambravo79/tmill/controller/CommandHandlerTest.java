@@ -550,8 +550,7 @@ class CommandHandlerTest {
 
         commandHandler.handleTextUpdate(update);
 
-        verify(telegramFacade)
-                .enviarMensagemHtml(eq(CHAT_ID), eq(BotMessages.ANIVERSARIO_PEDE_DATA));
+        verify(telegramFacade).enviarMensagemHtml(CHAT_ID, BotMessages.ANIVERSARIO_PEDE_DATA);
         verifyNoInteractions(birthdayService);
         verify(metricsService).success("comando_aniversario");
     }

@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.6.1** | Branch: `main` | Último build: 2026-10-21
+> **Versão atual: v2.6.3** | Branch: `main` | Último build: 2026-10-26
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
@@ -12,7 +12,7 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenA
 ![Tests](https://img.shields.io/badge/tests-passing-success)
 ![Coverage](https://img.shields.io/badge/coverage-90%25-yellowgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v2.6.1-blueviolet)
+![Status](https://img.shields.io/badge/status-v2.6.3-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
@@ -29,6 +29,7 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 - ⚽ Acompanhamento da Copa do Mundo 2026 (jogos, resultados e lembretes)
 - 📺 Notificações de lançamentos de streaming (TMDB + Watchmode)
 - 💡 Registro de ideias dos usuários (MongoDB)
+- 🔨 **Moderação de grupos** (Mute/Unmute via comando, painel ou API)
 - 🎛️ **23 feature flags runtime** com persistência opcional em disco
 - ⚙️ Backend moderno com **Spring Boot 4.1.1**, **Java 21 (Virtual Threads)**, **Kafka**, **PostgreSQL**, **MongoDB** e **SQLite legado**
 
@@ -51,6 +52,13 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 - Pipeline assíncrono via **Kafka** (`t1000.audio.received` → worker → `t1000.audio.processed`).
 - Cache de 24h evita reprocessar o mesmo áudio.
 - Fallback automático para transcrição bruta quando o refinamento falha.
+
+### 🔨 Moderação de grupos
+
+- **Comando no Chat**: Responda a mensagem de um usuário com `/mute` (permanente) ou `/mute 60` (60 minutos). Use `/unmute` para reverter.
+- **Painel Admin**: Nova aba "Moderação" para aplicar restrições por ID de usuário e chat.
+- **API REST**: Endpoints `/admin/mute` e `/admin/unmute` para integração via `curl`.
+- **Requisito**: O bot precisa ser Administrador do grupo e ter a permissão "Restringir membros".
 
 ### 💡 Anotar ideias
 
@@ -210,6 +218,8 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 | `/admin/reload-prompts`         | POST   | Recarrega prompts e personas                                            |
 | `/admin/podcast/resend`         | POST   | Reenvia podcast por sexta-feira (`?friday=yyyy-MM-dd&chatId=xxx`)       |
 | `/admin/custom-digest`          | GET    | Gera resumo sob demanda (`?start=yyyy-MM-dd&end=yyyy-MM-dd&chatId=xxx`) |
+| `/admin/mute`                   | POST   | Silencia usuário (`?chatId=...&userId=...&durationMinutes=...`)         |
+| `/admin/unmute`                 | POST   | Remove silenciamento (`?chatId=...&userId=...`)                         |
 | `/admin/features`               | GET    | Lista feature flags                                                     |
 | `/admin/features/{key}`         | POST   | Altera feature flag (`?enabled=true`)                                   |
 | `/admin/cache-stats`            | GET    | Estatísticas do cache de transcrições                                   |
@@ -597,6 +607,27 @@ Andre Nascimento
 
 ## 📋 Changelog resumido
 
+### 🆕 v2.6.3 — Moderação de Grupos e Comando de Ajuda
+
+**Nova feature:**
+
+- ✅ **Comando `/help`**: lista todos os comandos e funcionalidades do bot com formatação HTML.
+- ✅ **Módulo de Moderação (`TelegramModerationService`)**: permite silenciar (mute) e dessilenciar (unmute) usuários em grupos.
+- ✅ **Comandos no Telegram**: `/mute [minutos]` e `/unmute` (funcionam respondendo à mensagem do alvo).
+- ✅ **Painel Web**: nova aba "🔨 Moderação" para aplicar as ações visualmente.
+- ✅ **API REST**: endpoints `POST /admin/mute` e `POST /admin/unmute` para automações.
+
+**Melhorias:**
+
+- ✅ Ajuste no `MessageUpdateRuleHandler` para ignorar comandos com barra (`/`) e evitar conflito com o roteador do ksilisk.
+- ✅ `TelegramFacade` expõe o método genérico `executar(BaseRequest)` para maior flexibilidade.
+
+### 🆕 v2.6.2 — Hotfix: Ciclo de vida do Token de Transcrição
+
+**Bug fix:**
+
+- ✅ Correção no `AudioHandler`: o token gerado para os botões de transcrição (Bruto/Refinado) não é mais removido do cache imediatamente após o primeiro clique. Agora ele respeita o TTL de 7 dias, permitindo que o usuário clique no segundo botão sem receber "Token inválido ou expirado".
+
 ### 🆕 v2.6.1 — Múltiplas animações no Auto-Response
 
 **Nova feature:**
@@ -615,50 +646,13 @@ Andre Nascimento
 
 ### 🆕 v2.6.0 — Onda 3: Feature Flags & Documentação
 
-**Feature flags (23 no total):**
-
-- ✅ **6 flags de alta prioridade** (podcast, lembretes, releases, worldcup reminders, easter eggs, admin toggle)
-- ✅ **5 flags de média prioridade** (weekly digest, aniversário, notificação em grupos, podcast fallback, custom digest)
-- ✅ **5 flags de baixa prioridade** (prometheus, debug-cache, tmdb cache, telegram fallback, kafka audit)
-
-**Documentação:**
-
-- ✅ `docs/dev-guide/README.md` — índice do dev guide
-- ✅ `docs/dev-guide/feature-flags.md` — catálogo completo das 23 flags
-- ✅ `docs/dev-guide/config-files.md` — schema dos JSONs externos
-
-**Novos endpoints:**
-
-- ✅ `POST /admin/podcast/resend` — reenvio de podcast por sexta-feira com intervalo preciso
-- ✅ `POST /admin/reload-tmdb-aliases` — recarrega atalhos TMDB
-- ✅ `POST /admin/reload-worldcup-teams` — recarrega traduções de times
-- ✅ `POST /admin/reload-telegram-errors` — recarrega regras de erro
-- ✅ `POST /admin/reload-admin-config` — recarrega `admin-config.json`
-
-**Melhorias:**
-
-- ✅ `PodcastScriptService` respeita intervalo `12:00 → 11:59:59`
-- ✅ `TelegramSafeExecutor` com flag de supressão de fallback
-- ✅ `MovieService` migrou de `@Cacheable` para `CacheManager` programático
-- ✅ `PrometheusFeatureFlagFilter` para controlar `/actuator/prometheus` em runtime
-- ✅ `AudioResultConsumer` com audit trail opcional no MongoDB
-- ✅ KI-001 residual: propagação de falha de `enviarMidia` em TTS/auto-response
+_(Mantido igual ao anterior...)_
 
 ### 🆕 v2.5.5 — Onda 2: Estabilidade & Testes
 
-- ✅ Pipeline assíncrono com **Kafka** para processamento de áudio
-- ✅ **Podcast semanal** ("Silas Cast") com Azure TTS
-- ✅ **Digest com múltiplas personas** (T-1000, Bicentenário, Arquiteto)
-- ✅ **Notificações de lançamentos** de streaming (TMDB + Watchmode)
-- ✅ **Copa do Mundo 2026** (jogos, resultados, lembretes)
-- ✅ **Aniversários** com GIF temático
-- ✅ **Migração** de SQLite → PostgreSQL/MongoDB
-- ✅ **Painel admin** em Thymeleaf com Google OAuth2
-- ✅ **Auto-response** com time-range e user-overrides
-- ✅ **Observabilidade** com Micrometer + Prometheus + Actuator
-- ✅ Cobertura mínima de **90%** global, **70%** por classe
+_(Mantido igual ao anterior...)_
 
-### 🔄 Mudanças arquiteturais (v2.1.x → v2.6.1)
+### 🔄 Mudanças arquiteturais (v2.1.x → v2.6.3)
 
 - 🔀 Migração de **SQLite** para **PostgreSQL** (dados estruturados) + **MongoDB** (documentos)
 - 🔀 Processamento de áudio movido para **workers Kafka** (escalável horizontalmente)

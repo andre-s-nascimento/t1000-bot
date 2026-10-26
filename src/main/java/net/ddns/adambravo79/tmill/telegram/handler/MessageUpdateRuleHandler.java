@@ -50,8 +50,18 @@ public class MessageUpdateRuleHandler implements UpdateHandler, MessageUpdateRul
                 audioHandler.handleAudioUpdate(update);
             } else if (update.message().text() != null) {
                 String text = update.message().text();
-                // Log apenas se for comando (inicia com /, t1000, t-1000) ou contém link
-                if (text.startsWith("/") || text.toLowerCase().matches("t-?1000.*")) {
+
+                // 🔧 FIX: Se começa com "/", o ksilisk roteia para o CommandUpdateHandler.
+                // Não envie para o CommandHandler (que processa apenas "t1000 ...").
+                if (text.startsWith("/")) {
+                    log.info(
+                            "📝 Comando de barra detectado: '{}' (roteado pelo ksilisk)",
+                            LogSanitizer.sanitizeMessageText(text));
+                    return;
+                }
+
+                // Logs para comandos "t1000 ..." ou links
+                if (text.toLowerCase().matches("t-?1000.*")) {
                     log.info(
                             "📝 Comando detectado no chat {}: '{}'",
                             LogSanitizer.sanitizeId(chatId),

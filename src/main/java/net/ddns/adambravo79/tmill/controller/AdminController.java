@@ -63,6 +63,7 @@ import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
+import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
@@ -120,6 +121,7 @@ public class AdminController {
     private final TelegramExceptionHandler telegramExceptionHandler;
     private final AdminConfigService adminConfigService;
     private final TmdbClient tmdbClient;
+    private final TelegramModerationService moderationService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -148,6 +150,39 @@ public class AdminController {
                     log.warn("ID inválido em digest.chat-ids: {}", s);
                 }
             }
+        }
+    }
+
+    // ========================= MODERAÇÃO =========================
+
+    @PostMapping("/mute")
+    public ResponseEntity<String> muteUser(
+            @RequestParam("chatId") long chatId,
+            @RequestParam("userId") long userId,
+            @RequestParam(value = "durationMinutes", defaultValue = "0") int durationMinutes) {
+
+        boolean sucesso = moderationService.muteUser(chatId, userId, durationMinutes);
+
+        if (sucesso) {
+            String tempoStr = durationMinutes > 0 ? durationMinutes + " minutos" : "permanente";
+            return ResponseEntity.ok("🔇 Usuário " + userId + " silenciado por " + tempoStr + ".");
+        } else {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Falha ao silenciar. Verifique se o bot é admin e tem permissão.");
+        }
+    }
+
+    @PostMapping("/unmute")
+    public ResponseEntity<String> unmuteUser(
+            @RequestParam("chatId") long chatId, @RequestParam("userId") long userId) {
+
+        boolean sucesso = moderationService.unmuteUser(chatId, userId);
+
+        if (sucesso) {
+            return ResponseEntity.ok("🔊 Usuário " + userId + " desmutado.");
+        } else {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("❌ Falha ao desmutar.");
         }
     }
 
