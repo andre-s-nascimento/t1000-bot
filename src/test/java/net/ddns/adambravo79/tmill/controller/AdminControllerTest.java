@@ -2384,7 +2384,7 @@ class AdminControllerTest {
 
         mockMvc.perform(post("/admin/mute").param("chatId", "-100123").param("userId", "456"))
                 .andExpect(status().isInternalServerError())
-                .andExpect(content().string(containsString("❌ Falha ao silenciar")));
+                .andExpect(content().string(containsString("Falha ao silenciar")));
     }
 
     @Test
