@@ -12,6 +12,7 @@ import com.pengrad.telegrambot.model.File;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.*;
+import com.pengrad.telegrambot.response.BaseResponse;
 import com.pengrad.telegrambot.response.GetFileResponse;
 
 import io.ksilisk.telegrambot.core.executor.TelegramBotExecutor;
@@ -67,6 +68,11 @@ public class TelegramFacade {
                         .readTimeout(readTimeout, TimeUnit.SECONDS)
                         .writeTimeout(writeTimeout, TimeUnit.SECONDS)
                         .build();
+    }
+
+    public <T extends BaseRequest<T, R>, R extends BaseResponse> R executar(
+            BaseRequest<T, R> request) {
+        return executor.execute(request);
     }
 
     public void enviarMensagem(long chatId, String texto) {

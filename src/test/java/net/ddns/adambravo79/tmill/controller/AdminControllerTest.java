@@ -96,6 +96,7 @@ class AdminControllerTest {
     @Mock private TelegramExceptionHandler telegramExceptionHandler;
     @Mock private AdminConfigService adminConfigService;
     @Mock private TmdbClient tmdbClient;
+    @Mock private TelegramModerationService telegramModerationService;
 
     @BeforeEach
     @SneakyThrows
@@ -132,7 +133,8 @@ class AdminControllerTest {
                         teamsService,
                         telegramExceptionHandler,
                         adminConfigService,
-                        tmdbClient);
+                        tmdbClient,
+                        telegramModerationService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
@@ -2357,5 +2359,43 @@ class AdminControllerTest {
                 .andExpect(jsonPath("$.erro").value("Debug cache desabilitado por feature flag"));
 
         verifyNoInteractions(fileTranscriptionCacheService);
+    }
+
+    @Test
+    @DisplayName("POST /admin/mute - Deve mutar usuário com sucesso")
+    void muteUser_sucesso() throws Exception {
+        when(telegramModerationService.muteUser(anyLong(), anyLong(), anyInt())).thenReturn(true);
+
+        mockMvc.perform(
+                        post("/admin/mute")
+                                .param("chatId", "-100123")
+                                .param("userId", "456")
+                                .param("durationMinutes", "60"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("silenciado por 60 minutos")));
+
+        verify(telegramModerationService).muteUser(-100123L, 456L, 60);
+    }
+
+    @Test
+    @DisplayName("POST /admin/mute - Deve retornar erro 500 se falhar")
+    void muteUser_falha() throws Exception {
+        when(telegramModerationService.muteUser(anyLong(), anyLong(), anyInt())).thenReturn(false);
+
+        mockMvc.perform(post("/admin/mute").param("chatId", "-100123").param("userId", "456"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string(containsString("Falha ao silenciar")));
+    }
+
+    @Test
+    @DisplayName("POST /admin/unmute - Deve desmutar usuário com sucesso")
+    void unmuteUser_sucesso() throws Exception {
+        when(telegramModerationService.unmuteUser(anyLong(), anyLong())).thenReturn(true);
+
+        mockMvc.perform(post("/admin/unmute").param("chatId", "-100123").param("userId", "456"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("desmutado")));
+
+        verify(telegramModerationService).unmuteUser(-100123L, 456L);
     }
 }
