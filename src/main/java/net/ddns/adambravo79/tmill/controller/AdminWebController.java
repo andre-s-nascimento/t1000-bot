@@ -58,6 +58,7 @@ import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
+import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
@@ -145,6 +146,7 @@ public class AdminWebController {
     private final TelegramExceptionHandler telegramExceptionHandler;
     private final TmdbClient tmdbClient;
     private final AdminConfigService adminConfigService;
+    private final TelegramModerationService moderationService;
 
     // =========================================================================
     // @Value
@@ -167,6 +169,42 @@ public class AdminWebController {
 
     @Value("${migration.sqlite.path:./data/t1000.db}")
     private String migrationSqlitePath;
+
+    @PostMapping("/mute")
+    public String muteUser(
+            @RequestParam("chatId") long chatId,
+            @RequestParam("userId") long userId,
+            @RequestParam(value = "durationMinutes", defaultValue = "0") int durationMinutes,
+            RedirectAttributes redirectAttrs) {
+
+        boolean sucesso = moderationService.muteUser(chatId, userId, durationMinutes);
+
+        if (sucesso) {
+            String tempoStr = durationMinutes > 0 ? durationMinutes + " minutos" : "permanente";
+            redirectAttrs.addFlashAttribute(
+                    SUCCESS, "🔇 Usuário " + userId + " silenciado por " + tempoStr + ".");
+        } else {
+            redirectAttrs.addFlashAttribute(
+                    ERROR, "❌ Falha ao silenciar. Verifique se o bot é admin.");
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    @PostMapping("/unmute")
+    public String unmuteUser(
+            @RequestParam("chatId") long chatId,
+            @RequestParam("userId") long userId,
+            RedirectAttributes redirectAttrs) {
+
+        boolean sucesso = moderationService.unmuteUser(chatId, userId);
+
+        if (sucesso) {
+            redirectAttrs.addFlashAttribute(SUCCESS, "🔊 Usuário " + userId + " desmutado.");
+        } else {
+            redirectAttrs.addFlashAttribute(ERROR, "❌ Falha ao desmutar.");
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
 
     // =========================================================================
     // PÁGINA PRINCIPAL

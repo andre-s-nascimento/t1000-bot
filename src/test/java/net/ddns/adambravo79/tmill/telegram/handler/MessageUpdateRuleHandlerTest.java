@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import java.util.stream.Stream;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -84,22 +85,24 @@ class MessageUpdateRuleHandlerTest {
     }
 
     static Stream<Arguments> messageScenariosProvider() {
+        // 1. Instancia os mocks fora das lambdas (Sonar java:S9016)
+        Audio mockAudio = mock(Audio.class);
+        Voice mockVoice = mock(Voice.class);
+
         return Stream.of(
                 // Audio
                 Arguments.of(
-                        (MessageSetup) msg -> when(msg.audio()).thenReturn(mock(Audio.class)),
-                        true,
-                        false),
+                        (MessageSetup) msg -> when(msg.audio()).thenReturn(mockAudio), true, false),
                 // Voice
                 Arguments.of(
                         (MessageSetup)
                                 msg -> {
                                     when(msg.audio()).thenReturn(null);
-                                    when(msg.voice()).thenReturn(mock(Voice.class));
+                                    when(msg.voice()).thenReturn(mockVoice);
                                 },
                         true,
                         false),
-                // Comando
+                // Comando (agora é ignorado pelo handler e retorna false)
                 Arguments.of(
                         (MessageSetup)
                                 msg -> {
@@ -108,7 +111,8 @@ class MessageUpdateRuleHandlerTest {
                                     when(msg.text()).thenReturn("/start");
                                 },
                         false,
-                        true),
+                        false), // 🔧 FIX: Era 'true', mas como adicionamos o early return para '/',
+                // agora é 'false'
                 // Link
                 Arguments.of(
                         (MessageSetup)
@@ -196,5 +200,25 @@ class MessageUpdateRuleHandlerTest {
     @Test
     void deveCobrirHandler() {
         assertThat(handler.handler()).isSameAs(handler);
+    }
+
+    @Test
+    @DisplayName(
+            "handle: deve ignorar comandos que começam com / e NÃO enviar para o CommandHandler")
+    void handle_ignoraComandoComBarra() {
+        long chatId = 123L;
+        Message message = mockMessageWithChat(chatId);
+        when(message.audio()).thenReturn(null);
+        when(message.voice()).thenReturn(null);
+        when(message.text()).thenReturn("/help");
+
+        Update update = mockUpdateWithMessage(message);
+        when(authService.isAuthorized(update)).thenReturn(true);
+
+        handler.handle(update);
+
+        // O ksilisk cuida disso, o nosso handler não deve repassar
+        verifyNoInteractions(commandHandler);
+        verifyNoInteractions(audioHandler);
     }
 }

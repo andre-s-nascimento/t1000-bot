@@ -53,6 +53,7 @@ import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
+import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
@@ -93,6 +94,7 @@ class AdminWebControllerTest {
     @Mock private TelegramExceptionHandler telegramExceptionHandler;
     @Mock private TmdbClient tmdbClient;
     @Mock private AdminConfigService adminConfigService;
+    @Mock private TelegramModerationService telegramModerationService;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
@@ -127,7 +129,8 @@ class AdminWebControllerTest {
                         teamsService,
                         telegramExceptionHandler,
                         tmdbClient,
-                        adminConfigService);
+                        adminConfigService,
+                        telegramModerationService);
 
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
         ReflectionTestUtils.setField(controller, "ownerId", 999L);
@@ -276,7 +279,7 @@ class AdminWebControllerTest {
     @SneakyThrows
     @DisplayName("falaT1000Tts: texto válido retorna OK")
     void falaT1000Tts_textoValido() {
-        byte[] audio = new byte[] {1, 2, 3};
+        byte[] audio = {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         Path finalPath = Paths.get("/tmp/Cronicas-do-T1000-Audio-1.mp3");
 
@@ -346,7 +349,7 @@ class AdminWebControllerTest {
     @SneakyThrows
     @DisplayName("falaT1000Tts: sem chatId usa ownerId")
     void falaT1000Tts_semChatIdUsaOwner() {
-        byte[] audio = new byte[] {1, 2, 3};
+        byte[] audio = {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
@@ -372,7 +375,7 @@ class AdminWebControllerTest {
     @SneakyThrows
     @DisplayName("KI-001 residual: falaT1000Tts responde 500 se enviarMidia retornar false")
     void falaT1000Tts_midiaRetornaFalse_retorna500() {
-        byte[] audio = new byte[] {1, 2, 3};
+        byte[] audio = {1, 2, 3};
         Path tempPath = Paths.get("/tmp/tts_audio.mp3");
         when(azureTtsClient.synthesizeFullText("Test")).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
@@ -435,7 +438,7 @@ class AdminWebControllerTest {
     @SneakyThrows
     @DisplayName("testAzureTts: sucesso → flash success")
     void testAzureTts_sucesso() {
-        byte[] audio = new byte[] {1, 2, 3};
+        byte[] audio = {1, 2, 3};
         Path tempPath = Paths.get("/tmp/test_azure.mp3");
         when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
@@ -461,7 +464,7 @@ class AdminWebControllerTest {
     @SneakyThrows
     @DisplayName("KI-001 residual: testAzureTts responde flash error se enviarMidia retornar false")
     void testAzureTts_midiaRetornaFalse_flashError() {
-        byte[] audio = new byte[] {1, 2, 3};
+        byte[] audio = {1, 2, 3};
         Path tempPath = Paths.get("/tmp/test_azure.mp3");
         when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(audio);
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(tempPath);
