@@ -36,6 +36,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -166,10 +168,9 @@ public class AdminController {
         if (sucesso) {
             String tempoStr = durationMinutes > 0 ? durationMinutes + " minutos" : "permanente";
             return ResponseEntity.ok("🔇 Usuário " + userId + " silenciado por " + tempoStr + ".");
-        } else {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Falha ao silenciar. Verifique se o bot é admin e tem permissão.");
         }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("❌ Falha ao silenciar. Verifique se o bot é admin e tem permissão.");
     }
 
     @PostMapping("/unmute")
@@ -180,10 +181,8 @@ public class AdminController {
 
         if (sucesso) {
             return ResponseEntity.ok("🔊 Usuário " + userId + " desmutado.");
-        } else {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("❌ Falha ao desmutar.");
         }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("❌ Falha ao desmutar.");
     }
 
     // ========================= LIMPEZA DE DADOS =========================
@@ -716,6 +715,11 @@ public class AdminController {
         }
     }
 
+    @PostMapping("/test-azure-tts")
+    public ResponseEntity<String> testAzureTtsPost() {
+        return testAzureTts(); // reaproveita a lógica do GET existente
+    }
+
     /**
      * Sintetiza e envia áudio para um chat.
      *
@@ -838,6 +842,43 @@ public class AdminController {
     public ResponseEntity<String> clearBirthdays() {
         int deleted = birthdayRepository.deleteAll();
         return ResponseEntity.ok("✅ " + deleted + " aniversário(s) removido(s).");
+    }
+
+    // ========================= ANIVERSÁRIOS (form params) =========================
+
+    // ========================= ANIVERSÁRIOS (form params) =========================
+
+    /**
+     * Variante com @RequestParam, usada pelo Angular (form nativo).
+     * Mantém o endpoint com @PathVariable para compatibilidade com scripts/curl.
+     */
+    @PostMapping("/birthdays/test")
+    public ResponseEntity<String> testBirthdayForm(
+            @RequestParam("day") int day, @RequestParam("month") int month) {
+        if (day < 1 || day > 31 || month < 1 || month > 12) {
+            return ResponseEntity.badRequest().body("❌ Dia/mês inválidos.");
+        }
+        int enviados = birthdayService.enviarParabensPara(day, month);
+        return ResponseEntity.ok(
+                "🎂 Parabéns disparados para " + day + "/" + month + ". Enviados: " + enviados);
+    }
+
+    // ========================= AUTH / ME =========================
+
+    @GetMapping("/me")
+    public ResponseEntity<Map<String, Object>> currentUser(
+            @AuthenticationPrincipal Object principal) {
+
+        if (principal instanceof OAuth2User user) {
+            Map<String, Object> info = new java.util.LinkedHashMap<>();
+            info.put("email", user.getAttribute("email"));
+            info.put("name", user.getAttribute("name"));
+            info.put("sub", user.getAttribute("sub"));
+            info.put("authenticated", true);
+            return ResponseEntity.ok(info);
+        }
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("authenticated", false));
     }
 
     // ========================= AUXILIARES =========================

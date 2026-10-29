@@ -1289,6 +1289,27 @@ class AdminControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("7 aniversário")));
     }
 
+    @Test
+    @DisplayName("POST /admin/birthdays/test (form) com dados válidos")
+    void testBirthdayForm_comDiaMesValidos_deveEnviar() throws Exception {
+        when(birthdayService.enviarParabensPara(5, 10)).thenReturn(3);
+
+        mockMvc.perform(post("/admin/birthdays/test").param("day", "5").param("month", "10"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Enviados: 3")));
+
+        verify(birthdayService).enviarParabensPara(5, 10);
+    }
+
+    @Test
+    @DisplayName("POST /admin/birthdays/test (form) com dia inválido → 400")
+    void testBirthdayForm_comDiaInvalido_retornaBadRequest() throws Exception {
+        mockMvc.perform(post("/admin/birthdays/test").param("day", "0").param("month", "5"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(birthdayService);
+    }
+
     // ========================= DEBUG CACHE =========================
 
     @Test
