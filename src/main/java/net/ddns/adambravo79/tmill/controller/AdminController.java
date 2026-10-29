@@ -845,9 +845,6 @@ public class AdminController {
     }
 
     // ========================= ANIVERSÁRIOS (form params) =========================
-
-    // ========================= ANIVERSÁRIOS (form params) =========================
-
     /**
      * Variante com @RequestParam, usada pelo Angular (form nativo).
      * Mantém o endpoint com @PathVariable para compatibilidade com scripts/curl.

@@ -123,6 +123,8 @@ public class SecurityConfig {
                         auth ->
                                 auth.requestMatchers(
                                                 "/",
+                                                "/admin-ui",
+                                                "/admin-ui/**",
                                                 "/actuator/health",
                                                 "/favicon.ico",
                                                 "/access-denied")

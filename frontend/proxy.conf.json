@@ -1,0 +1,23 @@
+{
+  "/admin/": {
+    "target": "http://localhost:8082",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  },
+  "/oauth2": {
+    "target": "http://localhost:8082",
+    "secure": false,
+    "changeOrigin": true
+  },
+  "/login": {
+    "target": "http://localhost:8082",
+    "secure": false,
+    "changeOrigin": true
+  },
+  "/logout": {
+    "target": "http://localhost:8082",
+    "secure": false,
+    "changeOrigin": true
+  }
+}

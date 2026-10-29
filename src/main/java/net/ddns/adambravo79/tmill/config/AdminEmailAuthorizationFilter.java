@@ -118,7 +118,12 @@ public class AdminEmailAuthorizationFilter extends OncePerRequestFilter {
     }
 
     private boolean isProtectedPath(String path) {
-        return path.startsWith("/admin") || path.startsWith("/admin-web");
+        // /admin-ui/**  → assets do SPA (index.html, main.js, etc.):
+        //   NÃO proteger no filtro. A proteção fica no SecurityConfig
+        //   para os endpoints /admin/** REST.
+        // /admin/**     → endpoints REST: proteger
+        // /admin-web/** → Thymeleaf legado: proteger
+        return path.startsWith("/admin/") || path.startsWith("/admin-web");
     }
 
     private String formatAuthDetails(Authentication auth) {
