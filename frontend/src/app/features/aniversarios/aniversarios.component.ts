@@ -1,0 +1,8 @@
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-aniversarios',
+  standalone: true,
+  template: `<h2>🎂 Aniversários</h2><p class="text-muted">Em construção (Semana 2).</p>`
+})
+export class AniversariosComponent {}

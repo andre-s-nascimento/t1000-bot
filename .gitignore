@@ -91,3 +91,4 @@ config/prod-ca-2021.crt
 frontend/node_modules/
 frontend/dist/
 frontend/.angular/
+/frontend/fix-components.sh
