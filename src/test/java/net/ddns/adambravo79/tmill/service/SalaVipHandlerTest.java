@@ -291,4 +291,12 @@ class SalaVipHandlerTest {
                 .contains("#118")
                 .contains("Encontrado pela sinopse/nota");
     }
+
+    @Test
+    @DisplayName("handleNegativo: retorna mensagem de erro para número negativo")
+    void handleNegativo() {
+        assertThat(handler.handle(1L, "t1000 salavip -1")).isTrue();
+        verify(telegramFacade).enviarMensagem(eq(1L), contains("não pode ser negativo"));
+        verifyNoInteractions(salaVipService);
+    }
 }
