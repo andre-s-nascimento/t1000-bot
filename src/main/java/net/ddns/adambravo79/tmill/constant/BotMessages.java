@@ -24,6 +24,9 @@ package net.ddns.adambravo79.tmill.constant;
  */
 public final class BotMessages {
 
+    private static final String EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE =
+            "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+
     private BotMessages() {}
 
     // =========================================================================
@@ -96,20 +99,24 @@ public final class BotMessages {
 
     public static final String ANIVERSARIO_PEDE_DATA =
             "🎂 Me diga sua data de nascimento no formato <code>DD/MM</code>.\n"
-                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+                    + EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE;
 
     public static final String ANIVERSARIO_FORMATO_INVALIDO =
             "❌ Não entendi a data. Use o formato <code>DD/MM</code>.\n"
-                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+                    + EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE;
 
     public static final String ANIVERSARIO_DATA_INVALIDA =
             "❌ Essa data não existe, mané! Verifique o dia e o mês.\n"
-                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+                    + EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE;
 
     public static final String ANIVERSARIO_REGISTRADO =
-            "✅ <b>Aniversário registrado!</b>\n\n"
-                + "📅 Data: <b>%s</b>\n\n"
-                + "No dia, o T-1000, eu mesmo, vou aparecer por aqui pra te desejar parabéns. 🎉🎬";
+            """
+            ✅ <b>Aniversário registrado!</b>
+
+            📅 Data: <b>%s</b>
+
+            No dia, o T-1000, eu mesmo, vou aparecer por aqui pra te desejar parabéns. 🎉🎬\
+            """;
 
     public static final String ANIVERSARIO_JA_ENVIADO_HOJE =
             "🎂 Parabéns de hoje já foram enviados para este usuário.";
@@ -148,4 +155,42 @@ public final class BotMessages {
     // =========================================================================
 
     public static final String GLOBE_EMOJI = "🌐";
+
+    // =========================================================================
+    // HELP
+    // =========================================================================
+
+    public static final String HELP_TEXT =
+            """
+            🤖 <b>Central de Ajuda do T-1000</b>
+
+            Aqui está tudo o que eu posso fazer:
+
+            🎬 <b>Filmes</b>
+            <code>t1000 buscar &lt;nome&gt;</code> — Busca sinopse, elenco e onde assistir.
+            <code>t1000 estreias da semana</code> — Lançamentos nos streamings.
+
+            🍿 <b>Sala VIP do RapaduraCast</b>
+            <code>t1000 salavip &lt;numero&gt;</code> — Busca o filme pelo número da Sala VIP.
+            <code>t1000 salavip episodio &lt;numero&gt;</code> — Busca filmes pelo episódio do podcast.
+            <code>t1000 salavip filme &lt;título&gt;</code> — Busca pelo título ou sinopse (nota).
+
+            🎙️ <b>Áudio</b>
+            Envie um áudio ou mensagem de voz. Eu transcrevo e refino o texto.
+
+            ⚽ <b>Copa 2026</b>
+            <code>t1000 jogos</code> — Jogos do dia.
+            <code>t1000 resultados [ontem/hoje]</code> — Placar dos jogos.
+
+            🎂 <b>Aniversários</b>
+            <code>t1000 registrar aniversário DD/MM</code> — Anoto e te parabenizo no dia.
+
+            💡 <b>Ideias</b>
+            <code>t1000 anotar ideia &lt;texto&gt;</code> — Salva sua sugestão.
+
+            📊 <b>Diversão</b>
+            <code>t1000 bom dia</code> — Saudação com animações aleatórias.
+
+            <i>Desenvolvido com ☕ e circuitos da Skynet.</i>
+            """;
 }

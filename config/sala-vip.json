@@ -1,0 +1,968 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-01T17:00:00.000000+00:00",
+  "listUrl": "https://letterboxd.com/adambravo79/list/sala-vip-do-rapaduracast/",
+  "total": 119,
+  "filmes": [
+    {
+      "numero": 1,
+      "episodio": 1,
+      "slug": "killers-of-the-flower-moon",
+      "titulo": "Killers of the Flower Moon",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 01 - \"Assassinos da Lua das Flores\", a obra prima de Martin Scorsese!"
+    },
+    {
+      "numero": 2,
+      "episodio": 2,
+      "slug": "past-lives",
+      "titulo": "Past Lives",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 02 - \"Vidas Passadas\" é um doloroso e verdadeiro filme sobre amor(es)!"
+    },
+    {
+      "numero": 3,
+      "episodio": 3,
+      "slug": "anatomy-of-a-fall",
+      "titulo": "Anatomy of a Fall",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 03 - \"Anatomia de uma Queda\" e a discussão sobre a “verdade”"
+    },
+    {
+      "numero": 4,
+      "episodio": 4,
+      "slug": "the-boy-and-the-heron",
+      "titulo": "The Boy and the Heron",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 04 - \"O Menino e a Garça\" e a terapia cinematográfica de Hayao Miyazaki!"
+    },
+    {
+      "numero": 5,
+      "episodio": 5,
+      "slug": "saltburn",
+      "titulo": "Saltburn",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 05 - \"Saltburn\" e o sexo que a nova geração quer esconder!"
+    },
+    {
+      "numero": 6,
+      "episodio": 6,
+      "slug": "aftersun",
+      "titulo": "Aftersun",
+      "ano": 2022,
+      "nota": "RapaduraCast [Sala VIP] 06 - \"Aftersun\" e os fragmentos de uma mente sem esperança!"
+    },
+    {
+      "numero": 7,
+      "episodio": 7,
+      "slug": "wonka",
+      "titulo": "Wonka",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 07 - \"Wonka\" e o Sabor Mágico de um bom Chocolate!"
+    },
+    {
+      "numero": 8,
+      "episodio": 8,
+      "slug": "booksmart",
+      "titulo": "Booksmart",
+      "ano": 2019,
+      "nota": "RapaduraCast [Sala VIP] 08 - \"Fora de Série\" é a comédia adolescente perfeita!"
+    },
+    {
+      "numero": 9,
+      "episodio": 9,
+      "slug": "central-station",
+      "titulo": "Central Station",
+      "ano": 1998,
+      "nota": "RapaduraCast [Sala VIP] 09 - \"Central do Brasil\" é um filme emocionante e marcante"
+    },
+    {
+      "numero": 10,
+      "episodio": 10,
+      "slug": "the-fountain",
+      "titulo": "The Fountain",
+      "ano": 2006,
+      "nota": "RapaduraCast [Sala VIP] 10 - \"Fonte da Vida\" e o desconforto de falar sobre a morte!"
+    },
+    {
+      "numero": 11,
+      "episodio": 11,
+      "slug": "civil-war-2024",
+      "titulo": "Civil War",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 11 - \"Guerra Civil\": política, jornalismo e violência!"
+    },
+    {
+      "numero": 12,
+      "episodio": 12,
+      "slug": "whiplash-2014",
+      "titulo": "Whiplash",
+      "ano": 2014,
+      "nota": "RapaduraCast [Sala VIP] 12 - \"Whiplash\" e o lado visceral da busca pela perfeição!"
+    },
+    {
+      "numero": 13,
+      "episodio": 13,
+      "slug": "planet-of-the-apes",
+      "titulo": "Planet of the Apes",
+      "ano": 1968,
+      "nota": "RapaduraCast [Sala VIP] 13 - \"O Planeta dos Macacos\" (1968), o filme que mudou a ficção científica!"
+    },
+    {
+      "numero": 14,
+      "episodio": 14,
+      "slug": "barbarian-2022",
+      "titulo": "Barbarian",
+      "ano": 2022,
+      "nota": "RapaduraCast [Sala VIP] 14 - \"Noites Brutais\" (Barbarian) e o terror do cotidiano!"
+    },
+    {
+      "numero": 15,
+      "episodio": 15,
+      "slug": "mad-max",
+      "titulo": "Mad Max",
+      "ano": 1979,
+      "nota": "RapaduraCast [Sala VIP] 15 - \"Mad Max\" 1 e 2, clássicos atemporais!"
+    },
+    {
+      "numero": 16,
+      "episodio": 15,
+      "slug": "mad-max-2",
+      "titulo": "Mad Max 2",
+      "ano": 1981,
+      "nota": "RapaduraCast [Sala VIP] 15 - \"Mad Max\" 1 e 2, clássicos atemporais!"
+    },
+    {
+      "numero": 17,
+      "episodio": 16,
+      "slug": "the-hunger-games-the-ballad-of-songbirds-snakes",
+      "titulo": "The Hunger Games: The Ballad of Songbirds & Snakes",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 16 - Jogos Vorazes: A Cantiga dos Pássaros e das Serpentes"
+    },
+    {
+      "numero": 18,
+      "episodio": 17,
+      "slug": "about-time",
+      "titulo": "About Time",
+      "ano": 2013,
+      "nota": "RapaduraCast [Sala VIP] 17 - Questão de Tempo e as reflexões da vida!"
+    },
+    {
+      "numero": 19,
+      "episodio": 18,
+      "slug": "basic-sanitation-the-movie",
+      "titulo": "Basic Sanitation, the Movie",
+      "ano": 2007,
+      "nota": "RapaduraCast [Sala VIP] 18 - \"Saneamento Básico\" é uma aula de se fazer cinema no Brasil!"
+    },
+    {
+      "numero": 20,
+      "episodio": 19,
+      "slug": "teenage-mutant-ninja-turtles-mutant-mayhem",
+      "titulo": "Teenage Mutant Ninja Turtles: Mutant Mayhem",
+      "ano": 2023,
+      "nota": "RapaduraCast [Sala VIP] 19 - \"As Tartarugas Ninja: Caos Mutante\" tem carisma, coração e é lindo!"
+    },
+    {
+      "numero": 21,
+      "episodio": 20,
+      "slug": "the-nice-guys",
+      "titulo": "The Nice Guys",
+      "ano": 2016,
+      "nota": "RapaduraCast [Sala VIP] 20 - \"Dois Caras Legais\" tem ação, comédia pastelão e caos!"
+    },
+    {
+      "numero": 22,
+      "episodio": 21,
+      "slug": "jerry-maguire",
+      "titulo": "Jerry Maguire",
+      "ano": 1996,
+      "nota": "RapaduraCast [Sala VIP] 21 - \"Jerry Maguire\" e a aula de como começar de novo!"
+    },
+    {
+      "numero": 23,
+      "episodio": 22,
+      "slug": "challengers-2024",
+      "titulo": "Challengers",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 22 - \"Rivais\" é um filme sobre sexo e tênis (ou vice e versa)!"
+    },
+    {
+      "numero": 24,
+      "episodio": 23,
+      "slug": "13-going-on-30",
+      "titulo": "13 Going on 30",
+      "ano": 2004,
+      "nota": "RapaduraCast [Sala VIP] 23 - \"De Repente 30\" é mágico, nostálgico e inesquecível!"
+    },
+    {
+      "numero": 25,
+      "episodio": 24,
+      "slug": "x-men",
+      "titulo": "X-Men",
+      "ano": 2000,
+      "nota": "RapaduraCast [Sala VIP] 24 - \"X-Men: O Filme\" é o começo de tudo no universo de herois!"
+    },
+    {
+      "numero": 26,
+      "episodio": 25,
+      "slug": "captain-fantastic",
+      "titulo": "Captain Fantastic",
+      "ano": 2016,
+      "nota": "RapaduraCast [Sala VIP] 25 - \"Capitão Fantástico\" discute capitalismo e educação!"
+    },
+    {
+      "numero": 27,
+      "episodio": 26,
+      "slug": "crazy-stupid-love",
+      "titulo": "Crazy, Stupid, Love.",
+      "ano": 2011,
+      "nota": "RapaduraCast [Sala VIP] 26 - \"Amor a Toda Prova\" fala sobre os fins e recomeços!"
+    },
+    {
+      "numero": 28,
+      "episodio": 27,
+      "slug": "alien",
+      "titulo": "Alien",
+      "ano": 1979,
+      "nota": "RapaduraCast [Sala VIP] 27 - \"Alien, o 8º Passageiro\" é a perfeição do sci-fi!"
+    },
+    {
+      "numero": 29,
+      "episodio": 28,
+      "slug": "coraline",
+      "titulo": "Coraline",
+      "ano": 2009,
+      "nota": "RapaduraCast [Sala VIP] 28 - \"Coraline e o Mundo Secreto\" mostra os traumas da solidão!"
+    },
+    {
+      "numero": 30,
+      "episodio": 29,
+      "slug": "the-shawshank-redemption",
+      "titulo": "The Shawshank Redemption",
+      "ano": 1994,
+      "nota": "RapaduraCast [Sala VIP] 29 - \"Um Sonho de Liberdade\" e a prisão além da prisão!"
+    },
+    {
+      "numero": 31,
+      "episodio": 30,
+      "slug": "longlegs",
+      "titulo": "Longlegs",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 30 - \"Longlegs\" é um filme de serial killer com carinha de terror macabro!"
+    },
+    {
+      "numero": 32,
+      "episodio": 31,
+      "slug": "edward-scissorhands",
+      "titulo": "Edward Scissorhands",
+      "ano": 1990,
+      "nota": "RapaduraCast [Sala VIP] 31 - \"Edward Mãos de Tesoura\" é uma fábula perfeita do estranho com coração puro!"
+    },
+    {
+      "numero": 33,
+      "episodio": 32,
+      "slug": "the-social-network",
+      "titulo": "The Social Network",
+      "ano": 2010,
+      "nota": "RapaduraCast [Sala VIP] 32 - \"A Rede Social\" explica 100% a geração internet!"
+    },
+    {
+      "numero": 34,
+      "episodio": 33,
+      "slug": "the-fly-1986",
+      "titulo": "The Fly",
+      "ano": 1986,
+      "nota": "RapaduraCast [Sala VIP] 33 - \"A Mosca\" e a metáfora do envelhecimento!"
+    },
+    {
+      "numero": 35,
+      "episodio": 34,
+      "slug": "the-king-of-comedy",
+      "titulo": "The King of Comedy",
+      "ano": 1982,
+      "nota": "RapaduraCast [Sala VIP] 34 - \"O Rei da Comédia\" e a ilusão do sucesso!"
+    },
+    {
+      "numero": 36,
+      "episodio": 35,
+      "slug": "grave-of-the-fireflies",
+      "titulo": "Grave of the Fireflies",
+      "ano": 1988,
+      "nota": "RapaduraCast [Sala VIP] 35 - \"O Túmulo dos Vagalumes\" mostra a crueldade da guerra!"
+    },
+    {
+      "numero": 37,
+      "episodio": 36,
+      "slug": "the-wild-robot",
+      "titulo": "The Wild Robot",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 36 - \"Robô Selvagem\" e a ressignificação do ninho vazio!"
+    },
+    {
+      "numero": 38,
+      "episodio": 37,
+      "slug": "stand-by-me",
+      "titulo": "Stand by Me",
+      "ano": 1986,
+      "nota": "RapaduraCast [Sala VIP] 37 - \"Conta Comigo\" e os dilemas com os pais, amigos e o luto!"
+    },
+    {
+      "numero": 39,
+      "episodio": 38,
+      "slug": "the-blair-witch-project",
+      "titulo": "The Blair Witch Project",
+      "ano": 1999,
+      "nota": "RapaduraCast [Sala VIP] 38 - \"A Bruxa de Blair\" é um clássico do terror e do marketing!"
+    },
+    {
+      "numero": 40,
+      "episodio": 39,
+      "slug": "batman-returns",
+      "titulo": "Batman Returns",
+      "ano": 1992,
+      "nota": "RapaduraCast [Sala VIP] 39 - \"Batman: O Retorno\" é um tesão de filme!"
+    },
+    {
+      "numero": 41,
+      "episodio": 40,
+      "slug": "four-days-in-september",
+      "titulo": "Four Days in September",
+      "ano": 1997,
+      "nota": "RapaduraCast [Sala VIP] 40 - \"O Que É Isso, Companheiro?\" e o poder do cinema nacional!"
+    },
+    {
+      "numero": 42,
+      "episodio": 41,
+      "slug": "gladiator",
+      "titulo": "Gladiator",
+      "ano": 2000,
+      "nota": "RapaduraCast [Sala VIP] 41 - \"Gladiador\" continua ecoando na eternidade"
+    },
+    {
+      "numero": 43,
+      "episodio": 42,
+      "slug": "the-shining",
+      "titulo": "The Shining",
+      "ano": 1980,
+      "nota": "RapaduraCast [Sala VIP] 42 - \"O Iluminado\" é o retrato da violência americana!"
+    },
+    {
+      "numero": 44,
+      "episodio": 43,
+      "slug": "the-pursuit-of-happyness",
+      "titulo": "The Pursuit of Happyness",
+      "ano": 2006,
+      "nota": "RapaduraCast [Sala VIP] 43 - \"À Procura da Felicidade\" e as reflexões sobre sonhos e perseverança"
+    },
+    {
+      "numero": 45,
+      "episodio": 44,
+      "slug": "magnolia",
+      "titulo": "Magnolia",
+      "ano": 1999,
+      "nota": "RapaduraCast [Sala VIP] 44 - \"Magnólia\" e quando uma chuva de sapos não é coincidência!"
+    },
+    {
+      "numero": 46,
+      "episodio": 45,
+      "slug": "one-flew-over-the-cuckoos-nest",
+      "titulo": "One Flew Over the Cuckoo’s Nest",
+      "ano": 1975,
+      "nota": "RapaduraCast [Sala VIP] 45 - \"Um Estranho no Ninho\" continua relevante!"
+    },
+    {
+      "numero": 47,
+      "episodio": 46,
+      "slug": "anora",
+      "titulo": "Anora",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 46 - \"Anora\" e a ilusão de um mundo melhor"
+    },
+    {
+      "numero": 48,
+      "episodio": 47,
+      "slug": "emilia-perez",
+      "titulo": "Emilia Pérez",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 47 - \"Emilia Pérez\" é um musical ruim com (algumas) grandes atuações"
+    },
+    {
+      "numero": 49,
+      "episodio": 48,
+      "slug": "flow-2024",
+      "titulo": "Flow",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 48 - \"Flow\" é a prova que nascemos para viver juntos"
+    },
+    {
+      "numero": 50,
+      "episodio": 49,
+      "slug": "conclave-2024",
+      "titulo": "Conclave",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 49 - \"Conclave\" é o \"House of Cards\" da Igreja"
+    },
+    {
+      "numero": 51,
+      "episodio": 50,
+      "slug": "the-godfather",
+      "titulo": "The Godfather",
+      "ano": 1972,
+      "nota": "RapaduraCast [Sala VIP] 50 - \"O Poderoso Chefão\" continua perfeito após mais de 50 anos!"
+    },
+    {
+      "numero": 52,
+      "episodio": 51,
+      "slug": "companion-2025",
+      "titulo": "Companion",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 51 - \"Acompanhante Perfeita\" e o humano tóxico em tempos de IA!"
+    },
+    {
+      "numero": 53,
+      "episodio": 52,
+      "slug": "better-man-2024",
+      "titulo": "Better Man",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 52 - \"Better Man\" é a melhor cinebiografia de música já feita!"
+    },
+    {
+      "numero": 54,
+      "episodio": 53,
+      "slug": "moulin-rouge",
+      "titulo": "Moulin Rouge!",
+      "ano": 2001,
+      "nota": "RapaduraCast [Sala VIP] 53 - \"Moulin Rouge\" é um medley perfeito entre a tragédia de Orfeu e o pop"
+    },
+    {
+      "numero": 55,
+      "episodio": 54,
+      "slug": "pirates-of-the-caribbean-the-curse-of-the-black-pearl",
+      "titulo": "Pirates of the Caribbean: The Curse of the Black Pearl",
+      "ano": 2003,
+      "nota": "RapaduraCast [Sala VIP] 54 - \"Piratas do Caribe: A Maldição do Pérola Negra\" continua clássico!"
+    },
+    {
+      "numero": 56,
+      "episodio": 55,
+      "slug": "ex-machina",
+      "titulo": "Ex Machina",
+      "ano": 2015,
+      "nota": "RapaduraCast [Sala VIP] 55 - \"Ex_Machina: Instinto Artificial\" e quando a IA supera o humano!"
+    },
+    {
+      "numero": 57,
+      "episodio": 56,
+      "slug": "spider-man",
+      "titulo": "Spider-Man",
+      "ano": 2002,
+      "nota": "RapaduraCast [Sala VIP] 56 - \"Homem-Aranha\" é um dos maiores clássico da cultura pop!"
+    },
+    {
+      "numero": 58,
+      "episodio": 57,
+      "slug": "a-clockwork-orange",
+      "titulo": "A Clockwork Orange",
+      "ano": 1971,
+      "nota": "RapaduraCast [Sala VIP] 57 - \"Laranja Mecânica\" continua atual, visceral e muito violento!"
+    },
+    {
+      "numero": 59,
+      "episodio": 58,
+      "slug": "sinners-2025",
+      "titulo": "Sinners",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 58 - \"Pecadores\" é um espetáculo sobre blues, luxúria e vampiros!"
+    },
+    {
+      "numero": 60,
+      "episodio": 59,
+      "slug": "ferris-buellers-day-off",
+      "titulo": "Ferris Bueller’s Day Off",
+      "ano": 1986,
+      "nota": "RapaduraCast [Sala VIP] 59 - \"Curtindo a Vida Adoidado\" e a geração que aprendeu a viver"
+    },
+    {
+      "numero": 61,
+      "episodio": 60,
+      "slug": "28-days-later",
+      "titulo": "28 Days Later",
+      "ano": 2002,
+      "nota": "RapaduraCast [Sala VIP] 60 - \"Extermínio\" e onde tudo mudou na cultura pop sobre zumbis!"
+    },
+    {
+      "numero": 62,
+      "episodio": 61,
+      "slug": "final-destination-bloodlines",
+      "titulo": "Final Destination Bloodlines",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 61 - \"Premonição 6\" prova que terror e galhofa podem dar as mãos!"
+    },
+    {
+      "numero": 63,
+      "episodio": 62,
+      "slug": "from-the-world-of-john-wick-ballerina",
+      "titulo": "Ballerina",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 62 - \"Bailarina\" é tão bom quanto qualquer \"John Wick\""
+    },
+    {
+      "numero": 64,
+      "episodio": 63,
+      "slug": "how-to-train-your-dragon",
+      "titulo": "How to Train Your Dragon",
+      "ano": 2010,
+      "nota": "RapaduraCast [Sala VIP] 63 - \"Como Treinar o Seu Dragão\" mostra quando voar significa crescer"
+    },
+    {
+      "numero": 65,
+      "episodio": 64,
+      "slug": "28-years-later",
+      "titulo": "28 Years Later",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 64 - \"Extermínio: A Evolução\" não assusta e isso é assustador"
+    },
+    {
+      "numero": 66,
+      "episodio": 65,
+      "slug": "f1-2025",
+      "titulo": "F1",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 65 - \"F1 - O Filme\" transforma a Fórmula 1 em blockbuster empolgante!"
+    },
+    {
+      "numero": 67,
+      "episodio": 66,
+      "slug": "x2",
+      "titulo": "X2",
+      "ano": 2003,
+      "nota": "RapaduraCast [Sala VIP] 66 - \"X-Men 2\" é um clássico do cinema de super-heróis"
+    },
+    {
+      "numero": 68,
+      "episodio": 67,
+      "slug": "smile-2",
+      "titulo": "Smile 2",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 67 - \"Sorria 2\" fala sobre fama e traumas em grande filme de terror"
+    },
+    {
+      "numero": 69,
+      "episodio": 68,
+      "slug": "interstellar",
+      "titulo": "Interstellar",
+      "ano": 2014,
+      "nota": "RapaduraCast [Sala VIP] 68 - \"Interestelar\" se tornou um clássico da ficção-científica"
+    },
+    {
+      "numero": 70,
+      "episodio": 69,
+      "slug": "materialists",
+      "titulo": "Materialists",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 69 - \"Amores Materialistas\" discute as relações na era dos apps!"
+    },
+    {
+      "numero": 71,
+      "episodio": 70,
+      "slug": "weapons-2025",
+      "titulo": "Weapons",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 70 - \"A Hora do Mal\" eleva o terror para outro patamar!"
+    },
+    {
+      "numero": 72,
+      "episodio": 71,
+      "slug": "together-2025",
+      "titulo": "Together",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 71 - \"Juntos\" escancara a dependência emocional dos relacionamentos"
+    },
+    {
+      "numero": 73,
+      "episodio": 72,
+      "slug": "kpop-demon-hunters",
+      "titulo": "KPop Demon Hunters",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 72 - \"Guerreiras do K-Pop\", o filme mais assistido da história da Netflix!"
+    },
+    {
+      "numero": 74,
+      "episodio": 73,
+      "slug": "the-life-of-chuck",
+      "titulo": "The Life of Chuck",
+      "ano": 2024,
+      "nota": "RapaduraCast [Sala VIP] 73 - \"A Vida de Chuck\" e a decisão de viver maravilhosamente"
+    },
+    {
+      "numero": 75,
+      "episodio": 74,
+      "slug": "fight-club",
+      "titulo": "Fight Club",
+      "ano": 1999,
+      "nota": "RapaduraCast [Sala VIP] 74 - \"Clube da Luta\" e já quebramos as duas primeiras regras!"
+    },
+    {
+      "numero": 76,
+      "episodio": 75,
+      "slug": "the-lord-of-the-rings-the-fellowship-of-the-ring",
+      "titulo": "The Lord of the Rings: The Fellowship of the Ring",
+      "ano": 2001,
+      "nota": "RapaduraCast [Sala VIP] 75 - \"O Senhor dos Anéis: A Sociedade do Anel\" é a fantasia perfeita!"
+    },
+    {
+      "numero": 77,
+      "episodio": 76,
+      "slug": "almost-famous",
+      "titulo": "Almost Famous",
+      "ano": 2000,
+      "nota": "RapaduraCast [Sala VIP] 76 - \"Quase Famosos\": Cameron Crowe e sua carta de amor ao rock"
+    },
+    {
+      "numero": 78,
+      "episodio": 77,
+      "slug": "the-exorcist",
+      "titulo": "The Exorcist",
+      "ano": 1973,
+      "nota": "RapaduraCast [Sala VIP] 77 - \"O Exorcista\" e a possessão que redefiniu o medo no cinema"
+    },
+    {
+      "numero": 79,
+      "episodio": 78,
+      "slug": "the-flesh-itself",
+      "titulo": "The Flesh Itself",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 78 - \"A Própria Carne\" marca a estreia do Jovem Nerd nos cinemas"
+    },
+    {
+      "numero": 80,
+      "episodio": 79,
+      "slug": "up",
+      "titulo": "Up",
+      "ano": 2009,
+      "nota": "RapaduraCast [Sala VIP] 79 - \"UP - Altas Aventuras\" é uma aula sobre luto e deixar ir!"
+    },
+    {
+      "numero": 81,
+      "episodio": 80,
+      "slug": "the-secret-agent-2025",
+      "titulo": "The Secret Agent",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 80 - \"O Agente Secreto\" fala sobre a importância da memória"
+    },
+    {
+      "numero": 82,
+      "episodio": 81,
+      "slug": "the-hunchback-of-notre-dame-1996",
+      "titulo": "The Hunchback of Notre Dame",
+      "ano": 1996,
+      "nota": "RapaduraCast [Sala VIP] 81 - \"O Corcunda de Notre Dame\" é uma Disney que jamais existirá novamente! [Golden Ticket da Fer]"
+    },
+    {
+      "numero": 83,
+      "episodio": 82,
+      "slug": "iron-man",
+      "titulo": "Iron Man",
+      "ano": 2008,
+      "nota": "RapaduraCast [Sala VIP] 82 - \"Homem de Ferro\" é uma Marvel Studios que nunca mais existiu!"
+    },
+    {
+      "numero": 84,
+      "episodio": 83,
+      "slug": "die-hard",
+      "titulo": "Die Hard",
+      "ano": 1988,
+      "nota": "RapaduraCast [Sala VIP] 83 - \"Duro de Matar\" é uma metáfora perfeita para a vida!"
+    },
+    {
+      "numero": 85,
+      "episodio": 84,
+      "slug": "before-sunrise",
+      "titulo": "Before Sunrise",
+      "ano": 1995,
+      "nota": "RapaduraCast [Sala VIP] 84 - \"Antes do Amanhecer\" é sobre a eternidade dos encontros"
+    },
+    {
+      "numero": 86,
+      "episodio": 85,
+      "slug": "one-battle-after-another",
+      "titulo": "One Battle After Another",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 85 - \"Uma Batalha Após a Outra\" é mais uma obra de arte de Paul Thomas Anderson"
+    },
+    {
+      "numero": 87,
+      "episodio": 86,
+      "slug": "train-dreams",
+      "titulo": "Train Dreams",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 86 - \"Sonhos de Trem\" fala sobre ausência, dor e reconexão."
+    },
+    {
+      "numero": 88,
+      "episodio": 87,
+      "slug": "marty-supreme",
+      "titulo": "Marty Supreme",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 87 - \"Marty Supreme\" leva Timothée Chalamet ao seu auge!"
+    },
+    {
+      "numero": 89,
+      "episodio": 88,
+      "slug": "hamnet",
+      "titulo": "Hamnet",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 88 - \"Hamnet\" trata sobre o peso da perda e a importância da arte"
+    },
+    {
+      "numero": 90,
+      "episodio": 89,
+      "slug": "frankenstein-2025",
+      "titulo": "Frankenstein",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 89 - \"Frankenstein\" e a divisão que Guillermo Del Toro causou"
+    },
+    {
+      "numero": 91,
+      "episodio": 90,
+      "slug": "bugonia",
+      "titulo": "Bugonia",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 90 - \"Bugonia\" e o mundo das teorias da conspiração"
+    },
+    {
+      "numero": 92,
+      "episodio": 91,
+      "slug": "sentimental-value",
+      "titulo": "Sentimental Value",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 91 - \"Valor Sentimental\" e o abismo que nos une"
+    },
+    {
+      "numero": 93,
+      "episodio": 92,
+      "slug": "the-housemaid-2025",
+      "titulo": "The Housemaid",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 92 - \"A Empregada\" aposta no exagero e acerta"
+    },
+    {
+      "numero": 94,
+      "episodio": 93,
+      "slug": "shrek",
+      "titulo": "Shrek",
+      "ano": 2001,
+      "nota": "RapaduraCast [Sala VIP] 93 - \"Shrek\" é a vingança perfeita contra a Disney"
+    },
+    {
+      "numero": 95,
+      "episodio": 94,
+      "slug": "the-hunger-games",
+      "titulo": "The Hunger Games",
+      "ano": 2012,
+      "nota": "RapaduraCast [Sala VIP] 94 - \"Jogos Vorazes\" é um início glorioso de uma franquia já clássica"
+    },
+    {
+      "numero": 96,
+      "episodio": 95,
+      "slug": "28-years-later-the-bone-temple",
+      "titulo": "28 Years Later: The Bone Temple",
+      "ano": 2026,
+      "nota": "RapaduraCast [Sala VIP] 95 - \"Extermínio: O Templo dos Ossos\" mira em \"Laranja Mecânica\" e acerta!"
+    },
+    {
+      "numero": 97,
+      "episodio": 96,
+      "slug": "bingo-the-king-of-the-mornings",
+      "titulo": "Bingo: The King of the Mornings",
+      "ano": 2017,
+      "nota": "RapaduraCast [Sala VIP] 96 - \"Bingo: O Rei das Manhãs\" é uma palhaçada divertida"
+    },
+    {
+      "numero": 98,
+      "episodio": 97,
+      "slug": "the-matrix",
+      "titulo": "The Matrix",
+      "ano": 1999,
+      "nota": "RapaduraCast [Sala VIP] 97 - \"Matrix\" é um filme que melhora a cada ano"
+    },
+    {
+      "numero": 99,
+      "episodio": 98,
+      "slug": "the-drama",
+      "titulo": "The Drama",
+      "ano": 2026,
+      "nota": "RapaduraCast [Sala VIP] 98 - \"O Drama\" gera constrangimento de tão bom que é"
+    },
+    {
+      "numero": 100,
+      "episodio": 99,
+      "slug": "obsession-2025",
+      "titulo": "Obsession",
+      "ano": 2025,
+      "nota": "RapaduraCast [Sala VIP] 99 - \"Obsessão\" é um estudo sobre desejo, posse e crueldade"
+    },
+    {
+      "numero": 101,
+      "episodio": 100,
+      "slug": "the-lion-king",
+      "titulo": "The Lion King",
+      "ano": 1994,
+      "nota": "RapaduraCast [Sala VIP] 100 - \"O Rei Leão\" ainda é a melhor animação da Disney"
+    },
+    {
+      "numero": 102,
+      "episodio": 101,
+      "slug": "pretty-woman",
+      "titulo": "Pretty Woman",
+      "ano": 1990,
+      "nota": "RapaduraCast [Sala VIP] 101 - \"Uma Linda Mulher\" é o filme que redefiniu a comédia romântica"
+    },
+    {
+      "numero": 103,
+      "episodio": 102,
+      "slug": "the-avengers",
+      "titulo": "The Avengers",
+      "ano": 2012,
+      "nota": "RapaduraCast [Sala VIP] 102 - \"Vingadores\" revolucionou o cinema de heróis"
+    },
+    {
+      "numero": 104,
+      "episodio": 103,
+      "slug": "independence-day-1996",
+      "titulo": "Independence Day",
+      "ano": 1996,
+      "nota": "RapaduraCast [Sala VIP] 103 - \"Independence Day\" é tosco, mas diverte como um clássico!"
+    },
+    {
+      "numero": 105,
+      "episodio": 104,
+      "slug": "no-country-for-old-men",
+      "titulo": "No Country for Old Men",
+      "ano": 2007,
+      "nota": "RapaduraCast [Sala VIP] 104 - \"Onde os Fracos Não Têm Vez\" é um filme genial"
+    },
+    {
+      "numero": 106,
+      "episodio": 105,
+      "slug": "the-butterfly-effect",
+      "titulo": "The Butterfly Effect",
+      "ano": 2004,
+      "nota": "RapaduraCast [Sala VIP] 105 - \"Efeito Borboleta\" e o poder das pequenas decisões"
+    },
+    {
+      "numero": 107,
+      "episodio": 106,
+      "slug": "disclosure-day",
+      "titulo": "Disclosure Day",
+      "ano": 2026,
+      "nota": "RapaduraCast [Sala VIP] 106 - \"Dia D\" e a boa inocência de acreditar"
+    },
+    {
+      "numero": 108,
+      "episodio": 107,
+      "slug": "princess-mononoke",
+      "titulo": "Princess Mononoke",
+      "ano": 1997,
+      "nota": "RapaduraCast [Sala VIP] 107 - \"Princesa Mononoke\" e a genialidade do Hayao Miyazaki"
+    },
+    {
+      "numero": 109,
+      "episodio": 108,
+      "slug": "watchmen",
+      "titulo": "Watchmen",
+      "ano": 2009,
+      "nota": "RapaduraCast [Sala VIP] 108 - \"Watchmen: O Filme\" é um filmaço de Zack Snyder"
+    },
+    {
+      "numero": 110,
+      "episodio": 109,
+      "slug": "the-invite-2026",
+      "titulo": "The Invite",
+      "ano": 2026,
+      "nota": "RapaduraCast [Sala VIP] 109 - \"O Convite\" revela o desconforto de relações adultas"
+    },
+    {
+      "numero": 111,
+      "episodio": 110,
+      "slug": "modern-times",
+      "titulo": "Modern Times",
+      "ano": 1936,
+      "nota": "RapaduraCast [Sala VIP] 110 - \"Tempos Modernos\" completa 90 anos e continua atual (infelizmente)"
+    },
+    {
+      "numero": 112,
+      "episodio": 111,
+      "slug": "eyes-wide-shut",
+      "titulo": "Eyes Wide Shut",
+      "ano": 1999,
+      "nota": "RapaduraCast [Sala VIP] 111 - \"De Olhos Bem Fechados\" e a culpa da fidelidade"
+    },
+    {
+      "numero": 113,
+      "episodio": 112,
+      "slug": "coyote-vs-acme",
+      "titulo": "Coyote vs. Acme",
+      "ano": 2026,
+      "nota": "RapaduraCast [Sala VIP] 112 - \"Coyote vs. Acme\" e a metáfora perfeita do Mito de Sísifo"
+    },
+    {
+      "numero": 114,
+      "episodio": 113,
+      "slug": "the-end-of-oak-street",
+      "titulo": "The End of Oak Street",
+      "ano": 2026,
+      "nota": "RapaduraCast [Sala VIP] 113 - \"O Fim da Rua\" é um filme sabor Steven Spielberg"
+    },
+    {
+      "numero": 115,
+      "episodio": 114,
+      "slug": "speed-racer",
+      "titulo": "Speed Racer",
+      "ano": 2008,
+      "nota": "RapaduraCast [Sala VIP] 114 - \"Speed Racer\" envelheceu como um bom vinho"
+    },
+    {
+      "numero": 116,
+      "episodio": 115,
+      "slug": "avengers-age-of-ultron",
+      "titulo": "Avengers: Age of Ultron",
+      "ano": 2015,
+      "nota": "RapaduraCast [Sala VIP] 115 - \"Vingadores: Era de Ultron\" fez sentido só 4 anos depois"
+    },
+    {
+      "numero": 117,
+      "episodio": 116,
+      "slug": "demolition-man",
+      "titulo": "Demolition Man",
+      "ano": 1993,
+      "nota": "RapaduraCast [Sala VIP] 116 - \"O Demolidor\" critica o politicamento correto de forma divertida"
+    },
+    {
+      "numero": 118,
+      "episodio": 117,
+      "slug": "signs",
+      "titulo": "Signs",
+      "ano": 2002,
+      "nota": "RapaduraCast [Sala VIP] 117 - \"Sinais\" faz um filme sobre ETs discutir a fé e funciona!"
+    },
+    {
+      "numero": 119,
+      "episodio": 118,
+      "slug": "super-8",
+      "titulo": "Super 8",
+      "ano": 2011,
+      "nota": "RapaduraCast [Sala VIP] 118 - \"Super 8\" é um excelente filme dos anos 80 em 2011"
+    },
+    {
+      "numero": 120,
+      "episodio": 119,
+      "slug": "street-fighter-2026",
+      "titulo": "Street Fighter",
+      "ano": 2026,
+      "nota": "RapaduraCast [Sala VIP] 119 - \"Street Fighter\" é uma adaptação quase paródia"
+    }
+  ]
+}

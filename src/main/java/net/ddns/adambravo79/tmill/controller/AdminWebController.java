@@ -7,6 +7,8 @@ import static net.ddns.adambravo79.tmill.constant.BotMessages.FMT_HH_MM_SS;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,9 +40,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,6 +59,7 @@ import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
+import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
@@ -64,12 +67,14 @@ import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.SalaVipConfigService;
 import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -102,6 +107,14 @@ public class AdminWebController {
     // CONSTANTES
     // =========================================================================
 
+    private static final String FILE = "file:";
+    private static final String CLASSPATH = "classpath:";
+    private static final String WORLDCUP = "worldcup";
+    private static final String AUTO_RESPONSES = "auto-responses";
+    private static final String EASTER_EGGS = "easter-eggs";
+    private static final String SALAVIP = "salavip";
+    private static final String SALAVIP_CONFIG = "salavip-config";
+
     private static final String PARAMETRO_MESSAGE_OBRIGATORIO =
             "❌ Parâmetro 'message' é obrigatório.";
 
@@ -116,6 +129,8 @@ public class AdminWebController {
     private static final String PROP_WORLDCUP_FILE = "worldcup.data.file";
     private static final String PROP_AUTO_RESPONSE_FILE = "auto.response.file";
     private static final String PROP_EASTER_EGG_FILE = "easter-egg.file";
+    private static final String PROP_SALAVIP_FILE = "salavip.data.file";
+    private static final String PROP_SALAVIP_CONFIG_FILE = "salavip.config.file";
 
     // =========================================================================
     // DEPENDÊNCIAS
@@ -147,6 +162,8 @@ public class AdminWebController {
     private final TmdbClient tmdbClient;
     private final AdminConfigService adminConfigService;
     private final TelegramModerationService moderationService;
+    private final SalaVipService salaVipService;
+    private final SalaVipConfigService salaVipConfigService;
 
     // =========================================================================
     // @Value
@@ -169,6 +186,12 @@ public class AdminWebController {
 
     @Value("${migration.sqlite.path:./data/t1000.db}")
     private String migrationSqlitePath;
+
+    @Value("${salavip.data.file:file:./config/sala-vip.json}")
+    private String defaultSalavipPath;
+
+    @Value("${salavip.config.file:file:./config/salavip-config.json}")
+    private String defaultSalavipConfigPath;
 
     @PostMapping("/mute")
     public String muteUser(
@@ -1341,7 +1364,7 @@ public class AdminWebController {
                                 file.name(),
                                 file.defaultLocation());
                 result.put(file.name(), content);
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 log.error("Erro ao parsear JSON do arquivo: {}", file.name(), e);
                 result.put(file.name(), "❌ Erro ao parsear JSON");
             } catch (IOException e) {
@@ -1353,6 +1376,148 @@ public class AdminWebController {
             }
         }
         return result;
+    }
+
+    @PostMapping("/salavip/sync")
+    public String forcarSyncSalaVipWeb(RedirectAttributes redirectAttributes) {
+        try {
+            int totalFilmes = salaVipService.sincronizarLista();
+            redirectAttributes.addFlashAttribute(
+                    SUCCESS, "✅ Sincronização concluída. " + totalFilmes + " filmes salvos.");
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute(
+                    ERROR, "❌ Falha na sincronização: " + e.getMessage());
+        }
+        return REDIRECT_ADMIN_WEB; // Volta para a página principal do admin
+    }
+
+    @PostMapping("/salavip/reload")
+    public String reloadConfigSalaVipWeb(RedirectAttributes redirectAttributes) {
+        try {
+            salaVipConfigService.reload();
+            redirectAttributes.addFlashAttribute(
+                    "sucesso", "✅ Configuração da Sala VIP recarregada.");
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute(
+                    "erro", "❌ Falha ao recarregar configuração: " + e.getMessage());
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    // =========================================================================
+    // UPLOAD DE CONFIGURAÇÃO (.json)
+    // =========================================================================
+
+    /**
+     * Recebe um {@code .json} via multipart, valida que é JSON parseável,
+     * grava em {@code ./data/config/} e recarrega o serviço correspondente.
+     *
+     * <p>Alvos suportados: {@code easter-eggs}, {@code auto-responses},
+     * {@code worldcup}, {@code salavip}, {@code salavip-config}.
+     *
+     * <p>Os serviços precisam ler de {@code ./data/config/} (não do classpath)
+     * para que o upload tenha efeito. Veja a nota de arquitetura abaixo.
+     */
+    @PostMapping("/upload-json")
+    public String uploadJson(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("target") String target,
+            RedirectAttributes redirectAttrs) {
+
+        if (file == null || file.isEmpty()) {
+            redirectAttrs.addFlashAttribute(ERROR, "❌ Nenhum arquivo enviado.");
+            return REDIRECT_ADMIN_WEB;
+        }
+        if (file.getSize() > 2L * 1024 * 1024) {
+            redirectAttrs.addFlashAttribute(ERROR, "❌ Arquivo maior que 2 MB.");
+            return REDIRECT_ADMIN_WEB;
+        }
+
+        // ✅ CORREÇÃO PATH TRAVERSAL: Valida o alvo contra uma whitelist
+        Set<String> alvosPermitidos =
+                Set.of(EASTER_EGGS, AUTO_RESPONSES, WORLDCUP, SALAVIP, SALAVIP_CONFIG);
+        if (!alvosPermitidos.contains(target)) {
+            log.warn("⚠️ Tentativa de upload para alvo inválido: {}", target);
+            redirectAttrs.addFlashAttribute(ERROR, "❌ Alvo de upload inválido.");
+            return REDIRECT_ADMIN_WEB;
+        }
+
+        try {
+            byte[] bytes = file.getBytes();
+            objectMapper.readTree(bytes);
+
+            Path destino = resolverDestinoUpload(target);
+            Files.createDirectories(destino.getParent());
+            Files.write(
+                    destino,
+                    bytes,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+
+            recarregarServicoUpload(target);
+
+            log.info(
+                    "📤 [web] JSON '{}' carregado ({} bytes) → {}",
+                    target,
+                    bytes.length,
+                    destino.toAbsolutePath());
+            redirectAttrs.addFlashAttribute(
+                    SUCCESS,
+                    "✅ '" + target + "' carregado e recarregado (" + bytes.length + " bytes).");
+
+        } catch (JacksonException e) {
+            log.warn("JSON inválido recebido para '{}': {}", target, e.getOriginalMessage());
+            redirectAttrs.addFlashAttribute(ERROR, "❌ JSON inválido: " + e.getOriginalMessage());
+        } catch (MaxUploadSizeExceededException e) {
+            redirectAttrs.addFlashAttribute(
+                    ERROR,
+                    "❌ Arquivo excede o limite do servidor. Ajuste "
+                            + "spring.servlet.multipart.max-file-size.");
+        } catch (Exception e) {
+            log.error("Erro no upload de JSON '{}'", target, e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
+        }
+        return REDIRECT_ADMIN_WEB;
+    }
+
+    /** Diretório-base externo para configurações sobrescrevíveis em runtime. */
+    private static final Path CONFIG_DIR = Paths.get("./data/config");
+
+    private Path resolverDestinoUpload(String target) {
+        String prop =
+                switch (target) {
+                    case EASTER_EGGS -> PROP_EASTER_EGG_FILE;
+                    case AUTO_RESPONSES -> PROP_AUTO_RESPONSE_FILE;
+                    case WORLDCUP -> PROP_WORLDCUP_FILE;
+                    case SALAVIP -> PROP_SALAVIP_FILE;
+                    case SALAVIP_CONFIG -> PROP_SALAVIP_CONFIG_FILE;
+                    default -> throw new IllegalArgumentException("Alvo desconhecido: " + target);
+                };
+
+        String configured = environment.getProperty(prop);
+        if (configured != null && !configured.isBlank() && !configured.startsWith(CLASSPATH)) {
+            return toPath(configured);
+        }
+
+        if (SALAVIP.equals(target)) {
+            return toPath(defaultSalavipPath);
+        }
+        if (SALAVIP_CONFIG.equals(target)) {
+            return toPath(defaultSalavipConfigPath);
+        }
+
+        return CONFIG_DIR.resolve(target + ".json");
+    }
+
+    private void recarregarServicoUpload(String target) {
+        switch (target) {
+            case EASTER_EGGS -> easterEggService.reload();
+            case AUTO_RESPONSES -> autoResponseService.reload();
+            case WORLDCUP -> staticWorldCupService.reload();
+            case SALAVIP -> salaVipService.sincronizarLista();
+            case SALAVIP_CONFIG -> salaVipConfigService.reload();
+            default -> throw new IllegalArgumentException("Alvo desconhecido: " + target);
+        }
     }
 
     // =========================================================================
@@ -1391,5 +1556,10 @@ public class AdminWebController {
         } catch (IOException ignored) {
             log.debug("Não foi possível deletar arquivo: {}", file);
         }
+    }
+
+    private static Path toPath(String uriOrPath) {
+        return Paths.get(
+                uriOrPath.startsWith(FILE) ? uriOrPath.substring(FILE.length()) : uriOrPath);
     }
 }

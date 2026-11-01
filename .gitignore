@@ -86,3 +86,5 @@ EOF
 /config/feature-flags.json.tmp
 config/prod-ca-2021.crt
 .sonar/spring-context-model.json
+
+/frontend
