@@ -52,6 +52,7 @@ import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
+import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
@@ -59,6 +60,7 @@ import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.SalaVipConfigService;
 import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
@@ -95,6 +97,8 @@ class AdminWebControllerTest {
     @Mock private TmdbClient tmdbClient;
     @Mock private AdminConfigService adminConfigService;
     @Mock private TelegramModerationService telegramModerationService;
+    @Mock private SalaVipService salaVipService;
+    @Mock private SalaVipConfigService salaVipConfigService;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
@@ -130,7 +134,9 @@ class AdminWebControllerTest {
                         telegramExceptionHandler,
                         tmdbClient,
                         adminConfigService,
-                        telegramModerationService);
+                        telegramModerationService,
+                        salaVipService, // ← adicionar
+                        salaVipConfigService); // ← adicionar
 
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
         ReflectionTestUtils.setField(controller, "ownerId", 999L);
@@ -138,6 +144,10 @@ class AdminWebControllerTest {
         ReflectionTestUtils.setField(controller, "botAllowedChats", "111,222");
         ReflectionTestUtils.setField(controller, "digestChatIdsStr", "333,444");
         ReflectionTestUtils.setField(controller, "migrationSqlitePath", "./data/test.db");
+        ReflectionTestUtils.setField(
+                controller, "defaultSalavipPath", "file:/app/config/sala-vip.json");
+        ReflectionTestUtils.setField(
+                controller, "defaultSalavipConfigPath", "file:/app/config/salavip-config.json");
 
         lenient().when(adminConfigService.getShowcaseChatId()).thenReturn(SHOWCASE_CHAT_ID);
         lenient()

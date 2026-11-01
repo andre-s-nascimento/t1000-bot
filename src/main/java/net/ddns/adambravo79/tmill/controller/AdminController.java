@@ -62,6 +62,7 @@ import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
+import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
@@ -69,6 +70,7 @@ import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.SalaVipConfigService;
 import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
@@ -122,6 +124,8 @@ public class AdminController {
     private final AdminConfigService adminConfigService;
     private final TmdbClient tmdbClient;
     private final TelegramModerationService moderationService;
+    private final SalaVipService salaVipService;
+    private final SalaVipConfigService salaVipConfigService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -1361,5 +1365,28 @@ public class AdminController {
     public ResponseEntity<String> reloadAdminConfig() {
         adminConfigService.reload();
         return ResponseEntity.ok("admin-config.json recarregado");
+    }
+
+    @PostMapping("/salavip/sync")
+    public ResponseEntity<String> forcarSyncSalaVip() {
+        try {
+            int totalFilmes = salaVipService.sincronizarLista();
+            return ResponseEntity.ok(
+                    "✅ Sincronização concluída. " + totalFilmes + " filmes salvos.");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body("❌ Falha na sincronização: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/salavip/reload")
+    public ResponseEntity<String> reloadConfigSalaVip() {
+        try {
+            salaVipConfigService.reload();
+            return ResponseEntity.ok("✅ Configuração da Sala VIP recarregada.");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body("❌ Falha ao recarregar configuração: " + e.getMessage());
+        }
     }
 }

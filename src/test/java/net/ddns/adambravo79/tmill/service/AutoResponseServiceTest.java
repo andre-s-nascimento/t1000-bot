@@ -207,8 +207,8 @@ class AutoResponseServiceTest {
         ReflectionTestUtils.setField(service, "oncePerDayTriggersRaw", "bom dia");
         ReflectionTestUtils.invokeMethod(service, "parseOncePerDayTriggers");
 
-        // Flag habilitada por padrão em todos os testes.
-        // lenient() evita UnnecessaryStubbingException nos testes que não a usam.
+        // ✅ Habilita a flag por padrão (testes que precisam desabilitar
+        //    sobrescrevem com when(...).thenReturn(false))
         lenient()
                 .when(featureFlagAdminService.isEnabled(FLAG_AUTO_RESPONSE_ENABLED))
                 .thenReturn(true);
@@ -425,7 +425,7 @@ class AutoResponseServiceTest {
     @DisplayName("Serviço desabilitado: não registra métrica")
     void desabilitado_nenhumaMetrica() throws Exception {
         when(featureFlagAdminService.isEnabled(FLAG_AUTO_RESPONSE_ENABLED)).thenReturn(false);
-        carregarRegras();
+        carregarRegras(); // carrega mesmo assim (loadResponses não checa flag)
 
         assertThat(service.getResponseRule(1L, "bom dia")).isEmpty();
         verifyNoInteractions(metricsService);
@@ -652,10 +652,8 @@ class AutoResponseServiceTest {
     // ============================================================
 
     @Test
-    @DisplayName("isEnabled: delega para FeatureFlagAdminService")
     void isEnabled_retornaValor() {
         assertThat(service.isEnabled()).isTrue(); // herda do setUp
-
         when(featureFlagAdminService.isEnabled(FLAG_AUTO_RESPONSE_ENABLED)).thenReturn(false);
         assertThat(service.isEnabled()).isFalse();
     }
@@ -700,7 +698,6 @@ class AutoResponseServiceTest {
         when(resource.getInputStream()).thenReturn(is);
 
         service.init();
-
         assertThat(service.getRulesCount()).isGreaterThan(0);
     }
 
@@ -1057,10 +1054,11 @@ class AutoResponseServiceTest {
     // ============================================================
 
     private void carregarRegras() throws Exception {
-        InputStream is = new ByteArrayInputStream(JSON_VALIDO.getBytes());
         lenient().when(resourceLoader.getResource(anyString())).thenReturn(resource);
         lenient().when(resource.exists()).thenReturn(true);
-        lenient().when(resource.getInputStream()).thenReturn(is);
+        lenient()
+                .when(resource.getInputStream())
+                .thenAnswer(inv -> new ByteArrayInputStream(JSON_VALIDO.getBytes()));
         service.loadResponses();
     }
 }

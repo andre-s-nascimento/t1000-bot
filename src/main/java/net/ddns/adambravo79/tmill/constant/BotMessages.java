@@ -24,6 +24,9 @@ package net.ddns.adambravo79.tmill.constant;
  */
 public final class BotMessages {
 
+    private static final String EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE =
+            "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+
     private BotMessages() {}
 
     // =========================================================================
@@ -96,20 +99,24 @@ public final class BotMessages {
 
     public static final String ANIVERSARIO_PEDE_DATA =
             "🎂 Me diga sua data de nascimento no formato <code>DD/MM</code>.\n"
-                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+                    + EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE;
 
     public static final String ANIVERSARIO_FORMATO_INVALIDO =
             "❌ Não entendi a data. Use o formato <code>DD/MM</code>.\n"
-                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+                    + EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE;
 
     public static final String ANIVERSARIO_DATA_INVALIDA =
             "❌ Essa data não existe, mané! Verifique o dia e o mês.\n"
-                    + "Exemplo: <code>T1000 registrar aniversário 05/10</code>";
+                    + EXEMPLO_CODE_T1000_REGISTRAR_ANIVERSARIO_05_10_CODE;
 
     public static final String ANIVERSARIO_REGISTRADO =
-            "✅ <b>Aniversário registrado!</b>\n\n"
-                + "📅 Data: <b>%s</b>\n\n"
-                + "No dia, o T-1000, eu mesmo, vou aparecer por aqui pra te desejar parabéns. 🎉🎬";
+            """
+            ✅ <b>Aniversário registrado!</b>
+
+            📅 Data: <b>%s</b>
+
+            No dia, o T-1000, eu mesmo, vou aparecer por aqui pra te desejar parabéns. 🎉🎬\
+            """;
 
     public static final String ANIVERSARIO_JA_ENVIADO_HOJE =
             "🎂 Parabéns de hoje já foram enviados para este usuário.";
