@@ -293,10 +293,32 @@ class SalaVipHandlerTest {
     }
 
     @Test
-    @DisplayName("handleNegativo: retorna mensagem de erro para número negativo")
-    void handleNegativo() {
+    @DisplayName("handleNumeroNegativo: retorna erro e não chama o service")
+    void handleNumeroNegativo() {
+        // Testa "t1000 salavip -1"
         assertThat(handler.handle(1L, "t1000 salavip -1")).isTrue();
-        verify(telegramFacade).enviarMensagem(eq(1L), contains("não pode ser negativo"));
+
+        verify(telegramFacade).enviarMensagem(eq(1L), contains("deve ser maior que zero"));
         verifyNoInteractions(salaVipService);
+    }
+
+    @Test
+    @DisplayName("handleNumeroZero: retorna erro e não chama o service")
+    void handleNumeroZero() {
+        // Testa "t1000 salavip 0"
+        assertThat(handler.handle(1L, "t1000 salavip 0")).isTrue();
+
+        verify(telegramFacade).enviarMensagem(eq(1L), contains("deve ser maior que zero"));
+        verifyNoInteractions(salaVipService);
+    }
+
+    // Teste adicional para cobrir o caso onde o Service retorna vazio para um número válido (mas
+    // que não existe)
+    @Test
+    @DisplayName("handleNumeroNaoEncontrado: retorna mensagem de não encontrado")
+    void handleNumeroNaoEncontrado_01() {
+        when(salaVipService.buscarPorNumero(99)).thenReturn(Optional.empty());
+        assertThat(handler.handle(1L, "t1000 salavip 99")).isTrue();
+        verify(telegramFacade).enviarMensagem(eq(1L), contains("#99"));
     }
 }

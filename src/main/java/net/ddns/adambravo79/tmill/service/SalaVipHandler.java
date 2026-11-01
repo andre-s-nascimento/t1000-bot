@@ -26,15 +26,11 @@ public class SalaVipHandler {
 
     private static final Pattern REGEX_NUMERO =
             Pattern.compile(
-                    "t1000\\s+sala\\s*vip\\s+(?:(?:numero|n[uú]mero|n[º°]?|#)\\s*)?([1-9]\\d*)",
+                    "t1000\\s+sala\\s*vip\\s+(?:(?:numero|n[uú]mero|n[º°]?|#)\\s*)?(-?\\d+)",
                     FLAGS);
 
     private static final Pattern REGEX_TITULO =
             Pattern.compile("t1000\\s+sala\\s*vip\\s+(?:tem\\s+filme|filme)\\s+(.+)", FLAGS);
-
-    private static final Pattern REGEX_NUMERO_NEGATIVO =
-            Pattern.compile(
-                    "t1000\\s+sala\\s*vip\\s+(?:(?:numero|n[uú]mero|n[º°]?|#)\\s*)?(-\\d+)", FLAGS);
 
     // A alternância é intencional para cobrir grafias com e sem acento; suprimir aviso de
     // redundância
@@ -45,22 +41,15 @@ public class SalaVipHandler {
     public boolean handle(long chatId, String rawText) {
         String text = rawText.trim();
 
-        // Verifica se o usuário tentou buscar um número negativo
-        Matcher matcherNegativo = REGEX_NUMERO_NEGATIVO.matcher(text);
-        if (matcherNegativo.matches()) {
-            telegramFacade.enviarMensagem(chatId, "❌ O número da Sala VIP não pode ser negativo.");
-            return true;
-        }
-
         Matcher matcherNumero = REGEX_NUMERO.matcher(text);
         if (matcherNumero.matches()) {
             Integer numero = Integer.parseInt(matcherNumero.group(1));
 
-            // Validação extra de segurança (embora a regex já bloqueie, é bom garantir)
+            // Validação de número inválido
             if (numero < 1) {
                 telegramFacade.enviarMensagem(
                         chatId, "❌ O número da Sala VIP deve ser maior que zero.");
-                return true;
+                return true; // Retorna true para avisar que o comando foi reconhecido
             }
 
             buscarPorNumero(chatId, numero);
