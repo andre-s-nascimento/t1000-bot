@@ -1113,6 +1113,87 @@
                     </div>
                 </div>
 
+                <!-- Sala VIP -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <i class="bi bi-film" aria-hidden="true"></i> Sala VIP (Letterboxd)
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">
+                            Gerencie a integração com a lista do Letterboxd.
+                            O <b>Sync</b> busca os filmes da lista; o <b>Reload</b> recarrega o
+                            <code>salavip-config.json</code> (URL, cron, etc.) sem reiniciar a aplicação.
+                        </p>
+                        <div class="btn-group-vertical-mobile" role="group" aria-label="Ações da Sala VIP">
+                            <form th:action="@{/admin-web/salavip/sync}" method="post" class="d-inline-block"
+                                onsubmit="return confirm('Forçar sincronização da lista do Letterboxd agora?')">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Forçar Sincronização
+                                </button>
+                            </form>
+                            <form th:action="@{/admin-web/salavip/reload}" method="post" class="d-inline-block"
+                                onsubmit="return confirm('Recarregar o salavip-config.json?')">
+                                <button type="submit" class="btn btn-secondary">
+                                    <i class="bi bi-gear" aria-hidden="true"></i> Recarregar Configurações (JSON)
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+     Upload de arquivos de configuração (.json)
+     ============================================================ -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                        Carregar Arquivo de Configuração (.json)
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">
+                            Envie um <code>.json</code> para substituir o arquivo correspondente
+                            em <code>./data/config/</code>. O serviço associado é recarregado
+                            automaticamente após o upload — <b>sem reiniciar a aplicação</b>.
+                        </p>
+
+                        <form th:action="@{/admin-web/upload-json}" method="post" enctype="multipart/form-data"
+                            class="row g-2 align-items-end" onsubmit="return confirmUploadJson(this)">
+
+                            <div class="col-12 col-md-4">
+                                <label for="uploadTarget" class="form-label small mb-0">
+                                    Alvo <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select" id="uploadTarget" name="target" required
+                                    aria-label="Qual arquivo será substituído">
+                                    <option value="">-- Selecione --</option>
+                                    <option value="easter-eggs">Easter Eggs</option>
+                                    <option value="auto-responses">Auto-Responses</option>
+                                    <option value="worldcup">Copa do Mundo</option>
+                                    <option value="salavip">Sala VIP (lista de filmes)</option>
+                                    <option value="salavip-config">Sala VIP (config)</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-md-5">
+                                <label for="uploadFile" class="form-label small mb-0">
+                                    Arquivo JSON <span class="text-danger">*</span>
+                                </label>
+                                <input type="file" class="form-control" id="uploadFile" name="file"
+                                    accept="application/json,.json" required aria-describedby="uploadFileHelp">
+                                <div id="uploadFileHelp" class="form-text small">
+                                    Máximo 2&nbsp;MB. O JSON será validado antes de ser gravado.
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-3">
+                                <button type="submit" class="btn btn-primary w-100"
+                                    aria-label="Enviar e recarregar JSON">
+                                    <i class="bi bi-upload" aria-hidden="true"></i> Enviar e Recarregar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
                 <!-- Migração -->
                 <div class="card mt-3">
                     <div class="card-header">
@@ -1167,6 +1248,10 @@
                     </a>
                     <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-info">
                         <i class="bi bi-list-ul" aria-hidden="true"></i> Regras Auto-Response
+                    </a>
+                    <a href="#admin" class="btn btn-outline-warning" data-bs-toggle="tab" role="tab"
+                        onclick="setTimeout(() => document.getElementById('uploadTarget').focus(), 150)">
+                        <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Substituir arquivo JSON
                     </a>
                 </div>
 
@@ -1466,6 +1551,26 @@
                 } finally {
                     checkbox.disabled = false;
                 }
+            };
+
+            // ================================================================
+            // UPLOAD JSON — confirmação antes de enviar
+            // ================================================================
+            window.confirmUploadJson = function (form) {
+                var target = form.uploadTarget.value;
+                var file = form.uploadFile.files[0];
+                if (!target || !file) {
+                    showToast('Selecione o alvo e o arquivo antes de enviar.', 'warning');
+                    return false;
+                }
+                if (file.size > 2 * 1024 * 1024) {
+                    showToast('Arquivo maior que 2 MB. Envie um arquivo menor.', 'danger');
+                    return false;
+                }
+                return confirm(
+                    'Substituir "' + target + '" pelo arquivo "' + file.name + '"?\n\n' +
+                    'O serviço será recarregado imediatamente após o upload.'
+                );
             };
 
             // ================================================================

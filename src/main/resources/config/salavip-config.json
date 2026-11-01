@@ -1,0 +1,5 @@
+{
+  "cron": "0 0 12 * * TUE",
+  "zone": "America/Sao_Paulo",
+  "url": "https://letterboxd.com/adambravo79/list/sala-vip-do-rapaduracast/"
+}

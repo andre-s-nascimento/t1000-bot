@@ -42,6 +42,11 @@ import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 public class CommandHandler {
 
     private static final int MAX_LOG_LENGTH = 200;
+    private static final java.util.regex.Pattern PATTERN_ANIVERSARIO =
+            java.util.regex.Pattern.compile(
+                    "^t1000\\s+(registrar\\s+|anotar\\s+)?anivers[aá]rio\\s*",
+                    java.util.regex.Pattern.CASE_INSENSITIVE
+                            | java.util.regex.Pattern.UNICODE_CASE);
 
     private static String sanitizeForLog(String input) {
         if (input == null) return "null";
@@ -63,6 +68,7 @@ public class CommandHandler {
     private final TelegramUtils utils;
     private final BotAnalyticsService botAnalyticsService;
     private final MetricsService metricsService;
+    private final SalaVipHandler salaVipHandler;
 
     @Value("${telegram.owner.id:0}")
     private long ownerId;
@@ -179,6 +185,13 @@ public class CommandHandler {
             metricsService.success("comando_aniversario");
             return true;
         }
+
+        // 🔧 CORREÇÃO S1066: if fundido
+        if ((normalized.startsWith("t1000 salavip") || normalized.startsWith("t1000 sala vip"))
+                && salaVipHandler.handle(chatId, rawText)) {
+            metricsService.success("comando_salavip");
+            return true;
+        }
         return false;
     }
 
@@ -191,6 +204,7 @@ public class CommandHandler {
 
 📌 <b>O que posso fazer?</b>
 🎬 Buscar filmes: <code>t1000 buscar &lt;nome do filme&gt;</code>
+🍿 Consultar Sala VIP: <code>t1000 salavip 119</code> ou <code>t1000 salavip tem filme &lt;nome&gt;</code>
 🎙️ Transcrever áudios: envie uma mensagem de voz ou áudio.
 
 💡 <b>Em grupos/canais:</b>
@@ -290,10 +304,8 @@ Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
     }
 
     private void handleRegistrarAniversario(Message message, long chatId, String rawText) {
-        String dataTexto =
-                rawText.replaceFirst(
-                                "(?i)^t1000\\s+(registrar\\s+|anotar\\s+)?anivers[aá]rio\\s*", "")
-                        .trim();
+        // 🔧 CORREÇÃO S5866: Usando Pattern pré-compilado com UNICODE_CASE
+        String dataTexto = PATTERN_ANIVERSARIO.matcher(rawText).replaceFirst("").trim();
 
         if (dataTexto.isEmpty()) {
             telegramFacade.enviarMensagemHtml(chatId, BotMessages.ANIVERSARIO_PEDE_DATA);
@@ -446,8 +458,11 @@ Desenvolvido com 🧠 e ☕ Java 21 + Spring Boot.
     }
 
     private LocalDate tryParseWithPattern(String cleaned) {
+        // 🔧 CORREÇÃO S5866: Adicionado Pattern.UNICODE_CASE
         Pattern pattern =
-                Pattern.compile("\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b");
+                Pattern.compile(
+                        "\\b(\\d{1,2}[/-]\\d{2}(?:[/-]\\d{4})?|\\d{4}-\\d{2}-\\d{2})\\b",
+                        Pattern.UNICODE_CASE);
         Matcher matcher = pattern.matcher(cleaned);
         if (matcher.find()) {
             String dateStr = matcher.group(1).trim();

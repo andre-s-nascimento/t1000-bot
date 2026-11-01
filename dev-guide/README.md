@@ -26,6 +26,7 @@ você precisa no momento:
 - **Vai mexer em feature flags?** → [Feature Flags](feature-flags.md).
 - **Vai mexer em arquivos de configuração?** → em breve: `config-files.md`.
 - **Vai adicionar um serviço/cliente?** → leia as [Convenções do projeto](#convenções-do-projeto).
+- **Vai mexer na Sala VIP do RapaduraCast?** → [Sala VIP](salavip.md).
 
 ---
 
@@ -35,6 +36,7 @@ você precisa no momento:
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------ |
 | [Feature Flags](feature-flags.md)           | Sistema de flags runtime, catálogo, como adicionar e usar                                        | ✅     |
 | [Arquivos de Configuração](config-files.md) | Todos os JSONs de configuração (audio, groq, refinement, admin, worldcup, tmdb-aliases, prompts) | ✅     |
+| [Sala VIP](salavip.md)                      | Arquitetura do loader de JSON, sincronização, handler do Telegram e configuração de cron         | ✅     |
 
 > **Nota:** o guia de arquivos de configuração (`config-files.md`) está planejado para o
 > próximo ciclo. Até lá, os arquivos podem ser encontrados em `src/main/resources/` e
@@ -118,6 +120,8 @@ t1000-bot/
 └── config/                         # Arquivos de config externos (não versionados)
     ├── audio-config.json
     ├── groq-config.json
+    ├── sala-vip.json               # Lista de filmes (Sala VIP)
+    ├── salavip-config.json         # Cron, Zone e URL (Sala VIP)
     ├── feature-flags.json          # gerado em runtime
     └── ...
 ```

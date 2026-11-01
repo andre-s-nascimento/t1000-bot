@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.6.3** | Branch: `main` | Último build: 2026-10-26
+> **Versão atual: v2.7.0** | Branch: `main` | Último build: 2026-11-01
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
@@ -43,6 +43,15 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 - Retorna pôster, sinopse, elenco, diretor, nota, onde assistir (streaming) e easter eggs.
 - Desambiguação automática quando há vários resultados (botões inline).
 - Cache de detalhes por ID via `CacheManager` programático (controlado pela flag `tmdb.cache.enabled`).
+
+### 🍿 Sala VIP do RapaduraCast
+
+- `t1000 salavip [numero]` (ou `sala vip`, `nº`, `n°`, `#`) — Busca a ficha do filme pelo número da Sala VIP (ex: `t1000 salavip #15`).
+- `t1000 salavip episodio [numero]` — Retorna o(s) filme(s) correspondente(s) a um episódio do RapaduraCast (ex: `t1000 salavip episodio 15`).
+- `t1000 salavip filme [termo]` — Busca filmes pelo título **ou pela sinopse (nota)**. Isso permite encontrar um filme pelo nome em português mesmo que o título original esteja em inglês (ex: buscar "Sinais" encontra o filme "Signs").
+- A resposta inclui o pôster do Letterboxd, sinopse, número da Sala VIP e o link direto.
+- Sincronização e agendamento controlados pelo `SalaVipJsonLoader` e `SalaVipConfigService` (cron e URL externalizados em `salavip-config.json`).
+- **Upload via painel admin**: A aba de configurações permite atualizar o JSON diretamente pela interface web (`/admin-web/upload-json?target=salavip`).
 
 ### 🎙️ Transcrição de áudio
 

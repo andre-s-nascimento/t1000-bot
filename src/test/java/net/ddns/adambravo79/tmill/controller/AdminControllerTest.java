@@ -55,6 +55,7 @@ import net.ddns.adambravo79.tmill.repository.ReleaseNotifiedRepository;
 import net.ddns.adambravo79.tmill.service.*;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
+import net.ddns.adambravo79.tmill.service.config.SalaVipConfigService;
 import net.ddns.adambravo79.tmill.service.config.WorldCupTeamsService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.feature.FeatureFlagState;
@@ -71,6 +72,7 @@ class AdminControllerTest {
     private MockMvc mockMvc;
 
     private static final long SHOWCASE_CHAT_ID = -1003703557250L;
+    private static final String JSON_RESOURCE = "config/sala-vip.json";
 
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
@@ -97,6 +99,8 @@ class AdminControllerTest {
     @Mock private AdminConfigService adminConfigService;
     @Mock private TmdbClient tmdbClient;
     @Mock private TelegramModerationService telegramModerationService;
+    @Mock private SalaVipService salaVipService;
+    @Mock private SalaVipConfigService salaVipConfigService;
 
     @BeforeEach
     @SneakyThrows
@@ -134,7 +138,9 @@ class AdminControllerTest {
                         telegramExceptionHandler,
                         adminConfigService,
                         tmdbClient,
-                        telegramModerationService);
+                        telegramModerationService,
+                        salaVipService,
+                        salaVipConfigService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
@@ -150,15 +156,15 @@ class AdminControllerTest {
                 .thenAnswer(
                         invocation -> {
                             String path = invocation.getArgument(0, String.class);
-
                             if (path.startsWith("classpath:")) {
                                 String fileName = path.substring("classpath:".length());
                                 ClassPathResource cpr = new ClassPathResource(fileName);
                                 return cpr.exists() ? cpr : emptyResource;
                             }
-
+                            // file:/app/config/... e file:./config/... não existem no teste
                             return emptyResource;
                         });
+
         lenient()
                 .when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled"))
                 .thenReturn(true);
@@ -759,7 +765,9 @@ class AdminControllerTest {
 
     @Test
     void getConfigFiles_quandoArquivoNaoEncontrado_deveRetornarMensagemErro() throws Exception {
-        when(resourceLoader.getResource(anyString())).thenReturn(emptyResource);
+        when(resourceLoader.getResource(anyString()))
+                .thenReturn(new ClassPathResource(JSON_RESOURCE))
+                .thenReturn(emptyResource);
 
         mockMvc.perform(get("/admin/config-files"))
                 .andExpect(status().isOk())
@@ -772,12 +780,28 @@ class AdminControllerTest {
     void getConfigFiles_quandoJsonInvalido_deveRetornarMensagemErro() throws Exception {
         reset(resourceLoader);
 
+        // Recurso "válido" que serve de fallback para os outros 2 arquivos
+        Resource otherValid = mock(Resource.class);
+        when(otherValid.exists()).thenReturn(true);
+        when(otherValid.getInputStream())
+                .thenReturn(new ByteArrayInputStream("{\"ok\":true}".getBytes()));
+
+        // Recurso inválido SÓ para easter-eggs
         Resource invalidJsonResource = mock(Resource.class);
         when(invalidJsonResource.exists()).thenReturn(true);
         when(invalidJsonResource.getInputStream())
                 .thenReturn(new ByteArrayInputStream("not-a-valid-json".getBytes()));
 
-        when(resourceLoader.getResource(anyString())).thenReturn(invalidJsonResource);
+        // Mapeia por path: cada arquivo recebe o resource certo, sem depender de ordem
+        when(resourceLoader.getResource(anyString()))
+                .thenAnswer(
+                        invocation -> {
+                            String path = invocation.getArgument(0, String.class);
+                            if (path.contains("easter-eggs")) {
+                                return invalidJsonResource;
+                            }
+                            return otherValid;
+                        });
 
         ReflectionTestUtils.setField(adminController, "objectMapper", new ObjectMapper());
 
@@ -797,9 +821,18 @@ class AdminControllerTest {
         when(fileResource.getInputStream())
                 .thenReturn(new ByteArrayInputStream("{\"ok\":true}".getBytes()));
 
-        when(resourceLoader.getResource(startsWith("classpath:"))).thenReturn(emptyResource);
-        when(resourceLoader.getResource(startsWith("file:/app/config/"))).thenReturn(fileResource);
-        when(resourceLoader.getResource(startsWith("file:./config/"))).thenReturn(emptyResource);
+        when(resourceLoader.getResource(anyString()))
+                .thenAnswer(
+                        invocation -> {
+                            String path = invocation.getArgument(0, String.class);
+                            if (path.contains("easter-eggs")) {
+                                return fileResource; // só easter-eggs devolve o JSON válido
+                            }
+                            return emptyResource;
+                        });
+
+        when(environment.getProperty(eq("easter-egg.file"), anyString()))
+                .thenReturn("file:/app/config/easter-eggs.json");
 
         when(environment.getProperty(eq("easter-egg.file"), anyString()))
                 .thenReturn("file:/app/config/easter-eggs.json");
@@ -2397,5 +2430,57 @@ class AdminControllerTest {
                 .andExpect(content().string(containsString("desmutado")));
 
         verify(telegramModerationService).unmuteUser(-100123L, 456L);
+    }
+
+    // ========================= SALA VIP =========================
+
+    @Test
+    @DisplayName("POST /admin/salavip/sync - sucesso retorna 200 com total")
+    void salavipSync_sucesso() throws Exception {
+        when(salaVipService.sincronizarLista()).thenReturn(48);
+
+        mockMvc.perform(post("/admin/salavip/sync"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("48 filmes salvos")));
+
+        verify(salaVipService).sincronizarLista();
+    }
+
+    @Test
+    @DisplayName("POST /admin/salavip/sync - falha retorna 500")
+    void salavipSync_falha() throws Exception {
+        when(salaVipService.sincronizarLista())
+                .thenThrow(new IllegalStateException("JSON inválido"));
+
+        mockMvc.perform(post("/admin/salavip/sync"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string(containsString("Falha na sincronização")));
+
+        verify(salaVipService).sincronizarLista();
+    }
+
+    @Test
+    @DisplayName("POST /admin/salavip/reload - sucesso retorna 200")
+    void salavipReload_sucesso() throws Exception {
+        doNothing().when(salaVipConfigService).reload();
+
+        mockMvc.perform(post("/admin/salavip/reload"))
+                .andExpect(status().isOk())
+                .andExpect(
+                        content().string(containsString("Configuração da Sala VIP recarregada")));
+
+        verify(salaVipConfigService).reload();
+    }
+
+    @Test
+    @DisplayName("POST /admin/salavip/reload - falha retorna 500")
+    void salavipReload_falha() throws Exception {
+        doThrow(new RuntimeException("boom")).when(salaVipConfigService).reload();
+
+        mockMvc.perform(post("/admin/salavip/reload"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string(containsString("Falha ao recarregar")));
+
+        verify(salaVipConfigService).reload();
     }
 }
