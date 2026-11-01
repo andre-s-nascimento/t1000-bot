@@ -90,6 +90,37 @@ class SalaVipServiceTest {
                 .containsExactly("Mad Max", "Mad Max 2");
     }
 
+    @Test
+    void buscarPorNumero_deveRetornarVazioQuandoNumeroForMenorQueUm() {
+        // Testa numero = 0
+        Optional<SalaVipMovie> result = salaVipService.buscarPorNumero(0);
+        assertThat(result).isEmpty();
+        verifyNoInteractions(repository); // Garante que não foi no banco
+
+        // Testa numero = -5
+        result = salaVipService.buscarPorNumero(-5);
+        assertThat(result).isEmpty();
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void buscarPorNumero_deveRetornarVazioQuandoNumeroForNull() {
+        Optional<SalaVipMovie> result = salaVipService.buscarPorNumero(null);
+        assertThat(result).isEmpty();
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void buscarPorNumero_deveChamarRepositoryQuandoNumeroValido() {
+        var movie = new SalaVipMovie(1L, 1L, 1, 1, "slug", "Title", 2020, "url", "nota");
+        when(repository.findMovieByNumberInLatestSnapshot(1)).thenReturn(Optional.of(movie));
+
+        Optional<SalaVipMovie> result = salaVipService.buscarPorNumero(1);
+
+        assertThat(result).isPresent();
+        verify(repository).findMovieByNumberInLatestSnapshot(1);
+    }
+
     // ------------------------------------------------------------------
     // helper
     // ------------------------------------------------------------------
