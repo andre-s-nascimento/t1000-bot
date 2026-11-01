@@ -26,7 +26,8 @@ public class SalaVipHandler {
 
     private static final Pattern REGEX_NUMERO =
             Pattern.compile(
-                    "t1000\\s+sala\\s*vip\\s+(?:(?:numero|n[uú]mero|n[º°]?|#)\\s*)?(\\d+)", FLAGS);
+                    "t1000\\s+sala\\s*vip\\s+(?:(?:numero|n[uú]mero|n[º°]?|#)\\s*)?(-?\\d+)",
+                    FLAGS);
 
     private static final Pattern REGEX_TITULO =
             Pattern.compile("t1000\\s+sala\\s*vip\\s+(?:tem\\s+filme|filme)\\s+(.+)", FLAGS);
@@ -40,11 +41,17 @@ public class SalaVipHandler {
     public boolean handle(long chatId, String rawText) {
         String text = rawText.trim();
 
-        // Usamos matches() que exige que toda a string bata, eliminando a necessidade de ^ e $
-        // Isso resolve o aviso S8786 (backtracking)
         Matcher matcherNumero = REGEX_NUMERO.matcher(text);
         if (matcherNumero.matches()) {
             Integer numero = Integer.parseInt(matcherNumero.group(1));
+
+            // Validação de número inválido
+            if (numero < 1) {
+                telegramFacade.enviarMensagem(
+                        chatId, "❌ O número da Sala VIP deve ser maior que zero.");
+                return true; // Retorna true para avisar que o comando foi reconhecido
+            }
+
             buscarPorNumero(chatId, numero);
             return true;
         }

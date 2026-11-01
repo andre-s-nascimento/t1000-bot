@@ -34,6 +34,9 @@ public class SalaVipService {
      * Busca um filme pelo número da Sala VIP (ex: 119) no snapshot mais recente.
      */
     public Optional<SalaVipMovie> buscarPorNumero(Integer numero) {
+        if (numero == null || numero < 1) {
+            return Optional.empty();
+        }
         return repository.findMovieByNumberInLatestSnapshot(numero);
     }
 
