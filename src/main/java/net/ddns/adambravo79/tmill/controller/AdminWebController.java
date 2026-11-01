@@ -188,10 +188,10 @@ public class AdminWebController {
     @Value("${migration.sqlite.path:./data/t1000.db}")
     private String migrationSqlitePath;
 
-    @Value("${salavip.data.file:file:/app/config/sala-vip.json}")
+    @Value("${salavip.data.file:file:./config/sala-vip.json}")
     private String defaultSalavipPath;
 
-    @Value("${salavip.config.file:file:/app/config/salavip-config.json}")
+    @Value("${salavip.config.file:file:./config/salavip-config.json}")
     private String defaultSalavipConfigPath;
 
     @PostMapping("/mute")

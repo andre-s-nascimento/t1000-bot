@@ -142,16 +142,17 @@ public class SalaVipRepository {
     }
 
     /**
-     * Busca filmes por trecho do título no último snapshot.
+     * Busca filmes por trecho do título OU da nota (sinopse) no último snapshot.
      */
     public List<SalaVipMovie> findMoviesByTitleInLatestSnapshot(String titleFragment) {
         String sql =
                 """
                 SELECT m.* FROM sala_vip_movie m
                 JOIN sala_vip_snapshot s ON m.snapshot_id = s.id
-                WHERE lower(m.title) LIKE lower(?)
+                WHERE (lower(m.title) LIKE lower(?) OR lower(m.note_text) LIKE lower(?))
                   AND s.id = (SELECT id FROM sala_vip_snapshot ORDER BY captured_at DESC LIMIT 1)
                 """;
-        return jdbcTemplate.query(sql, MOVIE_ROW_MAPPER, "%" + titleFragment + "%");
+        String searchPattern = "%" + titleFragment + "%";
+        return jdbcTemplate.query(sql, MOVIE_ROW_MAPPER, searchPattern, searchPattern);
     }
 }

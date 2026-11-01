@@ -144,14 +144,23 @@ public class SalaVipHandler {
 
         if (movies.size() == 1) {
             SalaVipMovie movie = movies.get(0);
+            // Verifica se o match foi pelo título ou pela nota
+            boolean matchNaNota =
+                    !movie.title().toLowerCase().contains(termo.toLowerCase())
+                            && movie.noteText() != null
+                            && movie.noteText().toLowerCase().contains(termo.toLowerCase());
+
+            String aviso = matchNaNota ? "\n<i>(Encontrado pela sinopse/nota)</i>" : "";
+
             String resposta =
                     String.format(
                             "✅ Sim! O filme <b>%s</b> (%d) está na Sala VIP sob o número"
-                                    + " <b>#%s</b>.\n"
+                                    + " <b>#%s</b>.%s\n"
                                     + "🔗 <a href=\"%s\">Link no Letterboxd</a>",
                             utils.escapeHtml(movie.title()),
                             movie.year(),
                             movie.salaVipNumber() != null ? movie.salaVipNumber() : "?",
+                            aviso,
                             movie.letterboxdUrl());
             telegramFacade.enviarMensagemHtml(chatId, resposta);
         } else {
