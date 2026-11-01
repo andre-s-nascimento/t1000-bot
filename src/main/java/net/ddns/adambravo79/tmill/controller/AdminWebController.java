@@ -44,8 +44,6 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.ddns.adambravo79.tmill.client.AzureTtsClient;
@@ -76,6 +74,7 @@ import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -1365,7 +1364,7 @@ public class AdminWebController {
                                 file.name(),
                                 file.defaultLocation());
                 result.put(file.name(), content);
-            } catch (JsonProcessingException e) {
+            } catch (JacksonException e) {
                 log.error("Erro ao parsear JSON do arquivo: {}", file.name(), e);
                 result.put(file.name(), "❌ Erro ao parsear JSON");
             } catch (IOException e) {
@@ -1466,7 +1465,7 @@ public class AdminWebController {
                     SUCCESS,
                     "✅ '" + target + "' carregado e recarregado (" + bytes.length + " bytes).");
 
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.warn("JSON inválido recebido para '{}': {}", target, e.getOriginalMessage());
             redirectAttrs.addFlashAttribute(ERROR, "❌ JSON inválido: " + e.getOriginalMessage());
         } catch (MaxUploadSizeExceededException e) {

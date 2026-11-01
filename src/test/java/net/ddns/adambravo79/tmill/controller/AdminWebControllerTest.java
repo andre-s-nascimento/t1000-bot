@@ -66,6 +66,7 @@ import net.ddns.adambravo79.tmill.service.feature.FeatureFlagAdminService;
 import net.ddns.adambravo79.tmill.service.prompt.PromptRegistryService;
 import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.exception.TelegramExceptionHandler;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
@@ -1614,5 +1615,147 @@ class AdminWebControllerTest {
 
         assertThat(view).isEqualTo("redirect:/admin-web");
         assertThat(attrs.getFlashAttributes().get("error").toString()).contains("Falha");
+    }
+
+    @Test
+    @SneakyThrows
+    @DisplayName("uploadJson: arquivo vazio → flash error")
+    void uploadJson_arquivoVazio() {
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", new byte[0]);
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "salavip", attrs);
+
+        assertThat(attrs.getFlashAttributes().get("error").toString()).contains("Nenhum arquivo");
+    }
+
+    @Test
+    @SneakyThrows
+    @DisplayName("uploadJson: arquivo > 2MB → flash error")
+    void uploadJson_arquivoGrande() {
+        byte[] bytes = new byte[2 * 1024 * 1024 + 1];
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", bytes);
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "salavip", attrs);
+
+        assertThat(attrs.getFlashAttributes().get("error").toString()).contains("2 MB");
+    }
+
+    @Test
+    @DisplayName("uploadJson: alvo inválido → flash error")
+    void uploadJson_alvoInvalido() {
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "{}".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "../../etc/passwd", attrs);
+
+        assertThat(attrs.getFlashAttributes().get("error").toString()).contains("inválido");
+    }
+
+    @Test
+    @DisplayName("uploadJson: JSON inválido → flash error")
+    void uploadJson_jsonInvalido() throws Exception {
+        when(objectMapper.readTree(any(byte[].class)))
+                .thenThrow(new JacksonException("inválido") {}); // ← classe abstrata
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "{invalid".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "salavip", attrs);
+
+        assertThat(attrs.getFlashAttributes().get("error").toString()).contains("JSON inválido");
+    }
+
+    @Test
+    @DisplayName("uploadJson: sucesso no salavip → grava e recarrega")
+    void uploadJson_sucesso_salavip(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+            throws Exception {
+        java.nio.file.Path destino = tmp.resolve("sala-vip.json");
+        when(environment.getProperty("salavip.data.file")).thenReturn("file:" + destino);
+        when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
+
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile(
+                        "file", "{\"filmes\":[]}".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "salavip", attrs);
+
+        assertThat(java.nio.file.Files.exists(destino)).isTrue();
+        verify(salaVipService).sincronizarLista();
+        assertThat(attrs.getFlashAttributes().get("success")).isNotNull();
+    }
+
+    @Test
+    @DisplayName("uploadJson: salavip-config → recarrega config")
+    void uploadJson_sucesso_salavipConfig(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+            throws Exception {
+        java.nio.file.Path destino = tmp.resolve("salavip-config.json");
+        when(environment.getProperty("salavip.config.file")).thenReturn("file:" + destino);
+        when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
+
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "{}".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "salavip-config", attrs);
+
+        assertThat(java.nio.file.Files.exists(destino)).isTrue();
+        verify(salaVipConfigService).reload();
+    }
+
+    @Test
+    @DisplayName("uploadJson: easter-eggs → recarrega")
+    void uploadJson_sucesso_easterEggs(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+            throws Exception {
+        java.nio.file.Path destino = tmp.resolve("easter-eggs.json");
+        when(environment.getProperty("easter-egg.file")).thenReturn("file:" + destino);
+        when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
+
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "{}".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "easter-eggs", attrs);
+
+        verify(easterEggService).reload();
+    }
+
+    @Test
+    @DisplayName("uploadJson: auto-responses → recarrega")
+    void uploadJson_sucesso_autoResponses(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+            throws Exception {
+        java.nio.file.Path destino = tmp.resolve("auto-responses.json");
+        when(environment.getProperty("auto.response.file")).thenReturn("file:" + destino);
+        when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
+
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "{}".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "auto-responses", attrs);
+
+        verify(autoResponseService).reload();
+    }
+
+    @Test
+    @DisplayName("uploadJson: worldcup → recarrega")
+    void uploadJson_sucesso_worldcup(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+            throws Exception {
+        java.nio.file.Path destino = tmp.resolve("worldcup2026.json");
+        when(environment.getProperty("worldcup.data.file")).thenReturn("file:" + destino);
+        when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
+
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "{}".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "worldcup", attrs);
+
+        verify(staticWorldCupService).reload();
     }
 }

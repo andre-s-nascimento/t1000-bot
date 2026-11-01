@@ -163,6 +163,28 @@ class SalaVipRepositoryTest { // REMOVA o "extends BaseIntegrationTest"
         assertThat(results).isEmpty(); // "Inception" estava no snapshot antigo, não no mais recente
     }
 
+    @Test
+    void deveBuscarFilmePorNotaNoUltimoSnapshot() {
+        // Arrange
+        SalaVipMovie movie =
+                new SalaVipMovie(
+                        118,
+                        117,
+                        "signs",
+                        "Signs",
+                        2002,
+                        "url",
+                        "Um fazendeiro encontra sinais misteriosos em sua plantação.");
+        repository.saveSnapshot(new SalaVipSnapshot(OffsetDateTime.now(), 1, List.of(movie)));
+
+        // Act — busca por palavra que só existe na nota
+        List<SalaVipMovie> results = repository.findMoviesByTitleInLatestSnapshot("sinais");
+
+        // Assert
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).title()).isEqualTo("Signs");
+    }
+
     private static SalaVipMovie movie(
             int number, int episode, String slug, String title, int year, String url, String note) {
         return new SalaVipMovie(number, episode, slug, title, year, url, note);

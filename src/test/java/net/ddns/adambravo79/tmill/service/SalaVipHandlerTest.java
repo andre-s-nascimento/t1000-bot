@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -266,9 +267,10 @@ class SalaVipHandlerTest {
     }
 
     @Test
+    @DisplayName("handleTituloEncontradoNaNota: adiciona aviso de que achou pela sinopse")
     void handleTituloEncontradoNaNota() {
         escapeHtmlIdentidade();
-        // Filme cujo título NÃO contém "sinais", mas a nota SIM
+        // O título NÃO contém "sinais", mas a nota SIM
         var movie =
                 new SalaVipMovie(
                         118,
@@ -284,6 +286,9 @@ class SalaVipHandlerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
-        assertThat(captor.getValue()).contains("Signs").contains("#118");
+        assertThat(captor.getValue())
+                .contains("Signs")
+                .contains("#118")
+                .contains("Encontrado pela sinopse/nota");
     }
 }
