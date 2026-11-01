@@ -264,4 +264,26 @@ class SalaVipHandlerTest {
 
         verify(salaVipService, times(3)).buscarPorEpisodio(15);
     }
+
+    @Test
+    void handleTituloEncontradoNaNota() {
+        escapeHtmlIdentidade();
+        // Filme cujo título NÃO contém "sinais", mas a nota SIM
+        var movie =
+                new SalaVipMovie(
+                        118,
+                        117,
+                        "signs",
+                        "Signs",
+                        2002,
+                        "https://letterboxd.com/film/signs/",
+                        "Um fazendeiro encontra sinais misteriosos em sua plantação.");
+        when(salaVipService.buscarPorTitulo("sinais")).thenReturn(List.of(movie));
+
+        assertThat(handler.handle(1L, "t1000 salavip filme sinais")).isTrue();
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
+        assertThat(captor.getValue()).contains("Signs").contains("#118");
+    }
 }

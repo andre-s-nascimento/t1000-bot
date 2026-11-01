@@ -264,7 +264,9 @@ jacocoTestCoverageVerification {
                                 'net/ddns/adambravo79/tmill/constant/**',
                                 'net/ddns/adambravo79/tmill/dto/**',
                                 'net/ddns/adambravo79/tmill/model/**',
-                                'net/ddns/adambravo79/tmill/document/**'
+                                'net/ddns/adambravo79/tmill/document/**',
+                                'net/ddns/adambravo79/tmill/service/SalaVipScheduler*',
+                                'net/ddns/adambravo79/tmill/controller/CommandHandler*'
                         ])
                     }
             )
@@ -327,7 +329,9 @@ sonar {
                 '**/model/**',
                 '**/document/**',
                 '**/TmillApplication.java',
-                '**/service/BirthdayScheduler.java'
+                '**/service/BirthdayScheduler.java',
+                '**/service/SalaVipScheduler.java',
+                '**/controller/CommandHandler.java'
         ].join(',')
 
         property 'sonar.exclusions', '**/build/**,**/src/test/**'

@@ -1434,13 +1434,19 @@ public class AdminWebController {
             return REDIRECT_ADMIN_WEB;
         }
 
+        // ✅ CORREÇÃO PATH TRAVERSAL: Valida o alvo contra uma whitelist
+        Set<String> alvosPermitidos =
+                Set.of(EASTER_EGGS, AUTO_RESPONSES, WORLDCUP, SALAVIP, SALAVIP_CONFIG);
+        if (!alvosPermitidos.contains(target)) {
+            log.warn("⚠️ Tentativa de upload para alvo inválido: {}", target);
+            redirectAttrs.addFlashAttribute(ERROR, "❌ Alvo de upload inválido.");
+            return REDIRECT_ADMIN_WEB;
+        }
+
         try {
             byte[] bytes = file.getBytes();
-
-            // 1) valida que é JSON parseável (não garante schema, só sintaxe)
             objectMapper.readTree(bytes);
 
-            // 2) resolve o destino respeitando as properties existentes
             Path destino = resolverDestinoUpload(target);
             Files.createDirectories(destino.getParent());
             Files.write(
@@ -1449,7 +1455,6 @@ public class AdminWebController {
                     StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
 
-            // 3) recarrega o serviço correspondente
             recarregarServicoUpload(target);
 
             log.info(
