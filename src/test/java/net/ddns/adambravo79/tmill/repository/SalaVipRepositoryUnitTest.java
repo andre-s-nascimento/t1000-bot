@@ -67,4 +67,11 @@ class SalaVipRepositoryUnitTest {
 
         assertThat(repository.findMoviesByEpisodeInLatestSnapshot(15)).isEmpty();
     }
+
+    @Test
+    void findMoviesByEpisodeInLatestSnapshot_deveBuscarPorEpisodio() {
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq(16))).thenReturn(List.of());
+        repository.findMoviesByEpisodeInLatestSnapshot(16);
+        verify(jdbcTemplate).query(anyString(), any(RowMapper.class), eq(16));
+    }
 }

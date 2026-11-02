@@ -74,9 +74,9 @@ class SalaVipHandlerTest {
     void handleAceitaVariacoesDeNumero() {
         escapeHtmlIdentidade();
         var movie = movie(15, 15, "mad-max", "Mad Max", 1979);
-        when(salaVipService.buscarPorNumero(15)).thenReturn(Optional.of(movie));
+        // O Handler agora usa buscarPrimeiroPorEpisodio
+        when(salaVipService.buscarPrimeiroPorEpisodio(15)).thenReturn(Optional.of(movie));
 
-        // "salavip", "sala vip", "numero", "número", "nº", "n°", "n", "#"
         assertThat(handler.handle(1L, "t1000 salavip 15")).isTrue();
         assertThat(handler.handle(1L, "t1000 sala vip 15")).isTrue();
         assertThat(handler.handle(1L, "t1000 salavip numero 15")).isTrue();
@@ -87,18 +87,34 @@ class SalaVipHandlerTest {
         assertThat(handler.handle(1L, "t1000 salavip #15")).isTrue();
         assertThat(handler.handle(1L, "T1000 SALA VIP #15")).isTrue();
 
-        verify(salaVipService, times(9)).buscarPorNumero(15);
+        verify(salaVipService, times(9)).buscarPrimeiroPorEpisodio(15);
+    }
+
+    @Test
+    @DisplayName("handleNumeroZero: retorna erro e não chama o service")
+    void handleNumeroZero() {
+        assertThat(handler.handle(1L, "t1000 salavip 0")).isTrue();
+        verify(telegramFacade).enviarMensagem(eq(1L), contains("maior que zero"));
+        verifyNoInteractions(salaVipService);
+    }
+
+    @Test
+    @DisplayName("handleNumeroNegativo: retorna erro e não chama o service")
+    void handleNumeroNegativo() {
+        assertThat(handler.handle(1L, "t1000 salavip -1")).isTrue();
+        verify(telegramFacade).enviarMensagem(eq(1L), contains("maior que zero"));
+        verifyNoInteractions(salaVipService);
     }
 
     // ------------------------------------------------------------------
-    // buscarPorNumero
+    // buscarPorEpisodio (antigo buscarPorNumero no Handler)
     // ------------------------------------------------------------------
 
     @Test
     void handleNumeroEncontrado() {
         escapeHtmlIdentidade();
         var movie = movie(15, 15, "mad-max", "Mad Max", 1979);
-        when(salaVipService.buscarPorNumero(15)).thenReturn(Optional.of(movie));
+        when(salaVipService.buscarPrimeiroPorEpisodio(15)).thenReturn(Optional.of(movie));
 
         assertThat(handler.handle(1L, "t1000 salavip numero 15")).isTrue();
 
@@ -106,7 +122,7 @@ class SalaVipHandlerTest {
         verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
         String msg = captor.getValue();
         assertThat(msg)
-                .contains("Sala VIP #15") // template atual
+                .contains("episódio número <b>15</b>")
                 .contains("Mad Max")
                 .contains("(1979)")
                 .contains("https://letterboxd.com/film/mad-max/");
@@ -114,12 +130,40 @@ class SalaVipHandlerTest {
 
     @Test
     void handleNumeroNaoEncontrado() {
-        when(salaVipService.buscarPorNumero(99)).thenReturn(Optional.empty());
+        when(salaVipService.buscarPrimeiroPorEpisodio(99)).thenReturn(Optional.empty());
 
         assertThat(handler.handle(1L, "t1000 salavip numero 99")).isTrue();
 
         verify(telegramFacade).enviarMensagem(eq(1L), contains("#99"));
         verify(telegramFacade, never()).enviarMensagemHtml(eq(1L), anyString());
+    }
+
+    @Test
+    @DisplayName("handleNumeroComoEpisodio: busca pelo episódio e mostra a nota")
+    void handleNumeroComoEpisodio() {
+        escapeHtmlIdentidade();
+        var movie =
+                new SalaVipMovie(
+                        17,
+                        16,
+                        "hunger-games",
+                        "The Hunger Games",
+                        2023,
+                        "https://letterboxd.com/film/hunger-games/",
+                        "RapaduraCast [Sala VIP] 16 - Excelente!");
+
+        when(salaVipService.buscarPrimeiroPorEpisodio(16)).thenReturn(Optional.of(movie));
+
+        assertThat(handler.handle(1L, "t1000 salavip 16")).isTrue();
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
+
+        String msg = captor.getValue();
+        assertThat(msg)
+                .contains("é o episódio número <b>16</b>")
+                .contains("The Hunger Games")
+                .contains("RapaduraCast [Sala VIP] 16 - Excelente!");
     }
 
     // ------------------------------------------------------------------
@@ -208,8 +252,33 @@ class SalaVipHandlerTest {
         assertThat(msg).contains("mais de um filme").doesNotContain("mostrando os 5 primeiros");
     }
 
+    @Test
+    @DisplayName("handleTituloEncontradoNaNota: adiciona aviso de que achou pela sinopse")
+    void handleTituloEncontradoNaNota() {
+        escapeHtmlIdentidade();
+        var movie =
+                new SalaVipMovie(
+                        118,
+                        117,
+                        "signs",
+                        "Signs",
+                        2002,
+                        "https://letterboxd.com/film/signs/",
+                        "Um fazendeiro encontra sinais misteriosos em sua plantação.");
+        when(salaVipService.buscarPorTitulo("sinais")).thenReturn(List.of(movie));
+
+        assertThat(handler.handle(1L, "t1000 salavip filme sinais")).isTrue();
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
+        assertThat(captor.getValue())
+                .contains("Signs")
+                .contains("#118")
+                .contains("Encontrado pela sinopse/nota");
+    }
+
     // ------------------------------------------------------------------
-    // buscarPorEpisodio
+    // buscarPorEpisodio (comando explícito "episodio")
     // ------------------------------------------------------------------
 
     @Test
@@ -264,61 +333,5 @@ class SalaVipHandlerTest {
         assertThat(handler.handle(1L, "t1000 salavip ep 15")).isTrue();
 
         verify(salaVipService, times(3)).buscarPorEpisodio(15);
-    }
-
-    @Test
-    @DisplayName("handleTituloEncontradoNaNota: adiciona aviso de que achou pela sinopse")
-    void handleTituloEncontradoNaNota() {
-        escapeHtmlIdentidade();
-        // O título NÃO contém "sinais", mas a nota SIM
-        var movie =
-                new SalaVipMovie(
-                        118,
-                        117,
-                        "signs",
-                        "Signs",
-                        2002,
-                        "https://letterboxd.com/film/signs/",
-                        "Um fazendeiro encontra sinais misteriosos em sua plantação.");
-        when(salaVipService.buscarPorTitulo("sinais")).thenReturn(List.of(movie));
-
-        assertThat(handler.handle(1L, "t1000 salavip filme sinais")).isTrue();
-
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
-        assertThat(captor.getValue())
-                .contains("Signs")
-                .contains("#118")
-                .contains("Encontrado pela sinopse/nota");
-    }
-
-    @Test
-    @DisplayName("handleNumeroNegativo: retorna erro e não chama o service")
-    void handleNumeroNegativo() {
-        // Testa "t1000 salavip -1"
-        assertThat(handler.handle(1L, "t1000 salavip -1")).isTrue();
-
-        verify(telegramFacade).enviarMensagem(eq(1L), contains("deve ser maior que zero"));
-        verifyNoInteractions(salaVipService);
-    }
-
-    @Test
-    @DisplayName("handleNumeroZero: retorna erro e não chama o service")
-    void handleNumeroZero() {
-        // Testa "t1000 salavip 0"
-        assertThat(handler.handle(1L, "t1000 salavip 0")).isTrue();
-
-        verify(telegramFacade).enviarMensagem(eq(1L), contains("deve ser maior que zero"));
-        verifyNoInteractions(salaVipService);
-    }
-
-    // Teste adicional para cobrir o caso onde o Service retorna vazio para um número válido (mas
-    // que não existe)
-    @Test
-    @DisplayName("handleNumeroNaoEncontrado: retorna mensagem de não encontrado")
-    void handleNumeroNaoEncontrado_01() {
-        when(salaVipService.buscarPorNumero(99)).thenReturn(Optional.empty());
-        assertThat(handler.handle(1L, "t1000 salavip 99")).isTrue();
-        verify(telegramFacade).enviarMensagem(eq(1L), contains("#99"));
     }
 }

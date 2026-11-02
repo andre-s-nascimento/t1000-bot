@@ -45,11 +45,10 @@ public class SalaVipHandler {
         if (matcherNumero.matches()) {
             Integer numero = Integer.parseInt(matcherNumero.group(1));
 
-            // Validação de número inválido
             if (numero < 1) {
                 telegramFacade.enviarMensagem(
-                        chatId, "❌ O número da Sala VIP deve ser maior que zero.");
-                return true; // Retorna true para avisar que o comando foi reconhecido
+                        chatId, "❌ O número do episódio da Sala VIP deve ser maior que zero.");
+                return true;
             }
 
             buscarPorNumero(chatId, numero);
@@ -74,23 +73,30 @@ public class SalaVipHandler {
 
     @SuppressWarnings("java:S3457") //
     private void buscarPorNumero(long chatId, Integer numero) {
-        Optional<SalaVipMovie> movieOpt = salaVipService.buscarPorNumero(numero);
+        Optional<SalaVipMovie> movieOpt = salaVipService.buscarPrimeiroPorEpisodio(numero);
 
         if (movieOpt.isPresent()) {
             SalaVipMovie movie = movieOpt.get();
+            // Formata a nota (se existir)
+            String notaStr =
+                    (movie.noteText() != null && !movie.noteText().isBlank())
+                            ? "\n\n" + utils.escapeHtml(movie.noteText())
+                            : "";
             String resposta =
                     String.format(
-                            "✅ Sim, a <b>Sala VIP #%d</b> é o filme <b>%s</b> (%d).\n"
+                            "✅ Sim! O filme <b>%s</b> (%d) é o episódio número <b>%d</b> do Sala"
+                                    + " VIP.%s\n"
                                     + "🔗 <a href=\"%s\">Link no Letterboxd</a>",
-                            numero,
                             utils.escapeHtml(movie.title()),
                             movie.year(),
+                            movie.salaVipEpisode(), // Retorna o episódio na resposta
+                            notaStr,
                             movie.letterboxdUrl());
             telegramFacade.enviarMensagemHtml(chatId, resposta);
         } else {
             telegramFacade.enviarMensagem(
                     chatId,
-                    "❌ Não encontrei nenhum filme com a Sala VIP #" + numero + " na lista atual.");
+                    "❌ Não encontrei nenhum filme no episódio #" + numero + " da Sala VIP.");
         }
     }
 

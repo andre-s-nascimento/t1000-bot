@@ -121,6 +121,32 @@ class SalaVipServiceTest {
         verify(repository).findMovieByNumberInLatestSnapshot(1);
     }
 
+    @Test
+    void buscarPrimeiroPorEpisodio_deveRetornarVazioSeEpisodioInvalido() {
+        assertThat(salaVipService.buscarPrimeiroPorEpisodio(null)).isEmpty();
+        assertThat(salaVipService.buscarPrimeiroPorEpisodio(0)).isEmpty();
+        assertThat(salaVipService.buscarPrimeiroPorEpisodio(-5)).isEmpty();
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void buscarPrimeiroPorEpisodio_deveRetornarPrimeiroFilme() {
+        var movie = new SalaVipMovie(1L, 1L, 17, 16, "slug", "Title", 2020, "url", "nota");
+        when(repository.findMoviesByEpisodeInLatestSnapshot(16)).thenReturn(List.of(movie));
+
+        Optional<SalaVipMovie> result = salaVipService.buscarPrimeiroPorEpisodio(16);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().salaVipEpisode()).isEqualTo(16);
+        verify(repository).findMoviesByEpisodeInLatestSnapshot(16);
+    }
+
+    @Test
+    void buscarPorEpisodio_deveRetornarListaVaziaSeInvalido() {
+        assertThat(salaVipService.buscarPorEpisodio(null)).isEmpty();
+        assertThat(salaVipService.buscarPorEpisodio(0)).isEmpty();
+    }
+
     // ------------------------------------------------------------------
     // helper
     // ------------------------------------------------------------------
