@@ -181,22 +181,6 @@ class SalaVipHandlerTest {
     }
 
     @Test
-    void handleTituloComUmResultado() {
-        escapeHtmlIdentidade();
-        var movie = movie(1, 1, "killers-of-the-flower-moon", "Killers of the Flower Moon", 2023);
-        when(salaVipService.buscarPorTitulo("killers")).thenReturn(List.of(movie));
-
-        assertThat(handler.handle(1L, "t1000 salavip tem filme killers")).isTrue();
-
-        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
-        verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
-        assertThat(captor.getValue())
-                .contains("Killers of the Flower Moon")
-                .contains("(2023)")
-                .contains("Sala VIP sob o número <b>#1</b>");
-    }
-
-    @Test
     void handleTituloComUmResultadoSemNumero() {
         escapeHtmlIdentidade();
         var movie = movieSemNumero("sem-numero", "Filme Sem Número", 2020);
@@ -206,7 +190,15 @@ class SalaVipHandlerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
-        assertThat(captor.getValue()).contains("Sala VIP sob o número <b>#?</b>");
+
+        // Sem barras invertidas nos colchetes
+        assertThat(captor.getValue())
+                .contains(
+                        "✅ Sim! O filme <b>Filme Sem Número</b> (2020) está no episódio <b>#1</b>"
+                                + " da Sala VIP.")
+                .contains(
+                        "🔗 <a href=\"https://letterboxd.com/film/sem-numero/\">Link no"
+                                + " Letterboxd</a>");
     }
 
     @Test
@@ -227,15 +219,19 @@ class SalaVipHandlerTest {
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
         String msg = captor.getValue();
+
         assertThat(msg)
                 .contains("mais de um filme")
                 .contains("Alpha")
+                .contains("Episódio #1") // 👈 Mudou aqui
                 .contains("Beta")
+                .contains("Episódio #2") // 👈 Mudou aqui
                 .contains("Gamma")
                 .contains("Delta")
                 .contains("Epsilon")
                 .doesNotContain("Zeta")
-                .contains("mostrando os 5 primeiros resultados");
+                .contains("mostrando os 5 primeiros resultados")
+                .contains("Refine sua busca"); // 👈 Nova dica
     }
 
     @Test
@@ -249,7 +245,27 @@ class SalaVipHandlerTest {
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
         String msg = captor.getValue();
-        assertThat(msg).contains("mais de um filme").doesNotContain("mostrando os 5 primeiros");
+        assertThat(msg)
+                .contains("mais de um filme")
+                .contains("Episódio #1") // 👈 Mudou aqui
+                .contains("Episódio #2") // 👈 Mudou aqui
+                .doesNotContain("mostrando os 5 primeiros");
+    }
+
+    @Test
+    void handleTituloComUmResultado() {
+        escapeHtmlIdentidade();
+        var movie = movie(1, 1, "killers-of-the-flower-moon", "Killers of the Flower Moon", 2023);
+        when(salaVipService.buscarPorTitulo("killers")).thenReturn(List.of(movie));
+
+        assertThat(handler.handle(1L, "t1000 salavip tem filme killers")).isTrue();
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
+        assertThat(captor.getValue())
+                .contains("Killers of the Flower Moon")
+                .contains("(2023)")
+                .contains("está no episódio <b>#1</b> da Sala VIP"); // 👈 Mudou aqui
     }
 
     @Test
@@ -258,8 +274,8 @@ class SalaVipHandlerTest {
         escapeHtmlIdentidade();
         var movie =
                 new SalaVipMovie(
-                        118,
-                        117,
+                        118, // numero (Sala VIP)
+                        117, // episodio (é o que o handler vai exibir agora)
                         "signs",
                         "Signs",
                         2002,
@@ -271,9 +287,11 @@ class SalaVipHandlerTest {
 
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
         verify(telegramFacade).enviarMensagemHtml(eq(1L), captor.capture());
+
+        // A resposta agora deve conter o EPISÓDIO (#117)
         assertThat(captor.getValue())
                 .contains("Signs")
-                .contains("#118")
+                .contains("#117") // 👈 Alterado de #118 para #117
                 .contains("Encontrado pela sinopse/nota");
     }
 
