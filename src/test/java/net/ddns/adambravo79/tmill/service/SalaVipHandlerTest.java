@@ -64,9 +64,10 @@ class SalaVipHandlerTest {
 
     @Test
     void handleRetornaFalseQuandoNaoReconhece() {
+        // Comandos que não são da Sala VIP continuam retornando false
         assertThat(handler.handle(1L, "t1000 bom dia")).isFalse();
         assertThat(handler.handle(1L, "salavip 15")).isFalse();
-        assertThat(handler.handle(1L, "t1000 salavip")).isFalse();
+
         verifyNoInteractions(salaVipService, telegramFacade, utils);
     }
 
@@ -351,5 +352,24 @@ class SalaVipHandlerTest {
         assertThat(handler.handle(1L, "t1000 salavip ep 15")).isTrue();
 
         verify(salaVipService, times(3)).buscarPorEpisodio(15);
+    }
+
+    @Test
+    @DisplayName("handleAjudaSalaVip: comando inválido retorna guia de ajuda")
+    void handleAjudaSalaVip() {
+        // Agora, comandos mal formatados da Sala VIP retornam true e mostram a ajuda
+        assertThat(handler.handle(1L, "t1000 salavip")).isTrue();
+        assertThat(handler.handle(1L, "t1000 salavip qualquer_coisa_que_nao_bate")).isTrue();
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade, times(2)).enviarMensagemHtml(eq(1L), captor.capture());
+
+        String msg = captor.getAllValues().get(0);
+        assertThat(msg)
+                .contains("Como pesquisar na Sala VIP")
+                .contains("t1000 salavip &lt;numero_do_episodio&gt;")
+                .contains("t1000 salavip filme &lt;termo&gt;");
+
+        verifyNoInteractions(salaVipService);
     }
 }
