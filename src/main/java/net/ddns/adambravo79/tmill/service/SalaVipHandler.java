@@ -68,6 +68,23 @@ public class SalaVipHandler {
             return true;
         }
 
+        if (text.toLowerCase().startsWith("t1000 salavip")) {
+            String ajuda =
+                    """
+                    🤔 <b>Como pesquisar na Sala VIP do RapaduraCast:</b>
+
+                    🎬 <b>Pelo Episódio:</b>
+                    <code>t1000 salavip &lt;numero_do_episodio&gt;</code>
+                    (Ex: <code>t1000 salavip 16</code>)
+
+                    🔎 <b>Pelo Título ou Sinopse:</b>
+                    <code>t1000 salavip filme &lt;termo&gt;</code>
+                    (Ex: <code>t1000 salavip filme vingadores</code>)
+                    """;
+            telegramFacade.enviarMensagemHtml(chatId, ajuda);
+            return true; // Retorna true para indicar que tratamos a mensagem
+        }
+
         return false;
     }
 
