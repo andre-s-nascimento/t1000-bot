@@ -48,10 +48,25 @@ public class SalaVipService {
     }
 
     /**
+     * Busca o primeiro filme de um episódio específico.
+     * Útil para quando o comando do bot espera apenas um filme.
+     */
+    public Optional<SalaVipMovie> buscarPrimeiroPorEpisodio(Integer episodio) {
+        if (episodio == null || episodio < 1) {
+            return Optional.empty();
+        }
+        List<SalaVipMovie> filmes = repository.findMoviesByEpisodeInLatestSnapshot(episodio);
+        return filmes.stream().findFirst();
+    }
+
+    /**
      * Busca filmes pelo episódio do RapaduraCast.
      * Pode retornar 2+ filmes (ex: Mad Max 1 e 2 no episódio 15).
      */
     public List<SalaVipMovie> buscarPorEpisodio(Integer episodio) {
+        if (episodio == null || episodio < 1) {
+            return List.of();
+        }
         return repository.findMoviesByEpisodeInLatestSnapshot(episodio);
     }
 }
