@@ -162,40 +162,49 @@ public class SalaVipHandler {
                     !movie.title().toLowerCase().contains(termo.toLowerCase())
                             && movie.noteText() != null
                             && movie.noteText().toLowerCase().contains(termo.toLowerCase());
-
             String aviso = matchNaNota ? "\n<i>(Encontrado pela sinopse/nota)</i>" : "";
 
             String resposta =
                     String.format(
-                            "✅ Sim! O filme <b>%s</b> (%d) está na Sala VIP sob o número"
-                                    + " <b>#%s</b>.%s\n"
+                            "✅ Sim! O filme <b>%s</b> (%d) está no episódio <b>#%d</b> da Sala"
+                                    + " VIP.%s\n"
                                     + "🔗 <a href=\"%s\">Link no Letterboxd</a>",
                             utils.escapeHtml(movie.title()),
                             movie.year(),
-                            movie.salaVipNumber() != null ? movie.salaVipNumber() : "?",
+                            movie.salaVipEpisode() != null
+                                    ? movie.salaVipEpisode()
+                                    : "?", // Usa o EPISÓDIO
                             aviso,
                             movie.letterboxdUrl());
             telegramFacade.enviarMensagemHtml(chatId, resposta);
         } else {
             StringBuilder sb =
                     new StringBuilder(
-                            "🤔 Encontrei mais de um filme com esse nome na Sala VIP:\n\n");
+                            "🤔 Encontrei mais de um filme com esse nome no Sala VIP:\n\n");
             movies.stream()
                     .limit(5)
                     .forEach(
                             m -> {
                                 sb.append(
                                         String.format(
-                                                "• <b>%s</b> (%d) — Sala VIP #%s\n",
+                                                "• <b>%s</b> (%d) — Episódio #%s\n", // Usa o
+                                                // EPISÓDIO
                                                 utils.escapeHtml(m.title()),
                                                 m.year(),
-                                                m.salaVipNumber() != null
-                                                        ? m.salaVipNumber()
+                                                m.salaVipEpisode() != null
+                                                        ? m.salaVipEpisode()
                                                         : "?"));
                             });
             if (movies.size() > 5) {
                 sb.append("\n<i>(mostrando os 5 primeiros resultados)</i>");
             }
+
+            // Dica para o usuário
+            sb.append(
+                    "\n\n"
+                            + "💡 <i>Refine sua busca ou use o comando <code>t1000 salavip episodio"
+                            + " &lt;numero&gt;</code> para ver um específico.</i>");
+
             telegramFacade.enviarMensagemHtml(chatId, sb.toString());
         }
     }
