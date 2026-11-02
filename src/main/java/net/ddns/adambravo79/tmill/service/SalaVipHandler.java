@@ -200,10 +200,12 @@ public class SalaVipHandler {
             }
 
             // Dica para o usuário
+            // Dica para o usuário
             sb.append(
-                    "\n\n"
-                            + "💡 <i>Refine sua busca ou use o comando <code>t1000 salavip episodio"
-                            + " &lt;numero&gt;</code> para ver um específico.</i>");
+                    """
+
+                    💡 <i>Refine sua busca ou use o comando <code>t1000 salavip episodio &lt;numero&gt;</code> para ver um específico.</i>\
+                    """);
 
             telegramFacade.enviarMensagemHtml(chatId, sb.toString());
         }
