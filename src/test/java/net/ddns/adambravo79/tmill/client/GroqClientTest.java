@@ -410,6 +410,7 @@ class GroqClientTest {
 
         client.refinarTexto("texto bruto");
 
+        @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
         verify(bodySpec).body(captor.capture());
 
@@ -433,6 +434,7 @@ class GroqClientTest {
 
         client.gerarResumoDigest("mensagens", DigestPersona.T1000, "manhã");
 
+        @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
         verify(bodySpec).body(captor.capture());
 
