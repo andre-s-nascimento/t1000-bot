@@ -2,11 +2,12 @@
 package net.ddns.adambravo79.tmill.service;
 
 import java.io.InputStream;
+import java.text.Normalizer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -51,8 +52,14 @@ public class TorrentLaunchService {
     private final ResourceLoader resourceLoader;
     private final ObjectMapper objectMapper;
 
-    /** Lista imutável mantida em memória. */
-    private volatile List<TorrentLaunch> lancamentos = Collections.emptyList();
+    /**
+     * Lista imutável mantida em memória.
+     *
+     * <p>Usa {@link AtomicReference} para garantir visibilidade e atomicidade, evitando o aviso
+     * {@code java:S3077} do SonarQube.
+     */
+    private final AtomicReference<List<TorrentLaunch>> lancamentosRef =
+            new AtomicReference<>(Collections.emptyList());
 
     /** Metadados do JSON (mês de referência, ano). */
     private volatile String mesReferencia = "";
@@ -86,20 +93,21 @@ public class TorrentLaunchService {
 
             if (json == null || json.lancamentos() == null || json.lancamentos().isEmpty()) {
                 log.warn("⚠️ JSON de lançamentos torrent vazio ou inválido: {}", chosen);
-                this.lancamentos = Collections.emptyList();
-                this.mesReferencia = json != null ? json.mesReferencia() : "";
+                this.lancamentosRef.set(Collections.emptyList());
+                this.mesReferencia =
+                        json != null && json.mesReferencia() != null ? json.mesReferencia() : "";
                 this.ano = json != null ? json.ano() : 0;
                 return;
             }
 
             // Cópia imutável (segura para leitura concorrente)
-            this.lancamentos = List.copyOf(json.lancamentos());
+            this.lancamentosRef.set(List.copyOf(json.lancamentos()));
             this.mesReferencia = json.mesReferencia() != null ? json.mesReferencia() : "";
             this.ano = json.ano();
 
             log.info(
                     "✅ Lançamentos torrent carregados: {} itens (mês={}, ano={})",
-                    this.lancamentos.size(),
+                    this.lancamentosRef.get().size(),
                     this.mesReferencia,
                     this.ano);
 
@@ -114,7 +122,7 @@ public class TorrentLaunchService {
 
     /** Retorna todos os lançamentos (lista imutável). */
     public List<TorrentLaunch> listarTodos() {
-        return lancamentos;
+        return lancamentosRef.get();
     }
 
     /** Retorna o mês de referência do JSON (ex.: "novembro"). */
@@ -138,9 +146,9 @@ public class TorrentLaunchService {
             return List.of();
         }
         String busca = data.trim();
-        return lancamentos.stream()
+        return lancamentosRef.get().stream()
                 .filter(l -> busca.equalsIgnoreCase(l.dataLancamento()))
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -156,14 +164,11 @@ public class TorrentLaunchService {
         if (termo == null || termo.isBlank()) {
             return List.of();
         }
-        String busca = termo.trim().toLowerCase(Locale.ROOT);
-        return lancamentos.stream()
-                .filter(
-                        l ->
-                                l.titulo() != null
-                                        && l.titulo().toLowerCase(Locale.ROOT).contains(busca))
+        String busca = normalizar(termo);
+        return lancamentosRef.get().stream()
+                .filter(l -> l.titulo() != null && normalizar(l.titulo()).contains(busca))
                 .limit(10)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     /**
@@ -176,12 +181,9 @@ public class TorrentLaunchService {
         if (titulo == null || titulo.isBlank()) {
             return Optional.empty();
         }
-        String busca = titulo.trim().toLowerCase(Locale.ROOT);
-        return lancamentos.stream()
-                .filter(
-                        l ->
-                                l.titulo() != null
-                                        && l.titulo().toLowerCase(Locale.ROOT).equals(busca))
+        String busca = normalizar(titulo);
+        return lancamentosRef.get().stream()
+                .filter(l -> l.titulo() != null && normalizar(l.titulo()).equals(busca))
                 .findFirst();
     }
 
@@ -201,7 +203,7 @@ public class TorrentLaunchService {
         if (!mes.trim().equalsIgnoreCase(mesReferencia)) {
             return List.of();
         }
-        return lancamentos;
+        return lancamentosRef.get();
     }
 
     /**
@@ -212,5 +214,16 @@ public class TorrentLaunchService {
      */
     public List<String> getMesesDisponiveis() {
         return mesReferencia.isBlank() ? List.of() : List.of(mesReferencia);
+    }
+
+    /**
+     * Normaliza uma string para busca: minúsculas + sem acentos.
+     */
+    private String normalizar(String texto) {
+        if (texto == null) return "";
+        return Normalizer.normalize(texto, Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .toLowerCase(Locale.ROOT)
+                .trim();
     }
 }

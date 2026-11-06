@@ -27,7 +27,7 @@
       "tipo": "filme",
       "diretor": "Georgia Oakley",
       "atores": ["Daisy Edgar-Jones", "Esmé Creed-Miles"],
-      "letterboxd_url": "https://letterboxd.com/film/sense-and-sensibility-2026/",
+      "letterboxd_url": "https://letterboxd.com/film/sense-and-sensibility/",
       "temporada": null
     },
     {
@@ -37,6 +37,33 @@
       "diretor": null,
       "atores": ["Mahershala Ali"],
       "letterboxd_url": "https://letterboxd.com/film/your-mother-your-mother-your-mother/",
+      "temporada": null
+    },
+    {
+      "titulo": "Amor Possível",
+      "data_lancamento": "06/11",
+      "tipo": "filme",
+      "diretor": "Lee Chang-dong",
+      "atores": [],
+      "letterboxd_url": "https://letterboxd.com/film/possible-love/",
+      "temporada": null
+    },
+    {
+      "titulo": "A Odisséia",
+      "data_lancamento": "17/11",
+      "tipo": "filme",
+      "diretor": "Christopher Nolan",
+      "atores": ["Matt Damon", "Anne Hathaway", "Tom Holland"],
+      "letterboxd_url": "https://letterboxd.com/film/the-odyssey-2026/",
+      "temporada": null
+    },
+    {
+      "titulo": "Vicentina Pede Desculpas",
+      "data_lancamento": "20/11",
+      "tipo": "filme",
+      "diretor": "Gabriel Martins",
+      "atores": ["Rejane Faria"],
+      "letterboxd_url": "https://letterboxd.com/film/vicentina-pede-desculpas/",
       "temporada": null
     },
     {

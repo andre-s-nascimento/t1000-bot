@@ -225,7 +225,10 @@ public class TorrentHandler extends AbstractCommandHandler {
                     chatId,
                     "📭 Nenhum lançamento encontrado com o título '"
                             + termo
-                            + "'. Tente um nome mais curto ou verifique a lista do mês.");
+                            + "'.\n\n"
+                            + "💡 Dica: use <code>t1000 torrent "
+                            + torrentService.getMesReferencia()
+                            + "</code> para ver a lista completa.");
             return;
         }
 
