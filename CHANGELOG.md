@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.8.1] — 2026-11-06
+
+### Corrigido (Hotfix)
+
+- **Podcast SilasCast (Scheduler):** Corrigido o bug em que a publicação automática de sexta-feira falhava ao sintetizar o áudio via Azure TTS em background, enviando o roteiro como texto por engano.
+  - Aumentado o `readTimeout` do `AzureTtsClient` para 300s (5 minutos) para suportar roteiros longos.
+  - Adicionado log de erro detalhado na síntese do TTS para facilitar o diagnóstico.
+  - Adicionado retry genérico (`includes = Exception.class`) no `synthesizeSinglePart`.
+- **Módulo Torrent (`TorrentLaunchService`):** Substituído o uso de `volatile List` por `AtomicReference<List>` para garantir thread-safety real no acesso ao cache em memória, sanando o aviso `java:S3077` do SonarQube.
+- **Sala VIP (`SalaVipScheduler`):** Suprimido aviso do JDT sobre variável não utilizada (`@SuppressWarnings("unused")`), já que o `configService` é injetado apenas para uso via SpEL no `@Scheduled`.
+
+### Adicionado
+
+- **Testes de Cobertura:** Adicionados testes unitários para `TorrentLaunchService`, `TorrentHandler`, e endpoints de reload no `AdminController` / `AdminWebController`, elevando a cobertura de código novo (Quality Gate) para acima de 90%.
+
 ## [2.8.0] — 2026-11-05
 
 ### Adicionado
