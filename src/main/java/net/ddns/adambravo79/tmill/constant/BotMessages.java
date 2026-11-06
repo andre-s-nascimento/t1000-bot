@@ -169,7 +169,7 @@ public final class BotMessages {
             🎬 <b>Filmes</b>
             <code>t1000 buscar &lt;nome&gt;</code> — Busca sinopse, elenco e onde assistir.
             <code>t1000 estreias da semana</code> — Lançamentos nos streamings.
-
+            <code>t1000 torrent &lt;mês|DD/MM|título&gt;</code> — Lançamentos do torrent.  ← adicionar
             🍿 <b>Sala VIP do RapaduraCast</b>
             <code>t1000 salavip &lt;numero&gt;</code> — Busca o filme pelo número da Sala VIP.
             <code>t1000 salavip episodio &lt;numero&gt;</code> — Busca filmes pelo episódio do podcast.

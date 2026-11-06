@@ -1,0 +1,79 @@
+{
+  "versao": 1,
+  "mes_referencia": "novembro",
+  "ano": 2026,
+  "lancamentos": [
+    {
+      "titulo": "Resident Evil",
+      "data_lancamento": "02/11",
+      "tipo": "filme",
+      "diretor": "Zach Cragger",
+      "atores": [],
+      "letterboxd_url": "https://letterboxd.com/film/resident-evil-2026/",
+      "temporada": null
+    },
+    {
+      "titulo": "Primetime",
+      "data_lancamento": "03/11",
+      "tipo": "filme",
+      "diretor": "Lance Oppenheim",
+      "atores": ["Robert Pattinson"],
+      "letterboxd_url": "https://letterboxd.com/film/primetime/",
+      "temporada": null
+    },
+    {
+      "titulo": "Razão e Sensibilidade",
+      "data_lancamento": "03/11",
+      "tipo": "filme",
+      "diretor": "Georgia Oakley",
+      "atores": ["Daisy Edgar-Jones", "Esmé Creed-Miles"],
+      "letterboxd_url": "https://letterboxd.com/film/sense-and-sensibility/",
+      "temporada": null
+    },
+    {
+      "titulo": "Your Mother, Your Mother, Your Mother",
+      "data_lancamento": "03/11",
+      "tipo": "filme",
+      "diretor": null,
+      "atores": ["Mahershala Ali"],
+      "letterboxd_url": "https://letterboxd.com/film/your-mother-your-mother-your-mother/",
+      "temporada": null
+    },
+    {
+      "titulo": "Amor Possível",
+      "data_lancamento": "06/11",
+      "tipo": "filme",
+      "diretor": "Lee Chang-dong",
+      "atores": [],
+      "letterboxd_url": "https://letterboxd.com/film/possible-love/",
+      "temporada": null
+    },
+    {
+      "titulo": "A Odisséia",
+      "data_lancamento": "17/11",
+      "tipo": "filme",
+      "diretor": "Christopher Nolan",
+      "atores": ["Matt Damon", "Anne Hathaway", "Tom Holland"],
+      "letterboxd_url": "https://letterboxd.com/film/the-odyssey-2026/",
+      "temporada": null
+    },
+    {
+      "titulo": "Vicentina Pede Desculpas",
+      "data_lancamento": "20/11",
+      "tipo": "filme",
+      "diretor": "Gabriel Martins",
+      "atores": ["Rejane Faria"],
+      "letterboxd_url": "https://letterboxd.com/film/vicentina-pede-desculpas/",
+      "temporada": null
+    },
+    {
+      "titulo": "Blade Runner 2099",
+      "data_lancamento": "25/11",
+      "tipo": "serie",
+      "diretor": null,
+      "atores": ["Michelle Yeoh", "Hunter Schaffer"],
+      "letterboxd_url": "https://letterboxd.com/tv/blade-runner-2099/",
+      "temporada": 1
+    }
+  ]
+}

@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.8.0] — 2026-11-05
+
+### Adicionado
+
+- **Módulo Torrent**: consulta a lançamentos de filmes e séries (torrent) do mês.
+  - `t1000 torrent <mês>` — lista completa.
+  - `t1000 torrent <DD/MM>` — lançamentos de uma data.
+  - `t1000 torrent <título>` — ficha detalhada.
+- **JSON externo**: `torrent-lancamentos.json` (mesmo padrão da Sala VIP).
+- **Upload via painel admin**: `/admin-web/upload-json?target=torrent`.
+- **Reload em runtime**: `POST /admin/reload-torrent`.
+- **`TorrentLaunchService`**: carrega o JSON em memória (sem banco), suporta reload.
+- **`TorrentHandler`**: herda de `AbstractCommandHandler` (autorização, envio, tratamento de erro).
+- **Testes**: `TorrentHandlerTest` cobre os três comandos + autorização + métricas.
+
+### Alterado
+
+- `CommandHandler` (roteador): 1 linha para rotear `t1000 torrent`.
+- `AdminWebController`: alvo `"torrent"` no upload e reload.
+- `BotMessages.HELP_TEXT`: documentação do novo comando.
+- `README.md` e Dev Guide: seções do Torrent.
+
 ## [2.7.1] — 2026-11-05
 
 ### Refatoração (breaking change interno)

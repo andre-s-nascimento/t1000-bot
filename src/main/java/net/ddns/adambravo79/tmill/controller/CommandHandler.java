@@ -23,6 +23,7 @@ import net.ddns.adambravo79.tmill.telegram.handler.HelpCommandHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.IdeaHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.MovieHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.SalaVipHandler;
+import net.ddns.adambravo79.tmill.telegram.handler.TorrentHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.WorldCupHandler;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
@@ -66,6 +67,7 @@ public class CommandHandler {
     private final MovieHandler movieHandler;
     private final SalaVipHandler salaVipHandler;
     private final WorldCupHandler worldCupHandler;
+    private final TorrentHandler torrentHandler;
 
     // =========================================================================
     // PONTO DE ENTRADA
@@ -175,6 +177,12 @@ public class CommandHandler {
         if (normalized.startsWith(SalaVipHandler.PREFIXO)
                 || normalized.startsWith(SalaVipHandler.PREFIXO_ALT)) {
             salaVipHandler.processarComando(update);
+            return true;
+        }
+
+        // 🆕 Torrent
+        if (normalized.startsWith(TorrentHandler.PREFIXO)) {
+            torrentHandler.processarComando(update);
             return true;
         }
 

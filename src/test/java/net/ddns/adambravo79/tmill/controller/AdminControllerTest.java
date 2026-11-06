@@ -101,6 +101,7 @@ class AdminControllerTest {
     @Mock private TelegramModerationService telegramModerationService;
     @Mock private SalaVipService salaVipService;
     @Mock private SalaVipConfigService salaVipConfigService;
+    @Mock private TorrentLaunchService torrentLaunchService;
 
     @BeforeEach
     @SneakyThrows
@@ -140,7 +141,8 @@ class AdminControllerTest {
                         tmdbClient,
                         telegramModerationService,
                         salaVipService,
-                        salaVipConfigService);
+                        salaVipConfigService,
+                        torrentLaunchService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");
@@ -2482,5 +2484,23 @@ class AdminControllerTest {
                 .andExpect(content().string(containsString("Falha ao recarregar")));
 
         verify(salaVipConfigService).reload();
+    }
+
+    // =========================================================================
+    // TORRENT (v2.8.0)
+    // =========================================================================
+
+    @Test
+    @DisplayName(
+            "POST /admin/reload-torrent - Deve recarregar os lançamentos torrent e retornar HTTP"
+                    + " 200 OK")
+    void shouldReloadTorrentAndReturn200() throws Exception {
+        doNothing().when(torrentLaunchService).carregar();
+
+        mockMvc.perform(post("/admin/reload-torrent"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("Lançamentos torrent recarregados"));
+
+        verify(torrentLaunchService).carregar();
     }
 }
