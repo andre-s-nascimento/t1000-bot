@@ -68,3 +68,32 @@ serem "corrigidas" para o último dia do mês.
 ### Testes
 
 Cobertura completa em `src/test/java/.../util/DateParserUtilsTest.java` (~60 testes).
+
+## `reminders.json`
+
+**Localização padrão:** `classpath:reminders.json` (dev/testes), `file:/app/config/reminders.json` (prod)
+**Property:** `reminders.data.file`
+**Loader:** `ReminderService` (via `JsonConfigLoader`)
+**Model:** `ReminderJson` → `List<Reminder>`
+
+**Estrutura:**
+
+```json
+{
+  "version": 1,
+  "updatedAt": "2026-11-06T10:00:00Z",
+  "reminders": [
+    {
+      "id": "slug-kebab-case",
+      "name": "Nome de Exibição",
+      "enabled": true,
+      "cron": "0 0 16 * * WED",
+      "timezone": "America/Sao_Paulo",
+      "message": "<b>HTML aceito</b>",
+      "mediaUrl": "https://exemplo.com/video.mp4",
+      "targetChatIds": ["-100123"],
+      "tags": ["cinema"]
+    }
+  ]
+}
+```
