@@ -23,8 +23,9 @@ Cada arquivo deste diretório é **autocontido** e cobre um tópico específico.
 você precisa no momento:
 
 - **Novo no projeto?** → [Stack](#stack) e [Como rodar localmente](#como-rodar-localmente).
+- **Vai mexer em handlers de comando?** → 🆕 [Arquitetura](arquitetura.md).
 - **Vai mexer em feature flags?** → [Feature Flags](feature-flags.md).
-- **Vai mexer em arquivos de configuração?** → em breve: `config-files.md`.
+- **Vai mexer em arquivos de configuração?** → [Config Files](config-files.md).
 - **Vai adicionar um serviço/cliente?** → leia as [Convenções do projeto](#convenções-do-projeto).
 - **Vai mexer na Sala VIP do RapaduraCast?** → [Sala VIP](salavip.md).
 
@@ -32,15 +33,22 @@ você precisa no momento:
 
 ## Índice de guias
 
-| Guia                                        | Descrição                                                                                        | Status |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------ |
-| [Feature Flags](feature-flags.md)           | Sistema de flags runtime, catálogo, como adicionar e usar                                        | ✅     |
-| [Arquivos de Configuração](config-files.md) | Todos os JSONs de configuração (audio, groq, refinement, admin, worldcup, tmdb-aliases, prompts) | ✅     |
-| [Sala VIP](salavip.md)                      | Arquitetura do loader de JSON, sincronização, handler do Telegram e configuração de cron         | ✅     |
-
-> **Nota:** o guia de arquivos de configuração (`config-files.md`) está planejado para o
-> próximo ciclo. Até lá, os arquivos podem ser encontrados em `src/main/resources/` e
-> `config/` (runtime).
+| Guia                                                    | Descrição                                                                                        | Status |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------ |
+| 🆕 [Arquitetura](arquitetura.md)                        | Handlers especializados, superclasse `AbstractCommandHandler`, roteador, Template Method         | ✅     |
+| [Feature Flags](feature-flags.md)                       | Sistema de flags runtime, catálogo, como adicionar e usar                                        | ✅     |
+| [Arquivos de Configuração](config-files.md)             | Todos os JSONs de configuração (audio, groq, refinement, admin, worldcup, tmdb-aliases, prompts) | ✅     |
+| [Sala VIP](salavip.md)                                  | Arquitetura do loader de JSON, sincronização, handler do Telegram e configuração de cron         | ✅     |
+| [Auto-Responses](auto-responses.md)                     | Como funcionam as respostas automáticas (triggers, time-range, sorteio)                          | ✅     |
+| [Logging](logging.md)                                   | Estratégia de logs, sanitização, formato                                                         | ✅     |
+| [Observabilidade](observabilidade.md)                   | Prometheus, Grafana, Kibana                                                                      | ✅     |
+| [Prompts](prompts.md)                                   | Prompts externos, personas do digest, configuração                                               | ✅     |
+| [Known Issues](known-issues.md)                         | Bugs conhecidos e workarounds                                                                    | ✅     |
+| [Fluxo de Desenvolvimento](fluxo-de-desenvolvimento.md) | Branches, PRs, CI, releases                                                                      | ✅     |
+| [PR Template](pr-template.md)                           | Template de PR e issue                                                                           | ✅     |
+| [Rebase Conflicts](rebase-conflicts.md)                 | Como resolver conflitos de rebase                                                                | ✅     |
+| [Revert Develop](revert-develop.md)                     | Como reverter mudanças no develop                                                                | ✅     |
+| [Spotless Fallback](spotless-fallback.md)               | Fallback de formatação quando Spotless falha                                                     | ✅     |
 
 ---
 
@@ -49,7 +57,7 @@ você precisa no momento:
 | Camada              | Tecnologia                                 | Versão | Notas                                                     |
 | ------------------- | ------------------------------------------ | ------ | --------------------------------------------------------- |
 | Linguagem           | Java                                       | 21     | Virtual Threads habilitadas                               |
-| Framework           | Spring Boot                                | 4.x    | Web, Cache, JDBC, Kafka, Flyway, Validation, Data MongoDB |
+| Framework           | Spring Boot                                | 4.1.2  | Web, Cache, JDBC, Kafka, Flyway, Validation, Data MongoDB |
 | Telegram            | `ksilisk/telegram-bot-spring-boot-starter` | 0.7.0  | Starter + meta                                            |
 | Banco relacional    | PostgreSQL                                 | 15     | Produção; SQLite legado                                   |
 | Banco de documentos | MongoDB                                    | 6.0    | Logs estruturados, ideias                                 |
@@ -76,7 +84,10 @@ t1000-bot/
 ├── docs/
 │   └── dev-guide/                  # ← você está aqui
 │       ├── README.md               # este arquivo
-│       └── feature-flags.md        # guia de feature flags
+│       ├── arquitetura.md          # 🆕 handlers especializados (v2.7.1)
+│       ├── feature-flags.md        # guia de feature flags
+│       ├── config-files.md         # guia de configs JSON
+│       └── ...
 ├── src/
 │   ├── main/
 │   │   ├── java/net/ddns/adambravo79/tmill/
@@ -84,6 +95,8 @@ t1000-bot/
 │   │   │   ├── config/             # @Configuration (Security, Kafka, Caffeine, ...)
 │   │   │   ├── constant/           # Constantes (BotMessages)
 │   │   │   ├── controller/         # Controllers REST + handlers Telegram
+│   │   │   │   ├── CommandHandler.java        # 🆕 roteador puro (v2.7.1)
+│   │   │   │   └── ...
 │   │   │   ├── document/           # @Document MongoDB
 │   │   │   ├── dto/                # Records de transporte
 │   │   │   ├── exception/          # Exceções de domínio
@@ -98,7 +111,18 @@ t1000-bot/
 │   │   │   │   ├── kafka/          # Producers/Consumers
 │   │   │   │   └── prompt/         # Prompt registry
 │   │   │   ├── telegram/           # Fachada Telegram, handlers, utils
-│   │   │   └── util/               # Utilitários (LogSanitizer)
+│   │   │   │   ├── core/           # TelegramFacade, TelegramSafeExecutor
+│   │   │   │   ├── exception/      # TelegramExceptionHandler
+│   │   │   │   ├── handler/        # 🆕 handlers especializados (v2.7.1)
+│   │   │   │   │   ├── AbstractCommandHandler.java
+│   │   │   │   │   ├── BirthdayHandler.java
+│   │   │   │   │   ├── HelpCommandHandler.java
+│   │   │   │   │   ├── IdeaHandler.java
+│   │   │   │   │   ├── MovieHandler.java
+│   │   │   │   │   ├── SalaVipHandler.java
+│   │   │   │   │   └── WorldCupHandler.java
+│   │   │   │   └── util/           # TelegramUtils, MetricsService
+│   │   │   └── util/               # Utilitários (LogSanitizer, DateParserUtils)
 │   │   └── resources/
 │   │       ├── application.properties         # dev
 │   │       ├── application-prod.properties    # prod
@@ -110,13 +134,24 @@ t1000-bot/
 │           ├── client/             # Testes de clientes HTTP
 │           ├── config/             # Testes de configuração
 │           ├── controller/         # Testes de controllers
+│           │   └── CommandHandlerTest.java   # 🆕 foca só no roteamento (v2.7.1)
 │           ├── exception/          # Testes de exceções
 │           ├── integration/        # Testes com Testcontainers
 │           ├── model/              # Testes de records
 │           ├── prompt/             # Testes de prompts
 │           ├── repository/         # Testes de repositórios
 │           ├── service/            # Testes de serviços
+│           ├── telegram/
+│           │   └── handler/        # 🆕 testes dos handlers (v2.7.1)
+│           │       ├── AbstractCommandHandlerTest.java
+│           │       ├── BirthdayHandlerTest.java
+│           │       ├── HelpCommandHandlerTest.java
+│           │       ├── IdeaHandlerTest.java
+│           │       ├── MovieHandlerTest.java
+│           │       ├── SalaVipHandlerTest.java
+│           │       └── WorldCupHandlerTest.java
 │           └── util/               # Testes de utilitários
+│               └── DateParserUtilsTest.java  # 🆕 (v2.7.1)
 └── config/                         # Arquivos de config externos (não versionados)
     ├── audio-config.json
     ├── groq-config.json
@@ -210,7 +245,17 @@ Exclui `net.ddns.adambravo79.tmill.integration.*`.
 ### Um teste específico
 
 ```bash
-./gradlew unitTest --tests "net.ddns.adambravo79.tmill.controller.AdminControllerTest"
+./gradlew unitTest --tests "net.ddns.adambravo79.tmill.telegram.handler.MovieHandlerTest"
+```
+
+### Um handler específico (v2.7.1+)
+
+```bash
+# Testa só o MovieHandler
+./gradlew unitTest --tests "*MovieHandlerTest"
+
+# Testa todos os handlers
+./gradlew unitTest --tests "*HandlerTest"
 ```
 
 ### Cobertura (JaCoCo)
@@ -241,7 +286,8 @@ Exclui `net.ddns.adambravo79.tmill.integration.*`.
 
 - **`client/`** — comunicação com APIs externas (HTTP). Só orquestra; não contém regra de negócio.
 - **`service/`** — regra de negócio. Pode chamar `client/`, `repository/`, outros `service/`.
-- **`controller/`** — entrada HTTP/Telegram. Delega para `service/`.
+- **`controller/`** — entrada HTTP/Telegram. Delega para `service/` ou `telegram/handler/`.
+- **`telegram/handler/`** — 🆕 handlers especializados (v2.7.1+). Cada handler estende `AbstractCommandHandler`.
 - **`config/`** — `@Configuration` do Spring. Sem regra de negócio.
 - **`model/`** — records de domínio. Imutáveis.
 - **`dto/`** — records de transporte entre camadas.
@@ -249,6 +295,16 @@ Exclui `net.ddns.adambravo79.tmill.integration.*`.
 - **`repository/`** — acesso a dados. `JdbcTemplate` (SQL) ou `MongoRepository`.
 - **`exception/`** — exceções de domínio (`extends RuntimeException`).
 - **`util/`** — classes utilitárias estáticas (`private` constructor).
+
+### Handlers especializados (v2.7.1+)
+
+- Todo handler **estende** `AbstractCommandHandler`.
+- Implementa **`getPrefixo()`** e **`handleCommand(Update, String)`**.
+- O ponto de entrada é **`processarComando(Update)`** (herdado) — ele verifica autorização, normaliza texto e chama `handleCommand` com tratamento de exceção.
+- Use **`sendHtml`**, **`sendPlain`**, **`sendWithButtons`**, **`sendPhoto`** (herdados) em vez de chamar `telegramFacade` diretamente.
+- Se precisar de comportamento customizado de erro, sobrescreva **`mensagemErroUsuario()`**.
+
+📖 Ver [Arquitetura](arquitetura.md) para mais detalhes.
 
 ### Records vs classes
 
@@ -263,6 +319,8 @@ Exclui `net.ddns.adambravo79.tmill.integration.*`.
   múltiplos argumentos (ex.: `Environment` consultado com 13 chaves).
 - **`verify(featureFlags, never()).isEnabled("...")`** em testes do tipo "feature X não afeta
   este fluxo" — evita `UnnecessaryStubbingException` sem `lenient()`.
+- **`eq()` + matcher misturado** — quando há `any()`/`contains()`, todos os argumentos precisam de `eq()`. Use `@SuppressWarnings("java:S6068")` no método se o SonarLint reclamar.
+- **Handlers isolados** — teste cada handler separadamente (mock dos services). O `CommandHandlerTest` foca só no roteamento (mock dos handlers).
 
 ### Logs
 

@@ -82,4 +82,33 @@ O sorteio ocorre **a cada disparo** (não no carregamento do JSON). Ele usa `Thr
 ### ⏱️ Restrição "Once per Day"
 
 Alguns triggers (configurados em `auto.response.once-per-day-triggers`, como `bom dia`) só respondem **uma vez por dia por usuário**. Isso evita spam.
+
 _Nota para testes:_ se você estiver testando pelo painel admin, deixe o campo `User ID` em branco para ignorar essa regra e poder testar o sorteio quantas vezes quiser.
+
+---
+
+## 🔄 Fluxo na v2.7.1
+
+A partir da v2.7.1, o pré-processamento de auto-resposta é feito pelo **`CommandHandler`** (roteador), **antes** de qualquer roteamento para handlers especializados.
+
+### Ordem de execução no `CommandHandler.handleTextUpdate`
+
+1. **Registra conversa** no analytics (`BotAnalyticsService`).
+2. Verifica se é **comando explícito** (`t1000 ...`, `t-1000 ...`, `/start`, etc.).
+3. Se **não for comando**:
+   - Salva no DB (`MessageStoreService.saveMessage`).
+   - Detecta spoiler (`MessageEntity.Type.spoiler`).
+   - **Verifica auto-resposta** (`AutoResponseService.getResponseRule`).
+   - **Se casar:** envia a resposta e **retorna** (não roteia para nenhum handler).
+4. Se não casar (ou for comando), **roteia** para o handler especializado.
+
+### Implicações
+
+- **Comandos explícitos** (`t1000 buscar ...`) **não passam** por auto-resposta. Isso evita que "t1000 anotar ideia bom dia" dispare a auto-resposta de "bom dia".
+- **Mensagens normais** (`bom dia`) passam pela auto-resposta e, se não casarem, **não são roteadas** (o roteador retorna `false` e nenhum handler é chamado).
+- **Mensagem normal sem auto-resposta** é apenas salva no DB (para o digest) e ignorada.
+
+### Testes
+
+- `CommandHandlerTest` cobre o fluxo de auto-resposta (com/sem animação, válida/inválida, falha no envio).
+- `AutoResponseServiceTest` cobre o parse do JSON, precedência de formatos, sorteio e once-per-day.
