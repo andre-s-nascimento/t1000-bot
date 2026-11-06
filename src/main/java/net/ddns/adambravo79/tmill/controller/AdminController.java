@@ -66,6 +66,7 @@ import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
+import net.ddns.adambravo79.tmill.service.TorrentLaunchService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
@@ -126,6 +127,7 @@ public class AdminController {
     private final TelegramModerationService moderationService;
     private final SalaVipService salaVipService;
     private final SalaVipConfigService salaVipConfigService;
+    private final TorrentLaunchService torrentLaunchService;
 
     @Value("${worldcup.enabled:false}")
     private boolean worldcupEnabled;
@@ -1388,5 +1390,11 @@ public class AdminController {
             return ResponseEntity.internalServerError()
                     .body("❌ Falha ao recarregar configuração: " + e.getMessage());
         }
+    }
+
+    @PostMapping("/reload-torrent")
+    public ResponseEntity<String> reloadTorrent() {
+        torrentLaunchService.carregar();
+        return ResponseEntity.ok("Lançamentos torrent recarregados");
     }
 }

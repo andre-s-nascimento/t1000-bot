@@ -101,6 +101,7 @@ class AdminControllerTest {
     @Mock private TelegramModerationService telegramModerationService;
     @Mock private SalaVipService salaVipService;
     @Mock private SalaVipConfigService salaVipConfigService;
+    @Mock private TorrentLaunchService torrentLaunchService;
 
     @BeforeEach
     @SneakyThrows
@@ -140,7 +141,8 @@ class AdminControllerTest {
                         tmdbClient,
                         telegramModerationService,
                         salaVipService,
-                        salaVipConfigService);
+                        salaVipConfigService,
+                        torrentLaunchService);
 
         ReflectionTestUtils.setField(adminController, "worldcupEnabled", true);
         ReflectionTestUtils.setField(adminController, "migrationSqlitePath", "./data/t1000.db");

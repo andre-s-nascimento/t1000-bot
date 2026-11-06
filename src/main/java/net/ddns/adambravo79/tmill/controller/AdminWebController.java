@@ -63,6 +63,7 @@ import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
+import net.ddns.adambravo79.tmill.service.TorrentLaunchService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
@@ -107,6 +108,7 @@ public class AdminWebController {
     // CONSTANTES
     // =========================================================================
 
+    private static final String PROP_TORRENT_DATA_FILE = "torrent.data.file";
     private static final String FILE = "file:";
     private static final String CLASSPATH = "classpath:";
     private static final String WORLDCUP = "worldcup";
@@ -124,6 +126,7 @@ public class AdminWebController {
     private static final String SUCCESS = "success";
     private static final String ERROR = "error";
     private static final String REDIRECT_ADMIN_WEB = "redirect:/admin-web";
+    private static final String TORRENT = "torrent";
 
     // 🔧 FIX: Extração de literais duplicados exigida pelo Sonar (java:S1192)
     private static final String PROP_WORLDCUP_FILE = "worldcup.data.file";
@@ -164,6 +167,7 @@ public class AdminWebController {
     private final TelegramModerationService moderationService;
     private final SalaVipService salaVipService;
     private final SalaVipConfigService salaVipConfigService;
+    private final TorrentLaunchService torrentLaunchService;
 
     // =========================================================================
     // @Value
@@ -1404,6 +1408,12 @@ public class AdminWebController {
         return REDIRECT_ADMIN_WEB;
     }
 
+    @PostMapping("/reload-torrent")
+    public ResponseEntity<String> reloadTorrent() {
+        torrentLaunchService.carregar();
+        return ResponseEntity.ok("Lançamentos torrent recarregados");
+    }
+
     // =========================================================================
     // UPLOAD DE CONFIGURAÇÃO (.json)
     // =========================================================================
@@ -1435,7 +1445,7 @@ public class AdminWebController {
 
         // ✅ CORREÇÃO PATH TRAVERSAL: Valida o alvo contra uma whitelist
         Set<String> alvosPermitidos =
-                Set.of(EASTER_EGGS, AUTO_RESPONSES, WORLDCUP, SALAVIP, SALAVIP_CONFIG);
+                Set.of(EASTER_EGGS, AUTO_RESPONSES, WORLDCUP, SALAVIP, SALAVIP_CONFIG, TORRENT);
         if (!alvosPermitidos.contains(target)) {
             log.warn("⚠️ Tentativa de upload para alvo inválido: {}", target);
             redirectAttrs.addFlashAttribute(ERROR, "❌ Alvo de upload inválido.");
@@ -1491,6 +1501,7 @@ public class AdminWebController {
                     case WORLDCUP -> PROP_WORLDCUP_FILE;
                     case SALAVIP -> PROP_SALAVIP_FILE;
                     case SALAVIP_CONFIG -> PROP_SALAVIP_CONFIG_FILE;
+                    case TORRENT -> PROP_TORRENT_DATA_FILE;
                     default -> throw new IllegalArgumentException("Alvo desconhecido: " + target);
                 };
 
@@ -1516,6 +1527,7 @@ public class AdminWebController {
             case WORLDCUP -> staticWorldCupService.reload();
             case SALAVIP -> salaVipService.sincronizarLista();
             case SALAVIP_CONFIG -> salaVipConfigService.reload();
+            case TORRENT -> torrentLaunchService.carregar();
             default -> throw new IllegalArgumentException("Alvo desconhecido: " + target);
         }
     }

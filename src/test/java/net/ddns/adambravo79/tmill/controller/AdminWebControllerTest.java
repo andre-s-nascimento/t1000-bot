@@ -56,6 +56,7 @@ import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
+import net.ddns.adambravo79.tmill.service.TorrentLaunchService;
 import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
@@ -100,6 +101,7 @@ class AdminWebControllerTest {
     @Mock private TelegramModerationService telegramModerationService;
     @Mock private SalaVipService salaVipService;
     @Mock private SalaVipConfigService salaVipConfigService;
+    @Mock private TorrentLaunchService torrentLaunchService;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
@@ -137,7 +139,8 @@ class AdminWebControllerTest {
                         adminConfigService,
                         telegramModerationService,
                         salaVipService, // ← adicionar
-                        salaVipConfigService); // ← adicionar
+                        salaVipConfigService,
+                        torrentLaunchService); // ← adicionar
 
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
         ReflectionTestUtils.setField(controller, "ownerId", 999L);
