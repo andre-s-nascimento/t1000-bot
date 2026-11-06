@@ -341,6 +341,37 @@
             background: #2b3035;
         }
 
+        /* ============================================================
+   Ajustes de modal (scroll em telas pequenas)
+   ============================================================ */
+
+        /* Em telas onde o modal não cabe, deixa o BODY do modal rolar */
+        .modal-dialog.modal-dialog-scrollable .modal-content {
+            max-height: calc(100dvh - 3.5rem);
+            /* dvh = dynamic viewport height (funciona com barra de URL mobile) */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-dialog.modal-dialog-scrollable .modal-body {
+            overflow-y: auto;
+            /* fallback para navegadores antigos que não conhecem dvh */
+            max-height: calc(100vh - 12rem);
+            -webkit-overflow-scrolling: touch;
+            /* rolagem suave no iOS */
+        }
+
+        /* Mobile: modal ocupa quase a tela toda, sem cortar o rodapé */
+        @media (max-width: 576px) {
+            .modal-dialog {
+                margin: 0.5rem;
+            }
+
+            .modal-dialog.modal-dialog-scrollable .modal-content {
+                max-height: calc(100dvh - 1rem);
+            }
+        }
+
         /* 🆕 Reenvio de podcast — destaque sutil */
         .podcast-resend {
             border-left: 3px solid var(--bs-warning);
@@ -1395,7 +1426,7 @@
                                         Mensagem <span class="text-danger" aria-hidden="true">*</span>
                                     </label>
                                     <textarea class="form-control font-monospace" id="reminderMessage" name="message"
-                                        rows="4" required
+                                        rows="3" required
                                         placeholder="&lt;b&gt;Lembrete!&lt;/b&gt;&#10;&#10;Não esqueça do café."
                                         aria-describedby="reminderMessageHelp"></textarea>
                                     <div id="reminderMessageHelp" class="form-text">
