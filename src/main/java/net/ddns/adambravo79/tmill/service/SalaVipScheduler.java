@@ -20,7 +20,7 @@ public class SalaVipScheduler {
 
     private final SalaVipJsonLoader jsonLoader;
 
-    @SuppressWarnings("java:S1068") // usado via SpEL no @Scheduled
+    @SuppressWarnings({"java:S1068", "unused"}) // usado via SpEL no @Scheduled
     private final SalaVipConfigService configService;
 
     @Scheduled(

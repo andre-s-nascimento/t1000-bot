@@ -199,6 +199,15 @@ Para adicionar novos gatilhos, edite o arquivo `auto-responses.json` e recarregu
 curl -X POST http://localhost:8082/admin/reload-auto-responses
 ```
 
+### 🎬 Torrent (v2.8.0)
+
+- `t1000 torrent <mês>` — lista todos os lançamentos do mês.
+- `t1000 torrent <DD/MM>` — lançamentos de uma data específica.
+- `t1000 torrent <título>` — ficha de um filme/série.
+- Dados carregados de `torrent-lancamentos.json` (mesmo esquema da Sala VIP).
+- Upload via painel admin (`/admin-web/upload-json?target=torrent`).
+- Reload em runtime via `POST /admin/reload-torrent`.
+
 ### 🎛️ Feature Flags (23 no total)
 
 Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via painel admin ou API.
@@ -276,6 +285,7 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 | `/admin/migrate-sqlite`         | POST   | Migra dados do SQLite legado (`?dryRun=true`)                           |
 | `/admin/config-files`           | GET    | Inspeciona arquivos de configuração                                     |
 | `/admin/properties`             | GET    | Lista propriedades (tokens mascarados)                                  |
+| `/admin/reload-torrent`         | POST   | Recarrega `torrent-lancamentos.json`                                    |
 
 ---
 

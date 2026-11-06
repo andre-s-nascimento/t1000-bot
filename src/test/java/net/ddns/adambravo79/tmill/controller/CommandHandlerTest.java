@@ -46,6 +46,7 @@ import net.ddns.adambravo79.tmill.telegram.handler.HelpCommandHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.IdeaHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.MovieHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.SalaVipHandler;
+import net.ddns.adambravo79.tmill.telegram.handler.TorrentHandler;
 import net.ddns.adambravo79.tmill.telegram.handler.WorldCupHandler;
 import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
@@ -93,6 +94,7 @@ class CommandHandlerTest {
     @Mock private MovieHandler movieHandler;
     @Mock private SalaVipHandler salaVipHandler;
     @Mock private WorldCupHandler worldCupHandler;
+    @Mock private TorrentHandler torrentHandler;
 
     private CommandHandler handler;
 
@@ -115,7 +117,8 @@ class CommandHandlerTest {
                         ideaHandler,
                         movieHandler,
                         salaVipHandler,
-                        worldCupHandler);
+                        worldCupHandler,
+                        torrentHandler);
 
         lenient().when(utils.buildFullName(any(User.class))).thenReturn(USER_NAME);
         lenient().when(utils.buildUserMention(any(User.class))).thenReturn("@Testador");
