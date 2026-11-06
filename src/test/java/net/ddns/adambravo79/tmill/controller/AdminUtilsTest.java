@@ -80,7 +80,7 @@ class AdminUtilsTest {
     }
 
     // =========================================================================
-    // parseDateParam
+    // parseDateParam — delegação para DateParserUtils (v2.7.1)
     // =========================================================================
 
     @Nested
@@ -158,56 +158,6 @@ class AdminUtilsTest {
         void invalida() {
             assertThat(AdminUtils.parseDateParam("xyz")).isNull();
             assertThat(AdminUtils.parseDateParam("99/99")).isNull();
-        }
-    }
-
-    // =========================================================================
-    // tryParseWithPattern
-    // =========================================================================
-
-    @Nested
-    @DisplayName("tryParseWithPattern")
-    class TryParseWithPattern {
-
-        @Test
-        @DisplayName("null retorna null")
-        void nullInput() {
-            assertThat(AdminUtils.tryParseWithPattern(null)).isNull();
-        }
-
-        @Test
-        @DisplayName("string sem data retorna null")
-        void semData() {
-            assertThat(AdminUtils.tryParseWithPattern("nada de data")).isNull();
-        }
-    }
-
-    // =========================================================================
-    // tryParseFallback
-    // =========================================================================
-
-    @Nested
-    @DisplayName("tryParseFallback")
-    class TryParseFallback {
-
-        @Test
-        @DisplayName("aceita formato dd/MM")
-        void ddMM() {
-            assertThat(AdminUtils.tryParseFallback("20/06", "dd/MM"))
-                    .isEqualTo(LocalDate.of(2026, Month.JUNE, 20));
-        }
-
-        @Test
-        @DisplayName("formato inválido retorna null")
-        void invalido() {
-            assertThat(AdminUtils.tryParseFallback("abc", "dd/MM")).isNull();
-        }
-
-        @Test
-        @DisplayName("tenta múltiplos padrões em ordem")
-        void multiplos() {
-            assertThat(AdminUtils.tryParseFallback("20-06", "dd/MM", "dd-MM"))
-                    .isEqualTo(LocalDate.of(2026, Month.JUNE, 20));
         }
     }
 
