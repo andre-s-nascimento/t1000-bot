@@ -43,6 +43,10 @@ import net.ddns.adambravo79.tmill.util.LogSanitizer;
 @Component
 public class WorldCupHandler extends AbstractCommandHandler {
 
+    private static final String COMANDO_RESULTADOS = "comando_resultados";
+
+    private static final String COMANDO_COPA = "comando_copa";
+
     /** Prefixo do comando de jogos. */
     public static final String PREFIXO_JOGOS = "t1000 jogos";
 
@@ -103,7 +107,7 @@ public class WorldCupHandler extends AbstractCommandHandler {
         // 1. Feature flag
         if (!worldcupEnabled) {
             sendPlain(chatId, BotMessages.WORLD_CUP_FINISHED);
-            metricsService.success("comando_copa");
+            metricsService.success(COMANDO_COPA);
             return;
         }
 
@@ -115,7 +119,7 @@ public class WorldCupHandler extends AbstractCommandHandler {
         //    (sem isso, o scheduler receberia null e responderia "nenhum jogo programado")
         if (data == null) {
             sendPlain(chatId, BotMessages.DATA_INVALIDA);
-            metricsService.success("comando_copa");
+            metricsService.success(COMANDO_COPA);
             return;
         }
 
@@ -127,11 +131,11 @@ public class WorldCupHandler extends AbstractCommandHandler {
         } catch (RuntimeException e) {
             log.error("❌ Falha ao enviar jogos da Copa (chatId={})", chatId, e);
             sendPlain(chatId, BotMessages.ERRO_GENERICO);
-            metricsService.error("comando_copa");
+            metricsService.error(COMANDO_COPA);
             return;
         }
 
-        metricsService.success("comando_copa");
+        metricsService.success(COMANDO_COPA);
     }
 
     // =========================================================================
@@ -144,7 +148,7 @@ public class WorldCupHandler extends AbstractCommandHandler {
         // 1. Feature flag
         if (!worldcupEnabled) {
             sendPlain(chatId, BotMessages.WORLD_CUP_FINISHED);
-            metricsService.success("comando_resultados");
+            metricsService.success(COMANDO_RESULTADOS);
             return;
         }
 
@@ -155,7 +159,7 @@ public class WorldCupHandler extends AbstractCommandHandler {
         // 3. Validação: se o usuário digitou algo E o parse falhou → DATA_INVALIDA
         if (data == null) {
             sendPlain(chatId, BotMessages.DATA_INVALIDA);
-            metricsService.success("comando_resultados");
+            metricsService.success(COMANDO_RESULTADOS);
             return;
         }
 
@@ -171,11 +175,11 @@ public class WorldCupHandler extends AbstractCommandHandler {
         } catch (RuntimeException e) {
             log.error("❌ Falha ao enviar resultados da Copa (chatId={})", chatId, e);
             sendPlain(chatId, BotMessages.ERRO_GENERICO);
-            metricsService.error("comando_resultados");
+            metricsService.error(COMANDO_RESULTADOS);
             return;
         }
 
-        metricsService.success("comando_resultados");
+        metricsService.success(COMANDO_RESULTADOS);
     }
 
     // =========================================================================
