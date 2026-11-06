@@ -2,6 +2,7 @@
 package net.ddns.adambravo79.tmill.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
@@ -687,8 +688,8 @@ class ReminderServiceTest {
             service.reload();
             service.setReloadListener(null);
 
-            // Não deve lançar
-            service.create(reminder("a", true));
+            // Não deve lançar mesmo com listener no-op
+            assertThatCode(() -> service.create(reminder("a", true))).doesNotThrowAnyException();
         }
 
         @Test
