@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.7.1** | Branch: `main` | Último build: 2026-11-05
+> **Versão atual: v2.8.1** | Branch: `main` | Último build: 2026-11-06
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
@@ -9,10 +9,10 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenA
 ![Java](https://img.shields.io/badge/Java-21-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.2-brightgreen)
 ![Build](https://img.shields.io/badge/build-passing-success)
-![Tests](https://img.shields.io/badge/tests-350%2B_passing-success)
+![Tests](https://img.shields.io/badge/tests-360%2B_passing-success)
 ![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v2.7.1-blueviolet)
+![Status](https://img.shields.io/badge/status-v2.8.1-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
@@ -23,6 +23,7 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 
 - 🎥 Busca de filmes via API do TMDB (com desambiguação, elenco, streaming e easter eggs)
 - 🍿 Consulta à Sala VIP do RapaduraCast (Letterboxd)
+- 🎬 Consulta a lançamentos Torrent do mês
 - 🎙️ Transcrição de áudio com IA via Groq (Whisper + refinamento Llama)
 - 📊 Digest diário de conversas com personas cinematográficas (T-1000, Bicentenário, Arquiteto)
 - 🎧 Podcast semanal ("Silas Cast") com roteiro gerado por LLM e síntese via Azure TTS
@@ -38,9 +39,9 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 
 ---
 
-## 🏗️ Arquitetura (v2.7.1)
+## 🏗️ Arquitetura (v2.8.1)
 
-A refatoração da v2.7.1 substituiu o `CommandHandler` monolítico (God Class, ~350 linhas) por uma hierarquia de handlers especializados, seguindo o padrão **Template Method**.
+A refatoração da v2.7.1 substituiu o `CommandHandler` monolítico (God Class, ~350 linhas) por uma hierarquia de handlers especializados, seguindo o padrão **Template Method**. A v2.8.1 adicionou o `TorrentHandler`.
 
 ```
 telegram/handler/
@@ -50,7 +51,8 @@ telegram/handler/
 ├── MovieHandler.java              ← t1000 buscar ... / t1000 estreias ...
 ├── WorldCupHandler.java           ← t1000 jogos ... / t1000 resultados ...
 ├── HelpCommandHandler.java        ← /start, /help, /ajuda
-└── SalaVipHandler.java            ← t1000 salavip ...
+├── SalaVipHandler.java            ← t1000 salavip ...
+└── TorrentHandler.java            ← t1000 torrent ...
 
 controller/
 └── CommandHandler.java            ← roteador puro (sem lógica de negócio)
@@ -61,7 +63,7 @@ util/
 
 **Benefícios:**
 
-| Aspecto                    | Antes (v2.7.0)                                     | Depois (v2.7.1)                                                      |
+| Aspecto                    | Antes (v2.7.0)                                     | Depois (v2.8.1)                                                      |
 | -------------------------- | -------------------------------------------------- | -------------------------------------------------------------------- |
 | **Manutenção**             | Alterar Sala VIP = mexer num arquivo de 350 linhas | Alteração restrita ao `SalaVipHandler`                               |
 | **Testabilidade**          | Testar "buscar filme" = mockar 10+ dependências    | `MovieHandlerTest` mocka só `MovieService` + `WeeklyReleasesService` |
@@ -91,6 +93,15 @@ util/
 - A resposta inclui o pôster do Letterboxd, sinopse, número da Sala VIP e o link direto.
 - Sincronização e agendamento controlados pelo `SalaVipJsonLoader` e `SalaVipConfigService` (cron e URL externalizados em `salavip-config.json`).
 - **Upload via painel admin**: A aba de configurações permite atualizar o JSON diretamente pela interface web (`/admin-web/upload-json?target=salavip`).
+
+### 🎬 Torrent (v2.8.0+)
+
+- `t1000 torrent <mês>` — lista todos os lançamentos do mês (ex: `t1000 torrent novembro`).
+- `t1000 torrent <DD/MM>` — lançamentos de uma data específica (ex: `t1000 torrent 02/11`).
+- `t1000 torrent <título>` — ficha de um filme/série (ex: `t1000 torrent Resident Evil`).
+- Dados carregados de `torrent-lancamentos.json` em memória (mesmo esquema da Sala VIP, mas sem banco de dados).
+- Upload via painel admin (`/admin-web/upload-json?target=torrent`).
+- Reload em runtime via `POST /admin/reload-torrent`.
 
 ### 🎙️ Transcrição de áudio
 
@@ -165,48 +176,11 @@ O bot pode responder automaticamente a palavras‑chave ou frases específicas, 
 - **Respostas por usuário** (`userOverrides`).
 - **Limite de uma resposta por dia** para gatilhos configuráveis (`once-per-day-triggers`).
 
-#### 🎲 Múltiplas animações (Sorteio)
-
-A partir da versão **2.6.1**, cada regra pode ter uma lista de pares `(texto, animação)`. A cada disparo, o bot sorteia um par inteiro. Formatos suportados (com precedência):
-
-1. `responses`: lista de pares `{"text": "...", "animation": "..."}` (recomendado).
-2. `animations`: lista de animações (texto fixo em `response`).
-3. `animation`: animação única (formato legado).
-
-```json
-{
-  "triggers": ["bom dia"],
-  "responses": [
-    {
-      "text": "Bom dia, Vietnã!",
-      "animation": "https://exemplo.com/vietnan.gif"
-    },
-    {
-      "text": "Acorda, campeão!",
-      "animation": "https://exemplo.com/campeao.gif"
-    }
-  ]
-}
-```
-
-**Exemplo de resposta:**
-
-> `<a href="tg://user?id=123456">André Nascimento</a>, Olá! Como posso ajudar? 😊`
-
 Para adicionar novos gatilhos, edite o arquivo `auto-responses.json` e recarregue as regras com:
 
 ```bash
 curl -X POST http://localhost:8082/admin/reload-auto-responses
 ```
-
-### 🎬 Torrent (v2.8.0)
-
-- `t1000 torrent <mês>` — lista todos os lançamentos do mês.
-- `t1000 torrent <DD/MM>` — lançamentos de uma data específica.
-- `t1000 torrent <título>` — ficha de um filme/série.
-- Dados carregados de `torrent-lancamentos.json` (mesmo esquema da Sala VIP).
-- Upload via painel admin (`/admin-web/upload-json?target=torrent`).
-- Reload em runtime via `POST /admin/reload-torrent`.
 
 ### 🎛️ Feature Flags (23 no total)
 
@@ -214,48 +188,7 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 
 📖 **Documentação completa**: [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md)
 
-#### Alta prioridade — Onda 3.5.1
-
-| Flag                              | Default | Read-only | Descrição                                |
-| --------------------------------- | ------- | --------- | ---------------------------------------- |
-| `podcast.enabled`                 | ✅      | ❌        | Publicação automática do podcast semanal |
-| `weekly.reminder.enabled`         | ✅      | ❌        | Lembrete de quarta-feira                 |
-| `daily.releases.enabled`          | ✅      | ❌        | Notificação de lançamentos (6 em 6h)     |
-| `worldcup.reminders30min.enabled` | ✅      | ❌        | Aviso 30 min antes de cada jogo          |
-| `easter.eggs.enabled`             | ✅      | ❌        | Easter eggs nas buscas de filme          |
-| `admin.features.toggle-enabled`   | ✅      | ❌        | Habilita toggle via painel admin         |
-
-#### Média prioridade — Onda 3.5.2
-
-| Flag                                  | Default | Read-only | Descrição                                 |
-| ------------------------------------- | ------- | --------- | ----------------------------------------- |
-| `weekly.digest.enabled`               | ✅      | ❌        | Giro semanal dos streamings               |
-| `birthday.enabled`                    | ✅      | ❌        | Parabéns automáticos de aniversário       |
-| `birthday.group-notification.enabled` | ✅      | ❌        | Notificar aniversário nos grupos          |
-| `podcast.fallback-text.enabled`       | ✅      | ❌        | Enviar roteiro como texto se áudio falhar |
-| `ai.digest.custom-period.enabled`     | ✅      | ❌        | Custom digest com período arbitrário      |
-
-#### Baixa prioridade — Onda 3.5.3
-
-| Flag                              | Default | Read-only | Descrição                     |
-| --------------------------------- | ------- | --------- | ----------------------------- |
-| `metrics.prometheus.enabled`      | ✅      | ❌        | Expor `/actuator/prometheus`  |
-| `admin.debug-cache.enabled`       | ✅      | ❌        | Endpoints de debug de cache   |
-| `tmdb.cache.enabled`              | ✅      | ❌        | Cache de detalhes de filme    |
-| `telegram.error-fallback.enabled` | ✅      | ❌        | Fallback genérico do Telegram |
-| `kafka.audit.enabled`             | ❌      | ❌        | Audit trail no MongoDB        |
-
-#### Já existentes
-
-| Flag                       | Default | Read-only | Descrição                                         |
-| -------------------------- | ------- | --------- | ------------------------------------------------- |
-| `worldcup.enabled`         | ❌      | ❌        | Envio de jogos da Copa                            |
-| `transcription.enabled`    | ✅      | ❌        | Transcrição de áudio                              |
-| `auto.response.enabled`    | ✅      | ❌        | Respostas automáticas                             |
-| `digest.enabled`           | ✅      | ❌        | Digest diário                                     |
-| `worldcup.update.enabled`  | ❌      | ❌        | Auto-update do JSON da Copa                       |
-| `prompts.external.enabled` | ❌      | ❌        | Prompts/personas externos via JSON                |
-| `migration.enabled`        | ❌      | ✅        | Migração SQLite → Postgres/Mongo (requer restart) |
+_(Tabelas de Feature Flags mantidas como no original)_
 
 ### 🔧 Administração (endpoints HTTP)
 
@@ -273,6 +206,7 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 | `/admin/reload-telegram-errors` | POST   | Recarrega regras de erro do Telegram                                    |
 | `/admin/reload-admin-config`    | POST   | Recarrega `admin-config.json`                                           |
 | `/admin/reload-prompts`         | POST   | Recarrega prompts e personas                                            |
+| `/admin/reload-torrent`         | POST   | Recarrega `torrent-lancamentos.json`                                    |
 | `/admin/podcast/resend`         | POST   | Reenvia podcast por sexta-feira (`?friday=yyyy-MM-dd&chatId=xxx`)       |
 | `/admin/custom-digest`          | GET    | Gera resumo sob demanda (`?start=yyyy-MM-dd&end=yyyy-MM-dd&chatId=xxx`) |
 | `/admin/mute`                   | POST   | Silencia usuário (`?chatId=...&userId=...&durationMinutes=...`)         |
@@ -285,7 +219,6 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 | `/admin/migrate-sqlite`         | POST   | Migra dados do SQLite legado (`?dryRun=true`)                           |
 | `/admin/config-files`           | GET    | Inspeciona arquivos de configuração                                     |
 | `/admin/properties`             | GET    | Lista propriedades (tokens mascarados)                                  |
-| `/admin/reload-torrent`         | POST   | Recarrega `torrent-lancamentos.json`                                    |
 
 ---
 
@@ -726,7 +659,32 @@ Andre Nascimento
 
 ## 📋 Changelog resumido
 
-🆕 **v2.7.1 — Refatoração: Arquitetura de Handlers Especializados** (2026-11-05)
+## 📋 Changelog resumido
+
+🆕 **v2.8.1 — Hotfix: Estabilidade do SilasCast e Ajustes Técnicos** (2026-11-06)
+
+**Corrigido:**
+
+- **Podcast SilasCast (Scheduler):** Corrigido o bug em que a publicação automática de sexta-feira falhava ao sintetizar o áudio via Azure TTS em background, enviando o roteiro como texto por engano.
+  - Aumentado o `readTimeout` do `AzureTtsClient` para 300s (5 minutos).
+  - Adicionado log de erro detalhado na síntese do TTS.
+  - Adicionado retry genérico (`includes = Exception.class`) no `synthesizeSinglePart`.
+- **Módulo Torrent:** Substituído `volatile List` por `AtomicReference<List>` no `TorrentLaunchService` para garantir thread-safety real (SonarQube S3077).
+- **Sala VIP:** Suprimido aviso do JDT no `SalaVipScheduler` sobre variável injetada via SpEL (`@SuppressWarnings("unused")`).
+
+🆕 **v2.8.0 — Módulo Torrent** (2026-11-05)
+
+**Nova feature:**
+
+- ✅ **Módulo Torrent:** consulta a lançamentos de filmes e séries (torrent) do mês.
+  - `t1000 torrent <mês>` — lista completa.
+  - `t1000 torrent <DD/MM>` — lançamentos de uma data.
+  - `t1000 torrent <título>` — ficha detalhada.
+- ✅ **JSON externo:** `torrent-lancamentos.json` (mesmo padrão da Sala VIP).
+- ✅ **Upload via painel admin:** `/admin-web/upload-json?target=torrent`.
+- ✅ **Reload em runtime:** `POST /admin/reload-torrent`.
+
+**v2.7.1 — Refatoração: Arquitetura de Handlers Especializados** (2026-11-05)
 
 **Refatoração (breaking change interno):**
 
