@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-06T10:00:00Z",
+  "ads": [
+    {
+      "id": "quatro-horas-quarta",
+      "name": "Lembrete Semanal - Quatro Horas de Quarta",
+      "enabled": true,
+      "cron": "0 0 16 * * WED",
+      "timezone": "America/Sao_Paulo",
+      "message": "<i>\"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...\"</i>\n\n<b>Muito Prazer (1979) - David Neves</b>",
+      "mediaUrl": "${QUATRO_HORAS_QUARTA_FILE}",
+      "targetChatIds": ["-100123", "-100456"],
+      "tags": ["semanal", "cinema"]
+    },
+    {
+      "id": "promo-sexta",
+      "name": "Promoção Sexta-feira",
+      "enabled": false,
+      "cron": "0 0 10 * * FRI",
+      "timezone": "America/Sao_Paulo",
+      "message": "🎬 <b>Promoção da Sexta!</b>\n\nAssista com 50% off.",
+      "mediaUrl": "https://exemplo.com/promo.mp4",
+      "targetChatIds": ["-100789"],
+      "tags": ["promo", "sexta"]
+    }
+  ]
+}
