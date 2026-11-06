@@ -1,18 +1,18 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.7.0** | Branch: `main` | Último build: 2026-11-01
+> **Versão atual: v2.7.1** | Branch: `main` | Último build: 2026-11-05
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
 Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenAI), **busca filmes** no TMDB, **gera resumos automáticos** das conversas do grupo e **publica podcasts semanais** com TTS.
 
 ![Java](https://img.shields.io/badge/Java-21-orange)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.1-brightgreen)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.2-brightgreen)
 ![Build](https://img.shields.io/badge/build-passing-success)
-![Tests](https://img.shields.io/badge/tests-passing-success)
-![Coverage](https://img.shields.io/badge/coverage-90%25-yellowgreen)
+![Tests](https://img.shields.io/badge/tests-350%2B_passing-success)
+![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v2.6.3-blueviolet)
+![Status](https://img.shields.io/badge/status-v2.7.1-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
@@ -22,6 +22,7 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenA
 O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 
 - 🎥 Busca de filmes via API do TMDB (com desambiguação, elenco, streaming e easter eggs)
+- 🍿 Consulta à Sala VIP do RapaduraCast (Letterboxd)
 - 🎙️ Transcrição de áudio com IA via Groq (Whisper + refinamento Llama)
 - 📊 Digest diário de conversas com personas cinematográficas (T-1000, Bicentenário, Arquiteto)
 - 🎧 Podcast semanal ("Silas Cast") com roteiro gerado por LLM e síntese via Azure TTS
@@ -31,7 +32,45 @@ O **T1000-Bot** é uma plataforma de entretenimento para Telegram que combina:
 - 💡 Registro de ideias dos usuários (MongoDB)
 - 🔨 **Moderação de grupos** (Mute/Unmute via comando, painel ou API)
 - 🎛️ **23 feature flags runtime** com persistência opcional em disco
-- ⚙️ Backend moderno com **Spring Boot 4.1.1**, **Java 21 (Virtual Threads)**, **Kafka**, **PostgreSQL**, **MongoDB** e **SQLite legado**
+- ⚙️ Backend moderno com **Spring Boot 4.1.2**, **Java 21 (Virtual Threads)**, **Kafka**, **PostgreSQL**, **MongoDB** e **SQLite legado**
+
+🆕 **A partir da v2.7.1:** comandos do bot foram refatorados para uma **arquitetura de Handlers Especializados** (veja [Arquitetura](#arquitetura) abaixo).
+
+---
+
+## 🏗️ Arquitetura (v2.7.1)
+
+A refatoração da v2.7.1 substituiu o `CommandHandler` monolítico (God Class, ~350 linhas) por uma hierarquia de handlers especializados, seguindo o padrão **Template Method**.
+
+```
+telegram/handler/
+├── AbstractCommandHandler.java    ← superclasse (auth, envio, tratamento de erros)
+├── IdeaHandler.java               ← t1000 anotar ideia ...
+├── BirthdayHandler.java           ← t1000 registrar aniversario ...
+├── MovieHandler.java              ← t1000 buscar ... / t1000 estreias ...
+├── WorldCupHandler.java           ← t1000 jogos ... / t1000 resultados ...
+├── HelpCommandHandler.java        ← /start, /help, /ajuda
+└── SalaVipHandler.java            ← t1000 salavip ...
+
+controller/
+└── CommandHandler.java            ← roteador puro (sem lógica de negócio)
+
+util/
+└── DateParserUtils.java           ← parse de datas centralizado
+```
+
+**Benefícios:**
+
+| Aspecto                    | Antes (v2.7.0)                                     | Depois (v2.7.1)                                                      |
+| -------------------------- | -------------------------------------------------- | -------------------------------------------------------------------- |
+| **Manutenção**             | Alterar Sala VIP = mexer num arquivo de 350 linhas | Alteração restrita ao `SalaVipHandler`                               |
+| **Testabilidade**          | Testar "buscar filme" = mockar 10+ dependências    | `MovieHandlerTest` mocka só `MovieService` + `WeeklyReleasesService` |
+| **Complexidade cognitiva** | SonarQube penalizava o `CommandHandler`            | Cada handler tem complexidade ~5-10                                  |
+| **Escala**                 | Novo comando = modificar classe principal          | Novo comando = nova classe + 1 linha no roteador                     |
+| **Segurança**              | Cada comando lembrava de checar autorização        | `AbstractCommandHandler.processarComando` verifica sempre            |
+| **Tratamento de erro**     | Cada comando reimplementava try/catch              | `executarComProtecao` centraliza                                     |
+
+📖 **Documentação completa**: [Dev Guide → Arquitetura](./docs/dev-guide/arquitetura.md)
 
 ---
 
@@ -245,7 +284,7 @@ Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via p
 ### Core
 
 - **Java 21** com virtual threads
-- **Spring Boot 4.1.1**
+- **Spring Boot 4.1.2**
 - **Spring Security 7.1.1** (OAuth2 / Google)
 - **Gradle** com **Spotless** (google-java-format AOSP) e **JaCoCo**
 
@@ -296,16 +335,23 @@ O projeto é organizado em serviços especializados. Veja abaixo cada um e como 
 | `TelegramFacade` / `TelegramSafeExecutor`                                       | Camada de abstração da API do Telegram.                                                 | Fallback configurável via `telegram.error-fallback.enabled`.                                      |
 | `BotAnalyticsService`                                                           | Persistência de conversas, interações e ideias no MongoDB.                              | Três repositórios: `BotConversationRepository`, `InteractionLogRepository`, `UserIdeaRepository`. |
 | `PrometheusFeatureFlagFilter`                                                   | Intercepta `/actuator/prometheus` e bloqueia se flag off.                               | `OncePerRequestFilter` — desacoplado do Actuator.                                                 |
+| 🆕 `AbstractCommandHandler` + handlers especializados                           | Roteamento de comandos (v2.7.1+)                                                        | Cada handler isolado, testável, com autorização centralizada.                                     |
 
-### 💡 Como criar um novo serviço (exemplo: módulo de enquete)
+### 💡 Como criar um novo comando (exemplo: módulo de enquete)
 
-1. Crie uma nova classe `PollService` com a lógica de criar/responder enquetes.
-2. Injete `TelegramFacade` para enviar mensagens e botões.
-3. No `TelegramController`, adicione um handler para comandos como `/poll`.
-4. Registre uma feature flag (`poll.enabled`) no `FeatureFlagAdminService`.
-5. Pronto: o novo serviço fica isolado, testável e controlável via feature flag.
+1. Crie uma nova classe `PollHandler` que **estenda** `AbstractCommandHandler`.
+2. Implemente `getPrefixo()` retornando `"t1000 enquete"`.
+3. Implemente `handleCommand(Update, String)` com a lógica de criar/responder enquetes.
+4. No `CommandHandler` (roteador), adicione **1 linha** no `rotear`:
+   ```java
+   if (normalized.startsWith(PollHandler.PREFIXO)) {
+       pollHandler.processarComando(update);
+       return true;
+   }
+   ```
+5. Pronto: o novo handler fica isolado, testável e com autorização automática.
 
-📖 Documentação: [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md)
+📖 Documentação: [Dev Guide → Arquitetura](./docs/dev-guide/arquitetura.md)
 
 ---
 
@@ -432,6 +478,8 @@ O projeto usa uma estratégia de testes em camadas:
 - **Cobertura mínima**: 90% global, 70% por classe (excluindo `config`, `client`, `dto`, `model`, `document`).
 - **Análise estática**: SonarCloud integrado ao CI.
 
+🆕 **A partir da v2.7.1:** testes dos handlers de comando são **isolados por handler** (ex.: `MovieHandlerTest` testa só `MovieHandler`, sem mockar `SalaVipHandler`). O `CommandHandlerTest` foca **apenas** no roteamento.
+
 ### 🎨 Formatação
 
 O projeto usa **Spotless** com **google-java-format AOSP**:
@@ -455,6 +503,32 @@ Telegram → Interceptors → Handlers → Services → Clients → APIs externa
                     PostgreSQL + MongoDB
 ```
 
+🆕 **Handlers especializados (v2.7.1):**
+
+```
+Telegram Update
+      ↓
+MessageUpdateRuleHandler
+      ↓
+CommandHandler (roteador)
+      ↓
+┌─────────────────────────────────────┐
+│  Roteia pelo prefixo do texto       │
+└─────────────────────────────────────┘
+      ↓ (delega)
+┌──────────────┬──────────────┬──────────────┐
+│ MovieHandler │ SalaVipHandler│ WorldCupHandler│
+└──────────────┴──────────────┴──────────────┘
+      ↓ (via herança)
+┌─────────────────────────────────────┐
+│ AbstractCommandHandler              │
+│  - verifica autorização             │
+│  - normaliza texto                  │
+│  - executa handleCommand            │
+│  - captura exceções                 │
+└─────────────────────────────────────┘
+```
+
 ---
 
 ## 📚 Documentação de Desenvolvimento
@@ -462,8 +536,13 @@ Telegram → Interceptors → Handlers → Services → Clients → APIs externa
 Toda a documentação técnica está em [`docs/dev-guide/`](./docs/dev-guide/):
 
 - 📖 [Dev Guide — Índice](./docs/dev-guide/README.md)
+- 🏗️ [Arquitetura](./docs/dev-guide/arquitetura.md) — **NOVO em v2.7.1**: handlers especializados, superclasse, roteador
 - 🎛️ [Feature Flags](./docs/dev-guide/feature-flags.md) — 23 flags runtime, catálogo, como adicionar e usar
 - ⚙️ [Arquivos de Configuração](./docs/dev-guide/config-files.md) — todos os JSONs do projeto (audio, groq, refinement, admin, worldcup, tmdb-aliases, feature-flags, prompts)
+- 🍿 [Sala VIP](./docs/dev-guide/salavip.md) — loader de JSON, sincronização, handler do Telegram
+- 🚀 [Fluxo de Desenvolvimento](./docs/dev-guide/fluxo-de-desenvolvimento.md) — branches, PRs, CI, releases
+- 📝 [PR Template](./docs/dev-guide/pr-template.md) — template de PR e issue
+- 🧪 [Testes e Cobertura](./docs/dev-guide/spotless-fallback.md) — Spotless, JaCoCo, fallback de formatação
 
 ---
 
@@ -491,9 +570,17 @@ src/main/java/net/ddns/adambravo79/tmill
 ├── telegram
 │   ├── core
 │   ├── exception
-│   ├── handler
+│   ├── handler              ← 🆕 handlers especializados (v2.7.1)
+│   │   ├── AbstractCommandHandler.java
+│   │   ├── BirthdayHandler.java
+│   │   ├── HelpCommandHandler.java
+│   │   ├── IdeaHandler.java
+│   │   ├── MovieHandler.java
+│   │   ├── SalaVipHandler.java
+│   │   └── WorldCupHandler.java
 │   └── util
 └── util
+    └── DateParserUtils.java   ← 🆕 (v2.7.1)
 ```
 
 ---
@@ -602,6 +689,19 @@ src/main/java/net/ddns/adambravo79/tmill
 - **Por que existe**: o endpoint do Actuator é habilitado por `application.properties`, e não dá para desligá-lo em runtime sem um filtro.
 - **Testável isoladamente**: `PrometheusFeatureFlagFilterTest` cobre todos os paths.
 
+🆕 **Handlers especializados (v2.7.1):**
+
+- **`AbstractCommandHandler`**: superclasse com Template Method (`processarComando`), wrappers de envio, tratamento de exceção e helpers.
+- **`MovieHandler`**: busca, desambiguação, estreias.
+- **`SalaVipHandler`**: número, episódio, título (com match na nota).
+- **`WorldCupHandler`**: jogos, resultados, feature flag.
+- **`BirthdayHandler`**: 6 variantes de prefixo.
+- **`IdeaHandler`**: salvamento em arquivo + MongoDB.
+- **`HelpCommandHandler`**: `/start`, `/help`, `/ajuda` (via ksilisk) e `start` (via roteador).
+- **`CommandHandler`**: roteador puro (sem lógica de negócio).
+
+📖 Ver [Dev Guide → Arquitetura](./docs/dev-guide/arquitetura.md).
+
 ---
 
 ## 📄 Licença
@@ -615,6 +715,43 @@ Andre Nascimento
 ---
 
 ## 📋 Changelog resumido
+
+🆕 **v2.7.1 — Refatoração: Arquitetura de Handlers Especializados** (2026-11-05)
+
+**Refatoração (breaking change interno):**
+
+- ✅ Extração de toda a lógica de negócio do `CommandHandler` (God Class, ~350 linhas) para handlers especializados.
+- ✅ Criação da superclasse `AbstractCommandHandler` (Template Method) com:
+  - Verificação de autorização centralizada
+  - Wrappers seguros de envio (`sendHtml`, `sendPlain`, `sendWithButtons`, `sendPhoto`)
+  - Tratamento genérico de exceções (`executarComProtecao`)
+  - Helpers de extração (`chatId`, `userId`, `userName`, `textoBruto`, `normalizarTexto`, `argumentoApos`)
+- ✅ Novos handlers: `IdeaHandler`, `BirthdayHandler`, `MovieHandler`, `WorldCupHandler`.
+- ✅ `HelpCommandHandler` refatorado para herdar de `AbstractCommandHandler` + implementar `CommandUpdateHandler`.
+- ✅ `SalaVipHandler` **movido** de `service/` para `telegram/handler/` e migrado para herdar de `AbstractCommandHandler`.
+- ✅ `CommandHandler` agora é **roteador puro** (sem lógica de negócio).
+- ✅ Extração do `DateParserUtils` (parser de datas centralizado, antes duplicado em `CommandHandler` e `AdminUtils`).
+
+**Bugs latentes corrigidos durante a refatoração:**
+
+- ✅ `WorldCupHandler.handleJogos` agora valida `data == null` (antes passava `null` ao scheduler, que respondia "nenhum jogo programado" em vez de "data inválida").
+- ✅ `CommandHandler.normalizarTexto` agora colapsa espaços múltiplos (`"t1000   jogos   hoje"` → `"t1000 jogos hoje"`).
+- ✅ `SalaVipHandler.REGEX_NUMERO` agora aceita `número` (com acento) — `n[uú]mer[oó]?`.
+- ✅ `SalaVipHandler.FLAGS` removido `CANON_EQ` (quebrava match de acentos em classes de caracteres).
+
+**Testes (9 arquivos: 6 novos, 3 refatorados):**
+
+- ✅ `DateParserUtilsTest` (novo) — ~60 testes
+- ✅ `AbstractCommandHandlerTest` (novo) — ~45 testes
+- ✅ `IdeaHandlerTest` (novo) — ~17 testes
+- ✅ `BirthdayHandlerTest` (novo) — ~22 testes
+- ✅ `MovieHandlerTest` (novo) — ~28 testes
+- ✅ `WorldCupHandlerTest` (novo) — ~22 testes
+- ✅ `HelpCommandHandlerTest` (refatorado) — ~18 testes
+- ✅ `SalaVipHandlerTest` (refatorado, movido) — ~35 testes
+- ✅ `CommandHandlerTest` (refatorado drasticamente) — ~30 testes
+
+**Cobertura:** ~94% global (meta: ≥90%).
 
 ### 🆕 v2.6.3 — Moderação de Grupos e Comando de Ajuda
 
@@ -661,11 +798,12 @@ _(Mantido igual ao anterior...)_
 
 _(Mantido igual ao anterior...)_
 
-### 🔄 Mudanças arquiteturais (v2.1.x → v2.6.3)
+### 🔄 Mudanças arquiteturais (v2.1.x → v2.7.1)
 
 - 🔀 Migração de **SQLite** para **PostgreSQL** (dados estruturados) + **MongoDB** (documentos)
 - 🔀 Processamento de áudio movido para **workers Kafka** (escalável horizontalmente)
 - 🔀 **Virtual Threads** habilitados (`spring.threads.virtual.enabled=true`)
-- 🔀 **Spring Boot 4.1.1** + **Spring Security 7.1.1** + **Java 21**
+- 🔀 **Spring Boot 4.1.2** + **Spring Security 7.1.1** + **Java 21**
 - 🔀 **Spotless** + **JaCoCo** + **SonarCloud** no CI
 - 🔀 **Feature flags runtime** com persistência em disco e UI no painel admin
+- 🆕 **Arquitetura de handlers especializados** (v2.7.1) — `CommandHandler` virou roteador puro

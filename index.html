@@ -60,27 +60,47 @@
 
     <div class="badge">
         <img src="https://img.shields.io/badge/Java-21-orange" alt="Java">
-        <img src="https://img.shields.io/badge/Spring_Boot-3.x-brightgreen" alt="Spring Boot">
+        <img src="https://img.shields.io/badge/Spring_Boot-4.1.2-brightgreen" alt="Spring Boot">
         <img src="https://img.shields.io/badge/build-passing-success" alt="Build">
-        <img src="https://img.shields.io/badge/tests-coming_soon-yellow" alt="Tests">
+        <img src="https://img.shields.io/badge/tests-passing-success" alt="Tests">
+        <img src="https://img.shields.io/badge/coverage-94%25-brightgreen" alt="Coverage">
         <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
-        <img src="https://img.shields.io/badge/status-v1.3.1-blueviolet" alt="Status">
-        <img src="https://github.com/andre-s-nascimento/t1000/actions/workflows/ci.yml/badge.svg" alt="CI">
+        <img src="https://img.shields.io/badge/status-v2.7.1-blueviolet" alt="Status">
+        <img src="https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg" alt="CI">
     </div>
-
     <h2>🚀 Sobre o Projeto</h2>
     <p>O <b>Tmill Bot</b> é um bot para Telegram que combina:</p>
     <ul>
         <li>🎥 Busca de filmes via API do TMDB</li>
-        <li>🎙️ Transcrição de áudio com IA via Groq</li>
-        <li>🧠 Refinamento de texto com modelos LLM</li>
-        <li>⚙️ Backend moderno com Spring Boot + Java 21 (Virtual Threads)</li>
+        <li>🍿 Consulta à Sala VIP do RapaduraCast (Letterboxd)</li>
+        <li>⚽ Jogos e resultados da Copa do Mundo 2026</li>
+        <li>🎙️ Transcrição de áudio com IA via Groq + Whisper</li>
+        <li>🧠 Refinamento de texto com LLMs (gpt-oss)</li>
+        <li>🎧 Geração de podcast semanal com Azure TTS</li>
+        <li>💡 Anotação de ideias (arquivo + MongoDB)</li>
+        <li>🎂 Registro e lembretes de aniversário</li>
+        <li>⚙️ Backend moderno com Spring Boot 4 + Java 21 (Virtual Threads)</li>
+        <li>📊 Observabilidade com Prometheus, Grafana e Kibana</li>
     </ul>
 
-    <h2>📚 Documentação de Desenvolvimento</h2>
-    <p>Toda a documentação técnica e guias estão centralizados em:
-        <a href="./docs/dev-guide/README.md">Dev Guide</a>
+    <h2>🏗️ Arquitetura (v2.7.1)</h2>
+    <p>A partir da v2.7.1, os comandos do bot foram refatorados para uma arquitetura de <b>Handlers Especializados</b>:
     </p>
+    <pre><code>telegram/handler/
+├── AbstractCommandHandler.java    ← superclasse (auth, envio, erros)
+├── IdeaHandler.java               ← t1000 anotar ideia
+├── BirthdayHandler.java           ← t1000 registrar aniversario
+├── MovieHandler.java              ← t1000 buscar / estreias
+├── WorldCupHandler.java           ← t1000 jogos / resultados
+├── HelpCommandHandler.java        ← /start, /help, /ajuda
+└── SalaVipHandler.java            ← t1000 salavip
+
+controller/
+└── CommandHandler.java            ← roteador puro (sem lógica de negócio)</code></pre>
+    <p>Cada handler é testado isoladamente. O roteador apenas decide <i>quem</i> processa cada mensagem.</p>
+
+    <a href="./docs/dev-guide/README.md">Dev Guide</a>
+
 </body>
 <script>
     var text00 = "🚀 Como publicar no GitHub Pages";
