@@ -5,6 +5,72 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.9.0] — 2026-11-06
+
+### Adicionado
+
+#### Módulo de Reminders (Anúncios Configuráveis)
+
+- **Sistema de reminders em runtime**: substitui o `WeeklyReminderService` hardcoded por um registry persistente em JSON (`config/reminders.json`), com CRUD completo via painel admin e API REST.
+- **`Reminder` (record)**: modelo imutável com validação de `id` (slug kebab-case), `cron` (6 campos) e `message` (não vazio). Listas (`targetChatIds`, `tags`) são copiadas defensivamente (`List.copyOf`).
+- **`ReminderJson` (record)**: envelope do arquivo, com `version`, `updatedAt` e `reminders`. Fábricas: `of(...)`, `withReminders(...)`, `empty()`.
+- **`ReminderService`**: registry central. Carrega do disco no boot, mantém estado em `AtomicReference`, persiste com escrita atômica (`.tmp` + `ATOMIC_MOVE`), expõe `setReloadListener(Runnable)` para desacoplar do scheduler.
+- **`ReminderScheduler`**: agendador dinâmico baseado em `ThreadPoolTaskScheduler` + `ScheduledFuture` gerenciados manualmente. Reagenda em runtime via `reloadAll()`, cancela individualmente (`cancel(id)`) ou em massa (`cancelAll()`, `@PreDestroy`).
+- **`ReminderDispatcher`**: envia para múltiplos chats, isolando falha por chat. Usa `enviarMidia` (se `mediaUrl` presente) ou `enviarMensagemHtml` (só texto). Feature flag `reminders.enabled` permite pausar tudo sem editar cada reminder.
+- **`ReminderController`** (REST): 9 endpoints sob `/admin/reminders` — CRUD, `toggle`, `test`, `reload`, `status`. Valida cron com `CronExpression.parse` antes de delegar ao service.
+- **UI de Anúncios** (`admin.html`): nova aba `📢 Anúncios` com tabela, modal de criar/editar, toggle, delete, reload do disco e painel de diagnóstico (total vs. agendados).
+- **Feature flag `reminders.enabled`**: registrada no `FeatureFlagAdminService`. Default `true`.
+
+#### Migração de Configuração
+
+- **`config/reminders.json`**: novo arquivo de configuração, versionado no repositório, com metadados (`version`, `updatedAt`) e lista de reminders.
+- **Property `reminders.data.file`**: configurável (`classpath:` em dev/testes, `file:/app/config/reminders.json` em prod).
+- **Properties `application.properties`/`application-prod.properties`**: adicionadas com default explícito (env var `REMINDERS_ENABLED`).
+
+### Alterado
+
+- **`FeatureFlagAdminService.registerKnownFlags()`**: `TOTAL_FLAGS` de 23 → 24; registro de `reminders.enabled` como editável.
+- **`admin.html`**: nova aba na navegação; `nav-tabs` agora tem 11 abas (scroll horizontal preservado).
+- **`HELP_TEXT`** (opcional): mantido — os reminders não são comandos de bot, são envios agendados.
+
+### Testes
+
+- **`ReminderTest`** (opcional) — ~26 testes: validações do construtor compacto (id, cron, message), imutabilidade, `displayName`, `effectiveTimezone`, `withEnabled`, `equals`/`hashCode`.
+- **`ReminderJsonTest`** (opcional) — ~24 testes: normalização (`version`, `reminders`), `of`, `withReminders`, `empty`, `CURRENT_VERSION`, imutabilidade, `equals`/`hashCode`.
+- **`ReminderServiceTest`** — ~45 testes: carregamento, CRUD, toggle, delete, persistência atômica, listener, classpath vs. file:, concorrência (2 threads criando IDs diferentes).
+- **`ReminderSchedulerTest`** — ~25 testes: `init`, `reloadAll`, cron inválido, timezone inválida, `cancel`, `cancelAll`, `destroy`, `dispatchSafe` (via cron de 1s), listener, `scheduledIds` imutável.
+- **`ReminderDispatcherTest`** — ~30 testes: feature flag, reminder inexistente/desabilitado/sem chats, envio com/sem mídia, isolamento por chat, chat inválido, `dispatchToChat` (teste manual), métricas.
+- **`ReminderControllerTest`** — ~25 testes MockMvc: 9 endpoints + validações (400/404/409/500) + cron inválido + ID divergente.
+- **`FeatureFlagAdminServiceTest`**: atualizado para `TOTAL_FLAGS = 24` e novo teste da flag `reminders.enabled`.
+
+### Cobertura
+
+- **Global: ~95%** (meta: ≥90%).
+- **Código novo (Sonar Quality Gate): ~95%** (meta: ≥80%).
+- **`Reminder`/`ReminderJson`**: excluídos do JaCoCo e do Sonar (`model/**`, `dto/**`), mas 100% testados por robustez.
+
+### Corrigido
+
+- **Flag `reminders.enabled` ausente no `FeatureFlagAdminService`**: o `ReminderDispatcher` consultava a flag, mas ela não existia → `FeatureFlagService.isEnabled()` retornava `false` (default para flag desconhecida), e todos os reminders eram silenciosamente ignorados. Log: `⚠️ Consulta a flag desconhecida: 'reminders.enabled'. Retornando false.`
+
+### Removido
+
+- Nenhum código do `WeeklyReminderService` foi removido nesta versão (compatibilidade com a UI legada). A migração para o novo sistema é gradual — ver [Notas de Migração](#notas-de-migração).
+
+### Notas de Migração
+
+- **`WeeklyReminderService` legado**: continua funcionando na aba `📅 Lembretes`. O novo módulo (`📢 Anúncios`) é independente. Para migrar:
+  1. Criar um reminder em `📢 Anúncios` com o mesmo `cron` e `message`.
+  2. Desabilitar a flag `weekly.reminder.enabled` (a UI legada para de disparar).
+  3. (Opcional) Remover a UI legada numa versão futura.
+- **Volume Docker**: montar `config/reminders.json` em `/app/config/reminders.json` em produção (mesmo padrão de `easter-eggs.json`, `worldcup2026.json`, `torrent-lancamentos.json`).
+- **Feature flag**: `reminders.enabled` pode ser desligada em runtime via `/admin/features` ou `/admin-web` (aba 🎛️ Features) — útil em incidentes.
+
+### Segurança
+
+- **Sem `integrity` nas CDNs**: o `admin.html` mantém as CDNs do Bootstrap 5.3 e Icons 1.11.3 sem `integrity`/`crossorigin`. Correção adiada para a Fase 2 (refatoração geral do admin).
+- **`maximum-scale=1.0`**: mantido no `<meta viewport>` (Sonar Web S7926). Correção adiada para a Fase 2.
+
 ## [2.8.1] — 2026-11-06
 
 ### Corrigido (Hotfix)

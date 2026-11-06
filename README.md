@@ -145,6 +145,52 @@ util/
 - Toda **quarta-feira às 16h** (BRT) envia uma mensagem nos grupos autorizados.
 - Controlado pela flag `weekly.reminder.enabled`.
 
+### 📢 Anúncios / Reminders Configuráveis
+
+Sistema genérico de envios agendados, substituindo o `WeeklyReminderService` hardcoded. Cada anúncio tem seu próprio **cron**, **timezone**, **mensagem (HTML)**, **mídia opcional** e **lista de chats alvo**. Tudo configurável em runtime via painel admin ou API REST, sem reiniciar a aplicação.
+
+**Painel Admin (`📢 Anúncios`):**
+
+- Tabela com ID, nome, cron, status (habilitado/desabilitado), chats e ações.
+- Modal de criação/edição com validação JS (cron, ID slug, chats obrigatórios).
+- Toggle enable/disable, delete com confirmação, reload do disco.
+- Painel de diagnóstico: `total`, `enabled`, `scheduled`, `scheduledIds`.
+
+**API REST (`/admin/reminders`):**
+
+| Método | Endpoint                                    | Descrição                               |
+| ------ | ------------------------------------------- | --------------------------------------- |
+| GET    | `/admin/reminders`                          | Lista todos os reminders                |
+| GET    | `/admin/reminders/{id}`                     | Busca por ID                            |
+| POST   | `/admin/reminders`                          | Cria novo (body = JSON do `Reminder`)   |
+| PUT    | `/admin/reminders/{id}`                     | Substitui (ID do body deve bater)       |
+| POST   | `/admin/reminders/{id}/toggle?enabled=true` | Alterna `enabled`                       |
+| DELETE | `/admin/reminders/{id}`                     | Remove                                  |
+| POST   | `/admin/reminders/{id}/test?chatId=123`     | Envia manualmente para um chat          |
+| POST   | `/admin/reminders/reload`                   | Recarrega do disco                      |
+| GET    | `/admin/reminders/status`                   | Diagnóstico (total, enabled, scheduled) |
+
+**Exemplo de `config/reminders.json`:**
+
+````json
+{
+  "version": 1,
+  "updatedAt": "2026-11-06T10:00:00Z",
+  "reminders": [
+    {
+      "id": "quatro-horas-quarta",
+      "name": "Quatro Horas de Quarta",
+      "enabled": true,
+      "cron": "0 0 16 * * WED",
+      "timezone": "America/Sao_Paulo",
+      "message": "<b>Muito Prazer (1979)</b>",
+      "mediaUrl": "https://exemplo.com/video.mp4",
+      "targetChatIds": ["-100123", "-100456"],
+      "tags": ["cinema", "semanal"]
+    }
+  ]
+}
+
 ### 🎂 Aniversários
 
 - `t1000 anotar aniversário DD/MM` — registra o aniversário do usuário.
@@ -180,15 +226,23 @@ Para adicionar novos gatilhos, edite o arquivo `auto-responses.json` e recarregu
 
 ```bash
 curl -X POST http://localhost:8082/admin/reload-auto-responses
-```
+````
 
-### 🎛️ Feature Flags (23 no total)
+### 🎛️ Feature Flags (24 no total)
 
 Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via painel admin ou API.
 
 📖 **Documentação completa**: [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md)
 
-_(Tabelas de Feature Flags mantidas como no original)_
+### 🎛️ Feature Flags (24 no total)
+
+Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via painel admin ou API.
+
+**Novas flags (v2.9.0):**
+
+| Flag                | Default | Descrição                                                        |
+| ------------------- | ------- | ---------------------------------------------------------------- |
+| `reminders.enabled` | `true`  | Envio de anúncios/lembretes configuráveis via `/admin/reminders` |
 
 ### 🔧 Administração (endpoints HTTP)
 
@@ -656,8 +710,6 @@ MIT
 Andre Nascimento
 
 ---
-
-## 📋 Changelog resumido
 
 ## 📋 Changelog resumido
 

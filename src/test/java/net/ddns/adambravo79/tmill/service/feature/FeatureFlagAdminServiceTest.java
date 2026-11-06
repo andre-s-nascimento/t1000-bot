@@ -27,7 +27,7 @@ import tools.jackson.databind.ObjectMapper;
  * <p>Verifica:
  *
  * <ul>
- *   <li>Registro das 23 flags conhecidas no {@code @PostConstruct}
+ *   <li>Registro das 24 flags conhecidas no {@code @PostConstruct}
  *   <li>Leitura correta dos defaults do {@code Environment}
  *   <li>Delegação para o {@link FeatureFlagService}
  *   <li>Flags read-only são registradas como tal
@@ -41,7 +41,7 @@ import tools.jackson.databind.ObjectMapper;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class FeatureFlagAdminServiceTest {
 
-    private static final int TOTAL_FLAGS = 23;
+    private static final int TOTAL_FLAGS = 24;
 
     @Mock private Environment environment;
 
@@ -64,8 +64,8 @@ class FeatureFlagAdminServiceTest {
     class Registro {
 
         @Test
-        @DisplayName("registra exatamente 23 flags no boot")
-        void registers23Flags() {
+        @DisplayName("registra exatamente as flags no boot")
+        void registersFlags() {
             adminService.registerKnownFlags();
 
             assertThat(flagService.list()).hasSize(TOTAL_FLAGS);
@@ -85,22 +85,20 @@ class FeatureFlagAdminServiceTest {
                             "podcast.enabled",
                             "weekly.reminder.enabled",
                             "daily.releases.enabled",
+                            "reminders.enabled",
                             "worldcup.reminders30min.enabled",
                             "easter.eggs.enabled",
                             "admin.features.toggle-enabled",
-                            // ===== Média prioridade — Onda 3.5.2 =====
                             "weekly.digest.enabled",
                             "birthday.enabled",
                             "birthday.group-notification.enabled",
                             "podcast.fallback-text.enabled",
                             "ai.digest.custom-period.enabled",
-                            // ===== Baixa prioridade — Onda 3.5.3 =====
                             "metrics.prometheus.enabled",
                             "admin.debug-cache.enabled",
                             "tmdb.cache.enabled",
                             "telegram.error-fallback.enabled",
                             "kafka.audit.enabled",
-                            // ===== Já existentes =====
                             "worldcup.enabled",
                             "transcription.enabled",
                             "auto.response.enabled",
@@ -128,6 +126,8 @@ class FeatureFlagAdminServiceTest {
             assertThat(flagService.get("podcast.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("weekly.reminder.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("daily.releases.enabled").get().readOnly()).isFalse();
+            assertThat(flagService.get("reminders.enabled").get().readOnly()).isFalse();
+
             assertThat(flagService.get("worldcup.reminders30min.enabled").get().readOnly())
                     .isFalse();
             assertThat(flagService.get("easter.eggs.enabled").get().readOnly()).isFalse();
@@ -348,7 +348,7 @@ class FeatureFlagAdminServiceTest {
     class Delegacao {
 
         @Test
-        @DisplayName("list delega e retorna as 23 flags")
+        @DisplayName("list delega e retorna as flags")
         void listDelegates() {
             adminService.registerKnownFlags();
 
@@ -371,6 +371,7 @@ class FeatureFlagAdminServiceTest {
                             "podcast.enabled",
                             "weekly.reminder.enabled",
                             "daily.releases.enabled",
+                            "reminders.enabled",
                             "worldcup.reminders30min.enabled",
                             "easter.eggs.enabled",
                             "admin.features.toggle-enabled",

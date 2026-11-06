@@ -82,6 +82,7 @@ public class FeatureFlagAdminService {
         // =====================================================================
         registerBool("podcast.enabled", true, "Publicação automática semanal do podcast");
         registerBool("weekly.reminder.enabled", true, "Lembrete semanal de quarta-feira");
+        registerBool("reminders.enabled", true, "Envio de anúncios/lembretes configuráveis");
         registerBool("daily.releases.enabled", true, "Notificação de lançamentos a cada 6h");
         registerBool(
                 "worldcup.reminders30min.enabled", true, "Aviso 30 min antes de cada jogo da Copa");
