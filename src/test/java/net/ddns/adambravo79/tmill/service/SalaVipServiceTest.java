@@ -50,6 +50,7 @@ class SalaVipServiceTest {
     // buscarPorNumero / buscarPorTitulo / buscarPorEpisodio — delegam
     // ------------------------------------------------------------------
 
+    @SuppressWarnings("null")
     @Test
     void deveBuscarPorNumero() {
         SalaVipMovie movie = movie(15, 15, "mad-max", "Mad Max", 1979);
@@ -61,6 +62,7 @@ class SalaVipServiceTest {
         verify(repository).findMovieByNumberInLatestSnapshot(15);
     }
 
+    @SuppressWarnings("null")
     @Test
     void deveBuscarPorTitulo() {
         SalaVipMovie movie =
@@ -76,6 +78,7 @@ class SalaVipServiceTest {
                 .isEqualTo("Killers of the Flower Moon");
     }
 
+    @SuppressWarnings("null")
     @Test
     void deveBuscarPorEpisodioRetornandoDoisFilmes() {
         SalaVipMovie m1 = movie(15, 15, "mad-max", "Mad Max", 1979);
