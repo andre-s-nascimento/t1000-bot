@@ -296,6 +296,30 @@ public record FeatureFlagDefinition(
 - **Read-only:** exige restart para alterar.
 - **Caso de uso:** ligar apenas durante a migração real.
 
+### `reminders.enabled`
+
+**Default:** `true`
+**Env var:** `REMINDERS_ENABLED`
+**Tipo:** Editável (runtime)
+**Read-only:** ❌
+
+**Descrição:** Controla o envio de anúncios/reminders configuráveis via `/admin/reminders`.
+
+**Comportamento:**
+
+- Se `true`: `ReminderScheduler` agenda todos os reminders habilitados; `ReminderDispatcher` envia no horário do cron.
+- Se `false`: o scheduler **continua agendado**, mas o `ReminderDispatcher` pula o envio (log: `📴 Reminder '...' ignorado — flag 'reminders.enabled' desabilitada`) e registra métrica `reminder_dispatch_skipped`.
+
+**Quando usar `false`:**
+
+- Incidentes que exijam pausar todos os envios agendados sem editar cada reminder.
+- Manutenção no Telegram (ex.: troca de bot, rate limit).
+- Debug de comportamento do scheduler (agendar sem disparar).
+
+**Nota:** o `ReminderDispatcher.dispatchToChat()` (teste manual pelo admin) **não** valida essa flag — é ação explícita do admin. Mesmo padrão do `WeeklyReminderService.sendReminderToChat()`.
+
+**Adicionada em:** v2.9.0
+**Total de flags:** 24 (era 23)
 ---
 
 ## Como usar o painel admin

@@ -50,6 +50,8 @@ você precisa no momento:
 | [Revert Develop](revert-develop.md)                     | Como reverter mudanças no develop                                                                | ✅     |
 | [Spotless Fallback](spotless-fallback.md)               | Fallback de formatação quando Spotless falha                                                     | ✅     |
 
+- 📢 [Reminders](./reminders.md) — **NOVO em v2.9.0**: anúncios configuráveis, CRUD em runtime, agendamento dinâmico
+
 ---
 
 ## Stack
