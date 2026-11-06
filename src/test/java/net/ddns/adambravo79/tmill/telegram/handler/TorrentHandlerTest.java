@@ -275,4 +275,77 @@ class TorrentHandlerTest {
         verify(telegramFacade, never()).enviarMensagem(anyLong(), anyString());
         verify(telegramFacade, never()).enviarMensagemHtml(anyLong(), anyString());
     }
+
+    // =========================================================================
+    // COBERTURA ADICIONAL (BORDAS)
+    // =========================================================================
+
+    @Test
+    @DisplayName("Múltiplos resultados parciais: lista resumida com contagem")
+    void tituloMultiplosResultados() {
+        List<TorrentLaunch> lista =
+                List.of(
+                        filme("Resident Evil 1", "02/11", "Zach", List.of()),
+                        filme("Resident Evil 2", "03/11", "Zach", List.of()));
+        when(torrentService.buscarPrimeiroPorTitulo("Resident"))
+                .thenReturn(java.util.Optional.empty());
+        when(torrentService.buscarPorTitulo("Resident")).thenReturn(lista);
+        Update update = mockUpdate("t1000 torrent Resident");
+
+        handler.processarComando(update);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), captor.capture());
+        assertThat(captor.getValue()).contains("Encontrei 2 lançamento");
+    }
+
+    @Test
+    @DisplayName("Ficha com campos nulos (diretor null, atores vazios)")
+    void fichaComCamposNulos() {
+        TorrentLaunch l =
+                new TorrentLaunch("Filme Teste", "01/11", "filme", null, List.of(), "url", null);
+        when(torrentService.buscarPrimeiroPorTitulo("Filme Teste"))
+                .thenReturn(java.util.Optional.of(l));
+        Update update = mockUpdate("t1000 torrent Filme Teste");
+
+        handler.processarComando(update);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), captor.capture());
+        assertThat(captor.getValue())
+                .contains("Filme Teste")
+                .doesNotContain("🎬 Diretor:")
+                .doesNotContain("👥 Atores:");
+    }
+
+    @Test
+    @DisplayName("Ficha de série com temporada")
+    void fichaSerieComTemporada() {
+        TorrentLaunch l =
+                new TorrentLaunch("Série Teste", "01/11", "serie", null, List.of("Ator"), "url", 2);
+        when(torrentService.buscarPrimeiroPorTitulo("Série Teste"))
+                .thenReturn(java.util.Optional.of(l));
+        Update update = mockUpdate("t1000 torrent Série Teste");
+
+        handler.processarComando(update);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), captor.capture());
+        assertThat(captor.getValue()).contains("Tipo: Série (Temporada 2)");
+    }
+
+    @Test
+    @DisplayName("Ficha sem ano (ano = 0)")
+    void fichaSemAno() {
+        TorrentLaunch l = filme("Filme", "01/11", "Dir", List.of());
+        when(torrentService.getAno()).thenReturn(0);
+        when(torrentService.buscarPrimeiroPorTitulo("Filme")).thenReturn(java.util.Optional.of(l));
+        Update update = mockUpdate("t1000 torrent Filme");
+
+        handler.processarComando(update);
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), captor.capture());
+        assertThat(captor.getValue()).contains("Lançamento: Filme\n").doesNotContain("(2026)");
+    }
 }

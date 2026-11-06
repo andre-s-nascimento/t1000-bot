@@ -2485,4 +2485,22 @@ class AdminControllerTest {
 
         verify(salaVipConfigService).reload();
     }
+
+    // =========================================================================
+    // TORRENT (v2.8.0)
+    // =========================================================================
+
+    @Test
+    @DisplayName(
+            "POST /admin/reload-torrent - Deve recarregar os lançamentos torrent e retornar HTTP"
+                    + " 200 OK")
+    void shouldReloadTorrentAndReturn200() throws Exception {
+        doNothing().when(torrentLaunchService).carregar();
+
+        mockMvc.perform(post("/admin/reload-torrent"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("Lançamentos torrent recarregados"));
+
+        verify(torrentLaunchService).carregar();
+    }
 }

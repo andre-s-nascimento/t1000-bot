@@ -1409,9 +1409,15 @@ public class AdminWebController {
     }
 
     @PostMapping("/reload-torrent")
-    public ResponseEntity<String> reloadTorrent() {
-        torrentLaunchService.carregar();
-        return ResponseEntity.ok("Lançamentos torrent recarregados");
+    public String reloadTorrent(RedirectAttributes redirectAttrs) {
+        try {
+            torrentLaunchService.carregar();
+            redirectAttrs.addFlashAttribute(SUCCESS, "Lançamentos torrent recarregados");
+        } catch (Exception e) {
+            log.error("Erro ao recarregar lançamentos torrent", e);
+            redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
+        }
+        return REDIRECT_ADMIN_WEB;
     }
 
     // =========================================================================

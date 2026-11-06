@@ -1761,4 +1761,48 @@ class AdminWebControllerTest {
 
         verify(staticWorldCupService).reload();
     }
+
+    // =========================================================================
+    // TORRENT (v2.8.0)
+    // =========================================================================
+
+    @Test
+    @DisplayName("POST /admin-web/reload-torrent - Deve recarregar e redirecionar")
+    void shouldReloadTorrentAndRedirect() throws Exception {
+        doNothing().when(torrentLaunchService).carregar();
+
+        mockMvc.perform(post("/admin-web/reload-torrent"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/admin-web"))
+                .andExpect(flash().attribute("success", "Lançamentos torrent recarregados"));
+
+        verify(torrentLaunchService).carregar();
+    }
+
+    // =========================================================================
+    // UPLOAD JSON (target=torrent)
+    // =========================================================================
+
+    @Test
+    @DisplayName("uploadJson: alvo torrent → grava e recarrega")
+    @SneakyThrows
+    void uploadJson_sucesso_torrent(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) {
+        // Cria um arquivo JSON de mentira no temp dir
+        java.nio.file.Path destino = tmp.resolve("torrent-lancamentos.json");
+        when(environment.getProperty("torrent.data.file")).thenReturn("file:" + destino);
+        when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
+
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "{}".getBytes());
+        RedirectAttributes attrs = new RedirectAttributesModelMap();
+
+        // Executa o controller
+        String view = controller.uploadJson(file, "torrent", attrs);
+
+        // Verifica o redirecionamento e o recarregamento
+        assertThat(view).isEqualTo("redirect:/admin-web");
+        assertThat(java.nio.file.Files.exists(destino)).isTrue();
+        verify(torrentLaunchService).carregar();
+        assertThat(attrs.getFlashAttributes().get("success")).isNotNull();
+    }
 }
