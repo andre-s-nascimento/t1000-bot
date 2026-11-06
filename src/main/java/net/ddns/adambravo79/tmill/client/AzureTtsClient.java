@@ -58,7 +58,7 @@ public class AzureTtsClient {
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(Duration.ofSeconds(180));
+        requestFactory.setReadTimeout(Duration.ofSeconds(300));
 
         this.restClient =
                 RestClient.builder()
@@ -191,11 +191,11 @@ public class AzureTtsClient {
     }
 
     @Retryable(
-            includes = {ResourceAccessException.class, IOException.class},
+            includes = {ResourceAccessException.class, IOException.class, Exception.class},
             maxRetries = 3,
-            delay = 3000,
+            delay = 5000,
             multiplier = 2,
-            maxDelay = 30000)
+            maxDelay = 60000)
     public byte[] synthesizeSinglePart(String text) {
         String ssml =
                 "<speak version=\"1.0\" xmlns=\"http://www.w3.org/2001/10/synthesis\""
