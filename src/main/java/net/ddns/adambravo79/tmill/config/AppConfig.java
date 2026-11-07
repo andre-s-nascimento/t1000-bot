@@ -12,6 +12,7 @@ import org.springframework.core.task.support.TaskExecutorAdapter;
 import org.springframework.web.client.RestClient;
 
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -44,6 +45,12 @@ public class AppConfig {
 
     @Bean
     public ObjectMapper toolsObjectMapper() {
-        return JsonMapper.builder().build();
+        // 🔧 FIX: Jackson 3.x mudou o default de FAIL_ON_NULL_FOR_PRIMITIVES
+        // para `true` (no 2.x era `false`). Isso quebra records com campos
+        // primitivos opcionais no JSON (ex.: Reminder.version em POST de criação).
+        // Desabilitamos para restaurar o comportamento do Jackson 2.x.
+        return JsonMapper.builder()
+                .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+                .build();
     }
 }

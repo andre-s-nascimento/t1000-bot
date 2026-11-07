@@ -334,4 +334,33 @@ class ReminderJsonTest {
             assertThat(x).isNotEqualTo(y);
         }
     }
+
+    @Test
+    @DisplayName("Desserializa Reminder sem version (criação via API) → version=1")
+    void desserializaSemVersion_usaDefault() throws Exception {
+        String json =
+                """
+                {
+                  "id": "promo-sexta",
+                  "name": "Promo",
+                  "enabled": true,
+                  "cron": "0 0 16 * * WED",
+                  "timezone": "America/Sao_Paulo",
+                  "message": "msg",
+                  "targetChatIds": ["-100123"],
+                  "tags": []
+                }
+                """;
+
+        var mapper =
+                tools.jackson.databind.json.JsonMapper.builder()
+                        .disable(
+                                tools.jackson.databind.DeserializationFeature
+                                        .FAIL_ON_NULL_FOR_PRIMITIVES)
+                        .build();
+
+        Reminder r = mapper.readValue(json, Reminder.class);
+
+        assertThat(r.version()).isEqualTo(1);
+    }
 }

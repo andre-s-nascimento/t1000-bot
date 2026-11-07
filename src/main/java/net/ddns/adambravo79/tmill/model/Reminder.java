@@ -73,7 +73,7 @@ public record Reminder(
         @JsonProperty("mediaUrl") String mediaUrl,
         @JsonProperty("targetChatIds") List<String> targetChatIds,
         List<String> tags,
-        int version) {
+        Integer version) {
 
     /** Regex de ID aceito: slug kebab-case (letra inicial, depois alfanumérico/hífen). */
     private static final String ID_PATTERN = "^[a-z][a-z0-9-]*$";
@@ -96,7 +96,7 @@ public record Reminder(
         }
         targetChatIds = targetChatIds == null ? List.of() : List.copyOf(targetChatIds);
         tags = tags == null ? List.of() : List.copyOf(tags);
-        if (version < 1) {
+        if (version == null || version < 1) {
             version = 1;
         }
     }

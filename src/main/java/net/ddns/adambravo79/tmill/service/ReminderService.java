@@ -276,6 +276,7 @@ public class ReminderService {
      * @param replace se {@code true}, deleta os reminders ausentes do lote
      * @return quantos reminders foram criados/atualizados
      */
+    @SuppressWarnings("null")
     @Transactional
     public synchronized int importAll(List<Reminder> reminders, boolean replace) {
         if (reminders == null || reminders.isEmpty()) {
