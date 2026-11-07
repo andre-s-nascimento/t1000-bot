@@ -439,7 +439,6 @@ class ReminderServiceTest {
 
             when(repository.findById("novo")).thenReturn(Optional.empty());
             when(repository.findById("existente")).thenReturn(Optional.of(doBanco));
-            when(repository.findAll()).thenReturn(List.of(doBanco));
 
             AtomicInteger chamadas = new AtomicInteger();
             service.setReloadListener(chamadas::incrementAndGet);
@@ -450,6 +449,8 @@ class ReminderServiceTest {
             verify(repository).save(novo);
             verify(repository).update(existente, 7);
             verify(repository, never()).deleteById(any());
+            // findAll não é chamado com replace=false → confirma explicitamente
+            verify(repository, never()).findAll();
             assertThat(chamadas.get()).isEqualTo(1);
         }
 
@@ -473,14 +474,13 @@ class ReminderServiceTest {
         @DisplayName("replace=false: NÃO deleta ausentes")
         void naoReplace() {
             Reminder novo = reminder("novo", true);
-            Reminder doBanco = reminder("preservado", true);
 
             when(repository.findById("novo")).thenReturn(Optional.empty());
-            when(repository.findAll()).thenReturn(List.of(doBanco));
 
             service.importAll(List.of(novo), false);
 
             verify(repository, never()).deleteById(any());
+            verify(repository, never()).findAll();
         }
 
         @Test
