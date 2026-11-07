@@ -4,7 +4,7 @@ package net.ddns.adambravo79.tmill.service;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,7 +50,7 @@ import net.ddns.adambravo79.tmill.telegram.util.MetricsService;
  * afetar reminders já migrados.
  */
 @Slf4j
-@Component
+@Service
 @RequiredArgsConstructor
 public class ReminderDispatcher {
 

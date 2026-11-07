@@ -3,9 +3,11 @@ package net.ddns.adambravo79.tmill.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -13,6 +15,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -31,6 +35,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import net.ddns.adambravo79.tmill.dto.ReminderJson;
 import net.ddns.adambravo79.tmill.model.Reminder;
 import net.ddns.adambravo79.tmill.service.ReminderDispatcher;
 import net.ddns.adambravo79.tmill.service.ReminderScheduler;
@@ -40,30 +45,8 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Testes do {@link ReminderController} via MockMvc standalone.
  *
- * <p><b>Regra de {@code eq()}:</b> só é usado quando <b>algum</b> argumento do {@code verify} é
- * matcher ({@code any()}, {@code anyLong()}, {@code contains()} etc.). Quando todos os argumentos
- * são literais, passa-se direto (Sonar {@code java:S6068}).
- *
- * <p><b>Métodos {@code void}:</b> {@code reminderService.reload()} é {@code void} — o mock já é
- * no-op por padrão, então <b>não</b> se usa {@code doNothing().when(...)}.
- *
- * <p><b>Colisão de nome:</b> o método de teste do nested {@link Diagnostico} <b>não</b> pode se
- * chamar {@code status()}, porque {@code MockMvcResultMatchers.status()} é um import estático e
- * o Java dá precedência a métodos locais. Por isso o nome é {@code diagnostico()}.
- *
- * <p>Cobre os 9 endpoints do controller:
- *
- * <ul>
- *   <li>{@code GET    /admin/reminders}              — lista
- *   <li>{@code GET    /admin/reminders/{id}}         — busca
- *   <li>{@code POST   /admin/reminders}              — cria
- *   <li>{@code PUT    /admin/reminders/{id}}         — atualiza
- *   <li>{@code POST   /admin/reminders/{id}/toggle}  — alterna enabled
- *   <li>{@code DELETE /admin/reminders/{id}}         — remove
- *   <li>{@code POST   /admin/reminders/{id}/test}    — teste manual
- *   <li>{@code POST   /admin/reminders/reload}       — recarrega do disco
- *   <li>{@code GET    /admin/reminders/status}       — diagnóstico
- * </ul>
+ * <p>Cobre os 11 endpoints do controller, incluindo os novos de export/import
+ * e o mapeamento de conflito de versão (409).
  */
 @ExtendWith(MockitoExtension.class)
 class ReminderControllerTest {
@@ -333,6 +316,26 @@ class ReminderControllerTest {
 
             verifyNoInteractions(reminderService);
         }
+
+        @Test
+        @DisplayName("conflito de versão no service: 409 Conflict")
+        void conflitoDeVersao() throws Exception {
+            Reminder atualizado = reminder(REMINDER_ID, true, CRON_VALIDO);
+            when(reminderService.update(eq(REMINDER_ID), any(Reminder.class)))
+                    .thenThrow(
+                            new IllegalStateException(
+                                    "Reminder '"
+                                            + REMINDER_ID
+                                            + "' foi modificado por outra instância. "
+                                            + "Recarregue e tente novamente."));
+
+            mockMvc.perform(
+                            put(BASE_URL + "/" + REMINDER_ID)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(json(atualizado)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.erro").value(containsString("Conflito de versão")));
+        }
     }
 
     // =========================================================================
@@ -382,6 +385,18 @@ class ReminderControllerTest {
             mockMvc.perform(post(BASE_URL + "/" + REMINDER_ID + "/toggle"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.erro").value(containsString(NAO_ENCONTRADO)));
+        }
+
+        @Test
+        @DisplayName("conflito de versão: 409")
+        void conflitoDeVersao() throws Exception {
+            when(reminderService.getById(REMINDER_ID)).thenReturn(Optional.of(reminder()));
+            when(reminderService.toggle(eq(REMINDER_ID), anyBoolean()))
+                    .thenThrow(new IllegalStateException("conflito"));
+
+            mockMvc.perform(post(BASE_URL + "/" + REMINDER_ID + "/toggle"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.erro").value(containsString("Conflito de versão")));
         }
     }
 
@@ -476,7 +491,6 @@ class ReminderControllerTest {
         @Test
         @DisplayName("sucesso: 200 + contadores")
         void sucesso() throws Exception {
-            // ReminderService.reload() é void — o mock já é no-op.
             when(reminderService.count()).thenReturn(3);
             when(reminderScheduler.scheduledCount()).thenReturn(2);
 
@@ -520,6 +534,147 @@ class ReminderControllerTest {
                     .andExpect(jsonPath("$.scheduled").value(1))
                     .andExpect(jsonPath("$.scheduledIds").isArray())
                     .andExpect(jsonPath("$.scheduledIds[0]").value(REMINDER_ID));
+        }
+    }
+
+    @Nested
+    @DisplayName("GET /admin/reminders/export")
+    class Export {
+
+        @Test
+        @DisplayName("exporta todos como ReminderJson")
+        void exportaTodos() throws Exception {
+            when(reminderService.getAll())
+                    .thenReturn(
+                            List.of(
+                                    reminder("a", true, CRON_VALIDO),
+                                    reminder("b", false, CRON_VALIDO)));
+
+            mockMvc.perform(get(BASE_URL + "/export"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                    .andExpect(jsonPath("$.reminders").isArray())
+                    .andExpect(jsonPath("$.reminders.length()").value(2))
+                    .andExpect(jsonPath("$.reminders[0].id").value("a"))
+                    .andExpect(jsonPath("$.reminders[1].id").value("b"))
+                    .andExpect(jsonPath("$.version").value(1))
+                    .andExpect(jsonPath("$.updatedAt").exists());
+        }
+
+        @Test
+        @DisplayName("sugere filename via Content-Disposition")
+        void contentDisposition() throws Exception {
+            when(reminderService.getAll()).thenReturn(List.of());
+
+            mockMvc.perform(get(BASE_URL + "/export"))
+                    .andExpect(status().isOk())
+                    .andExpect(
+                            header().string(
+                                            "Content-Disposition",
+                                            containsString("attachment; filename=\"reminders-")));
+        }
+
+        @Test
+        @DisplayName("lista vazia: 200 + ReminderJson vazio")
+        void listaVazia() throws Exception {
+            when(reminderService.getAll()).thenReturn(List.of());
+
+            mockMvc.perform(get(BASE_URL + "/export"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.reminders").isArray())
+                    .andExpect(jsonPath("$.reminders.length()").value(0));
+        }
+    }
+
+    @Nested
+    @DisplayName("POST /admin/reminders/import")
+    class Import {
+
+        @Test
+        @DisplayName("body válido, replace=false: 200 + contadores")
+        void sucessoMerge() throws Exception {
+            ReminderJson payload =
+                    ReminderJson.of(
+                            List.of(
+                                    reminder("novo", true, CRON_VALIDO),
+                                    reminder("outro", false, CRON_VALIDO)));
+            when(reminderService.importAll(any(), eq(false))).thenReturn(2);
+            when(reminderService.count()).thenReturn(5);
+
+            mockMvc.perform(
+                            post(BASE_URL + "/import")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(payload)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.replace").value(false))
+                    .andExpect(jsonPath("$.total").value(5));
+
+            verify(reminderService).importAll(any(), eq(false));
+        }
+
+        @Test
+        @DisplayName("replace=true: delega com replace=true")
+        void sucessoReplace() throws Exception {
+            ReminderJson payload = ReminderJson.of(List.of(reminder("novo", true, CRON_VALIDO)));
+            when(reminderService.importAll(any(), eq(true))).thenReturn(1);
+            when(reminderService.count()).thenReturn(1);
+
+            mockMvc.perform(
+                            post(BASE_URL + "/import")
+                                    .param("replace", "true")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(payload)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.replace").value(true));
+
+            verify(reminderService).importAll(any(), eq(true));
+        }
+
+        @Test
+        @DisplayName("lista vazia: 400 (proteção contra replace acidental)")
+        void listaVazia() throws Exception {
+            ReminderJson payload = ReminderJson.empty();
+
+            mockMvc.perform(
+                            post(BASE_URL + "/import")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(payload)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erro").value(containsString("vazia")));
+
+            verify(reminderService, never()).importAll(any(), anyBoolean());
+        }
+
+        @Test
+        @DisplayName("service lança IllegalArgumentException: 400")
+        void serviceIllegalArgument() throws Exception {
+            ReminderJson payload = ReminderJson.of(List.of(reminder("x", true, CRON_VALIDO)));
+            when(reminderService.importAll(any(), eq(false)))
+                    .thenThrow(new IllegalArgumentException("id inválido"));
+
+            mockMvc.perform(
+                            post(BASE_URL + "/import")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(payload)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.erro").value("id inválido"));
+        }
+
+        @Test
+        @DisplayName("service lança RuntimeException: 500")
+        void serviceRuntimeException() throws Exception {
+            ReminderJson payload = ReminderJson.of(List.of(reminder("x", true, CRON_VALIDO)));
+            when(reminderService.importAll(any(), eq(false)))
+                    .thenThrow(new RuntimeException("DB down"));
+
+            mockMvc.perform(
+                            post(BASE_URL + "/import")
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(payload)))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(
+                            jsonPath("$.erro")
+                                    .value("Erro interno. Verifique os logs do servidor."));
         }
     }
 

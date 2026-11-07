@@ -4,34 +4,37 @@ package net.ddns.adambravo79.tmill.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.Mockito;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
-import net.ddns.adambravo79.tmill.dto.ReminderJson;
 import net.ddns.adambravo79.tmill.model.Reminder;
-import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
-import tools.jackson.databind.ObjectMapper;
+import net.ddns.adambravo79.tmill.repository.ReminderRepository;
 
 /**
  * Testes do {@link ReminderService}.
@@ -39,166 +42,67 @@ import tools.jackson.databind.ObjectMapper;
  * <p>Cobre:
  *
  * <ul>
- *   <li>Carregamento inicial ({@link ReminderService#init()} e {@link ReminderService#reload()}).
- *   <li>CRUD completo com persistência atômica em disco.
- *   <li>Toggle de {@code enabled} preservando demais campos.
- *   <li>Listener de reload (chamado após cada mutação e após reload).
- *   <li>Comportamento com {@code classpath:} (não persiste) vs {@code file:} (persiste).
- *   <li>Concorrência: escrita serializada (2 threads criando IDs diferentes).
- *   <li>Validações de {@code id} (nulo, branco).
+ *   <li>Leitura: {@code getAll}, {@code getEnabled}, {@code getById}, {@code count} —
+ *       delegação direta ao repository.
+ *   <li>CRUD: {@code create}, {@code update}, {@code toggle}, {@code delete}.
+ *   <li>Optimistic locking: {@code update} com versão errada → {@code IllegalStateException}
+ *       (o controller traduz para HTTP 409).
+ *   <li>Importação: {@code importAll} (merge e replace), com transação.
+ *   <li>Listener: {@code setReloadListener}, {@code notifyReload} (após cada mutação,
+ *       sucesso e falha parcial).
+ *   <li>{@code reload}: apenas notifica o listener (não relê nada, o estado vive no banco).
  * </ul>
  *
- * <p>O {@link JsonConfigLoader} é mockado porque ele já tem cobertura própria
- * ({@code JsonConfigLoaderTest}). Aqui testamos <b>o comportamento do service</b> com o loader
- * respondendo o que queremos — não a leitura de disco do loader em si.
+ * <p><b>Não cobre:</b> SQL do repository (coberto em {@code ReminderRepositoryTest}),
+ * serialização JSON (coberto em {@code ReminderJsonTest}), endpoints (coberto em
+ * {@code ReminderControllerTest}).
  */
+@ExtendWith(MockitoExtension.class)
 class ReminderServiceTest {
 
     private static final String VALID_CRON = "0 0 16 * * WED";
     private static final String VALID_TZ = "America/Sao_Paulo";
 
-    @TempDir Path tempDir;
+    @Mock private ReminderRepository repository;
 
-    private JsonConfigLoader loader;
-    private ObjectMapper objectMapper;
-    private ReminderService service;
+    @InjectMocks private ReminderService service;
 
     @BeforeEach
     void setUp() {
-        loader = Mockito.mock(JsonConfigLoader.class);
-        objectMapper = new ObjectMapper();
-        service = new ReminderService(loader, objectMapper);
-        // Default: classpath (não persiste) — testes que precisam de file: sobrescrevem
-        ReflectionTestUtils.setField(service, "remindersFile", "classpath:reminders.json");
+        lenient().when(repository.findAll()).thenReturn(List.of());
+        lenient().when(repository.findEnabled()).thenReturn(List.of());
+        lenient().when(repository.count()).thenReturn(0);
     }
 
     // =========================================================================
     // FIXTURES
     // =========================================================================
 
-    private Reminder reminder(String id, boolean enabled, String... chatIds) {
+    private Reminder reminder(String id, boolean enabled) {
         return new Reminder(
                 id,
-                id,
+                "Nome " + id,
                 enabled,
                 VALID_CRON,
                 VALID_TZ,
-                "<b>Mensagem " + id + "</b>",
+                "<b>Msg " + id + "</b>",
                 null,
-                List.of(chatIds),
-                List.of());
+                List.of("-100123"),
+                List.of("cinema"));
     }
 
-    /** Mocka o {@code loadConfig} para devolver os reminders informados. */
-    private void stubLoad(Reminder... reminders) {
-        ReminderJson json = ReminderJson.of(List.of(reminders));
-        Mockito.when(
-                        loader.loadConfig(
-                                Mockito.eq("reminders.json"),
-                                Mockito.eq(ReminderJson.class),
-                                Mockito.any()))
-                .thenReturn(Optional.of(json));
-    }
-
-    /** Mocka o {@code loadConfig} para simular arquivo ausente. */
-    private void stubLoadEmpty() {
-        Mockito.when(
-                        loader.loadConfig(
-                                Mockito.eq("reminders.json"),
-                                Mockito.eq(ReminderJson.class),
-                                Mockito.any()))
-                .thenReturn(Optional.empty());
-    }
-
-    /** Mocka o {@code loadConfig} para lançar exceção (arquivo corrompido, etc). */
-    private void stubLoadFails() {
-        Mockito.when(
-                        loader.loadConfig(
-                                Mockito.eq("reminders.json"),
-                                Mockito.eq(ReminderJson.class),
-                                Mockito.any()))
-                .thenThrow(new RuntimeException("boom"));
-    }
-
-    // =========================================================================
-    // INICIALIZAÇÃO / RELOAD
-    // =========================================================================
-
-    @Nested
-    @DisplayName("init() / reload()")
-    class Inicializacao {
-
-        @Test
-        @DisplayName("init() carrega os reminders do arquivo")
-        void initCarrega() {
-            stubLoad(reminder("a", true), reminder("b", false));
-
-            service.init();
-
-            assertThat(service.getAll()).hasSize(2);
-            assertThat(service.count()).isEqualTo(2);
-        }
-
-        @Test
-        @DisplayName("init() com arquivo ausente: lista vazia, sem exception")
-        void initArquivoAusente() {
-            stubLoadEmpty();
-
-            service.init();
-
-            assertThat(service.getAll()).isEmpty();
-        }
-
-        @Test
-        @DisplayName("init() com loader lançando: mantém estado anterior (lista vazia)")
-        void initLoaderFalha() {
-            stubLoadFails();
-
-            service.init();
-
-            assertThat(service.getAll()).isEmpty();
-        }
-
-        @Test
-        @DisplayName("reload() substitui o estado atual")
-        void reloadSubstitui() {
-            stubLoad(reminder("a", true));
-            service.reload();
-            assertThat(service.count()).isEqualTo(1);
-
-            stubLoad(reminder("b", true), reminder("c", true));
-            service.reload();
-
-            assertThat(service.count()).isEqualTo(2);
-            assertThat(service.getById("a")).isEmpty();
-            assertThat(service.getById("b")).isPresent();
-        }
-
-        @Test
-        @DisplayName("reload() com falha mantém estado anterior")
-        void reloadFalhaMantemEstado() {
-            stubLoad(reminder("a", true));
-            service.reload();
-            assertThat(service.count()).isEqualTo(1);
-
-            stubLoadFails();
-            service.reload();
-
-            assertThat(service.count()).isEqualTo(1);
-            assertThat(service.getById("a")).isPresent();
-        }
-
-        @Test
-        @DisplayName("reload() notifica o listener")
-        void reloadNotificaListener() {
-            stubLoad(reminder("a", true));
-            AtomicInteger chamadas = new AtomicInteger();
-            service.setReloadListener(chamadas::incrementAndGet);
-
-            service.reload();
-
-            assertThat(chamadas.get()).isEqualTo(1);
-        }
+    private Reminder reminderComVersion(String id, int version) {
+        return new Reminder(
+                id,
+                "Nome " + id,
+                true,
+                VALID_CRON,
+                VALID_TZ,
+                "msg",
+                null,
+                List.of("-100123"),
+                List.of(),
+                version);
     }
 
     // =========================================================================
@@ -210,64 +114,52 @@ class ReminderServiceTest {
     class Leitura {
 
         @Test
-        @DisplayName("getAll() retorna todos (enabled + disabled)")
-        void getAllTodos() {
-            stubLoad(reminder("a", true), reminder("b", false));
-            service.reload();
+        @DisplayName("getAll delega ao repository.findAll()")
+        void getAll() {
+            List<Reminder> expected = List.of(reminder("a", true), reminder("b", false));
+            when(repository.findAll()).thenReturn(expected);
 
-            assertThat(service.getAll()).hasSize(2);
+            assertThat(service.getAll()).isEqualTo(expected);
+            verify(repository).findAll();
         }
 
         @Test
-        @DisplayName("getEnabled() filtra apenas habilitados")
-        @SuppressWarnings("null")
-        void getEnabledFiltra() {
-            stubLoad(reminder("a", true), reminder("b", false), reminder("c", true));
-            service.reload();
+        @DisplayName("getEnabled delega ao repository.findEnabled()")
+        void getEnabled() {
+            List<Reminder> expected = List.of(reminder("a", true));
+            when(repository.findEnabled()).thenReturn(expected);
 
-            assertThat(service.getEnabled())
-                    .extracting(Reminder::id)
-                    .containsExactlyInAnyOrder("a", "c");
+            assertThat(service.getEnabled()).isEqualTo(expected);
+            verify(repository).findEnabled();
         }
 
         @Test
-        @DisplayName("getById() encontra existente")
-        void getByIdExistente() {
-            stubLoad(reminder("a", true));
-            service.reload();
+        @DisplayName("getById delega ao repository.findById()")
+        void getById() {
+            Reminder r = reminder("a", true);
+            when(repository.findById("a")).thenReturn(Optional.of(r));
 
-            assertThat(service.getById("a")).isPresent();
+            assertThat(service.getById("a")).contains(r);
+            verify(repository).findById("a");
         }
 
         @Test
-        @DisplayName("getById() retorna empty para inexistente")
+        @DisplayName("getById com id inexistente: Optional.empty()")
         void getByIdInexistente() {
-            stubLoad(reminder("a", true));
-            service.reload();
-
-            assertThat(service.getById("nao-existe")).isEmpty();
-        }
-
-        @ParameterizedTest
-        @NullAndEmptySource
-        @ValueSource(strings = {"   "})
-        @DisplayName("getById() com id nulo/vazio retorna empty")
-        void getByIdInvalido(String id) {
-            assertThat(service.getById(id)).isEmpty();
+            when(repository.findById("x")).thenReturn(Optional.empty());
+            assertThat(service.getById("x")).isEmpty();
         }
 
         @Test
-        @DisplayName("count() retorna total")
+        @DisplayName("count delega ao repository.count()")
         void count() {
-            stubLoad(reminder("a", true), reminder("b", false));
-            service.reload();
-
-            assertThat(service.count()).isEqualTo(2);
+            when(repository.count()).thenReturn(7);
+            assertThat(service.count()).isEqualTo(7);
         }
     }
 
     // =========================================================================
-    // CRUD — create()
+    // CREATE
     // =========================================================================
 
     @Nested
@@ -275,53 +167,60 @@ class ReminderServiceTest {
     class Create {
 
         @Test
-        @DisplayName("create() adiciona e retorna o reminder")
-        void createAdiciona() {
-            stubLoadEmpty();
-            service.reload();
-
-            Reminder novo = reminder("novo", true, "-100123");
-            Reminder criado = service.create(novo);
-
-            assertThat(criado).isEqualTo(novo);
-            assertThat(service.count()).isEqualTo(1);
-            assertThat(service.getById("novo")).isPresent();
-        }
-
-        @Test
-        @DisplayName("create() com ID duplicado lança IllegalArgumentException")
-        void createIdDuplicado() {
-            stubLoad(reminder("a", true));
-            service.reload();
-
-            Reminder duplicado = reminder("a", true);
-            assertThatThrownBy(() -> service.create(duplicado))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("já existe");
-        }
-
-        @Test
-        @DisplayName("create(null) lança NullPointerException")
-        void createNull() {
-            assertThatThrownBy(() -> service.create(null)).isInstanceOf(NullPointerException.class);
-        }
-
-        @Test
-        @DisplayName("create() notifica o listener")
-        void createNotificaListener() {
-            stubLoadEmpty();
-            service.reload();
+        @DisplayName("cria com sucesso: chama save, retorna com version=1, notifica listener")
+        void sucesso() {
+            when(repository.existsById("novo")).thenReturn(false);
             AtomicInteger chamadas = new AtomicInteger();
             service.setReloadListener(chamadas::incrementAndGet);
 
-            service.create(reminder("a", true));
+            Reminder novo = reminder("novo", true);
+            Reminder criado = service.create(novo);
 
+            verify(repository).save(novo);
+            assertThat(criado.version()).isEqualTo(1);
             assertThat(chamadas.get()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("id duplicado: IllegalArgumentException, sem save, sem listener")
+        void idDuplicado() {
+            when(repository.existsById("dup")).thenReturn(true);
+            AtomicInteger chamadas = new AtomicInteger();
+            service.setReloadListener(chamadas::incrementAndGet);
+
+            Reminder dup = reminder("dup", true);
+
+            assertThatThrownBy(() -> service.create(dup))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("já existe");
+
+            verify(repository, never()).save(any());
+            assertThat(chamadas.get()).isZero();
+        }
+
+        @Test
+        @DisplayName("record nulo: NullPointerException")
+        void recordNulo() {
+            assertThatThrownBy(() -> service.create(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("não pode ser nulo");
+        }
+
+        @Test
+        @DisplayName("record com version alta: força version=1 no retorno e no save")
+        void forcaVersionUm() {
+            when(repository.existsById("x")).thenReturn(false);
+            Reminder comVersion99 = reminderComVersion("x", 99);
+
+            Reminder criado = service.create(comVersion99);
+
+            verify(repository).save(comVersion99);
+            assertThat(criado.version()).isEqualTo(1);
         }
     }
 
     // =========================================================================
-    // CRUD — update()
+    // UPDATE
     // =========================================================================
 
     @Nested
@@ -329,91 +228,74 @@ class ReminderServiceTest {
     class Update {
 
         @Test
-        @DisplayName("update() substitui todos os campos do reminder")
-        void updateSubstitui() {
-            stubLoad(reminder("a", true));
-            service.reload();
+        @DisplayName("sucesso: chama update, retorna com version+1, notifica listener")
+        void sucesso() {
+            AtomicInteger chamadas = new AtomicInteger();
+            service.setReloadListener(chamadas::incrementAndGet);
 
-            Reminder atualizado =
-                    new Reminder(
-                            "a",
-                            "novo nome",
-                            false,
-                            "0 0 10 * * FRI",
-                            "America/New_York",
-                            "<b>Nova msg</b>",
-                            "https://exemplo.com/x.mp4",
-                            List.of("-100999"),
-                            List.of("t1"));
+            Reminder atualizado = reminderComVersion("a", 2);
 
-            service.update("a", atualizado);
+            Reminder retorno = service.update("a", atualizado);
 
-            Reminder fromRegistry = service.getById("a").orElseThrow();
-            assertThat(fromRegistry.name()).isEqualTo("novo nome");
-            assertThat(fromRegistry.enabled()).isFalse();
-            assertThat(fromRegistry.cron()).isEqualTo("0 0 10 * * FRI");
-            assertThat(fromRegistry.timezone()).isEqualTo("America/New_York");
-            assertThat(fromRegistry.mediaUrl()).isEqualTo("https://exemplo.com/x.mp4");
+            verify(repository).update(atualizado, 2);
+            assertThat(retorno.version()).isEqualTo(3);
+            assertThat(chamadas.get()).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("update() com id divergente do body lança IllegalArgumentException")
-        void updateIdDivergente() {
-            stubLoad(reminder("a", true));
-            service.reload();
+        @DisplayName("conflito de versão: IllegalStateException, sem listener")
+        void conflitoDeVersao() {
+            doThrow(new OptimisticLockingFailureException("conflito"))
+                    .when(repository)
+                    .update(any(Reminder.class), anyInt());
 
-            Reminder diferente = reminder("b", true);
-            assertThatThrownBy(() -> service.update("a", diferente))
+            AtomicInteger chamadas = new AtomicInteger();
+            service.setReloadListener(chamadas::incrementAndGet);
+
+            Reminder atualizado = reminderComVersion("a", 2);
+
+            assertThatThrownBy(() -> service.update("a", atualizado))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("modificado por outra instância");
+
+            assertThat(chamadas.get()).isZero();
+        }
+
+        @Test
+        @DisplayName("id do path diverge do body: IllegalArgumentException")
+        void idDivergente() {
+            Reminder r = reminderComVersion("outro", 1);
+
+            assertThatThrownBy(() -> service.update("path", r))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("diverge");
+
+            verifyNoInteractions(repository);
         }
 
         @Test
-        @DisplayName("update() com reminder inexistente lança IllegalArgumentException")
-        void updateInexistente() {
-            stubLoadEmpty();
-            service.reload();
+        @DisplayName("id do path nulo/vazio: IllegalArgumentException")
+        void idPathInvalido() {
+            Reminder r = reminderComVersion("a", 1);
 
-            Reminder novo = reminder("x", true);
-            assertThatThrownBy(() -> service.update("x", novo))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("não encontrado");
-        }
-
-        @Test
-        @DisplayName("update() com id do path nulo/vazio lança IllegalArgumentException")
-        void updateIdPathInvalido() {
-            stubLoad(reminder("a", true));
-            service.reload();
-
-            Reminder r = reminder("a", true);
             assertThatThrownBy(() -> service.update(null, r))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> service.update("", r))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> service.update("   ", r))
                     .isInstanceOf(IllegalArgumentException.class);
         }
 
         @Test
-        @DisplayName("update(null, ...) lança NullPointerException")
-        void updateReminderNull() {
+        @DisplayName("record nulo: NullPointerException")
+        void recordNulo() {
             assertThatThrownBy(() -> service.update("a", null))
                     .isInstanceOf(NullPointerException.class);
-        }
-
-        @Test
-        @DisplayName("update() notifica o listener")
-        void updateNotificaListener() {
-            stubLoad(reminder("a", true));
-            service.reload();
-            AtomicInteger chamadas = new AtomicInteger();
-            service.setReloadListener(chamadas::incrementAndGet);
-
-            service.update("a", reminder("a", false));
-
-            assertThat(chamadas.get()).isEqualTo(1);
         }
     }
 
     // =========================================================================
-    // CRUD — toggle()
+    // TOGGLE
     // =========================================================================
 
     @Nested
@@ -421,68 +303,70 @@ class ReminderServiceTest {
     class Toggle {
 
         @Test
-        @DisplayName("toggle(true) habilita")
-        void toggleHabilita() {
-            stubLoad(reminder("a", false));
-            service.reload();
+        @DisplayName("desabilita: chama getById + update, preserva campos, notifica listener")
+        void desabilita() {
+            Reminder atual = reminder("a", true);
+            when(repository.findById("a")).thenReturn(Optional.of(atual));
+
+            AtomicInteger chamadas = new AtomicInteger();
+            service.setReloadListener(chamadas::incrementAndGet);
+
+            Reminder retorno = service.toggle("a", false);
+
+            ArgumentCaptor<Reminder> captor = ArgumentCaptor.forClass(Reminder.class);
+            verify(repository).update(captor.capture(), eq(1));
+
+            Reminder passado = captor.getValue();
+            assertThat(passado.enabled()).isFalse();
+            assertThat(passado.id()).isEqualTo("a");
+            assertThat(passado.cron()).isEqualTo(atual.cron());
+            assertThat(passado.message()).isEqualTo(atual.message());
+
+            assertThat(retorno.enabled()).isFalse();
+            assertThat(chamadas.get()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("habilita: inverte para true")
+        void habilita() {
+            Reminder atual = reminder("a", false);
+            when(repository.findById("a")).thenReturn(Optional.of(atual));
 
             service.toggle("a", true);
 
-            assertThat(service.getById("a").orElseThrow().enabled()).isTrue();
+            ArgumentCaptor<Reminder> captor = ArgumentCaptor.forClass(Reminder.class);
+            verify(repository).update(captor.capture(), eq(1));
+            assertThat(captor.getValue().enabled()).isTrue();
         }
 
         @Test
-        @DisplayName("toggle(false) desabilita")
-        void toggleDesabilita() {
-            stubLoad(reminder("a", true));
-            service.reload();
-
-            service.toggle("a", false);
-
-            assertThat(service.getById("a").orElseThrow().enabled()).isFalse();
-        }
-
-        @Test
-        @DisplayName("toggle() preserva todos os outros campos")
-        void togglePreservaCampos() {
-            Reminder original =
-                    new Reminder(
-                            "a",
-                            "Nome original",
-                            true,
-                            "0 0 16 * * WED",
-                            VALID_TZ,
-                            "msg",
-                            "https://exemplo.com/x.mp4",
-                            List.of("-100"),
-                            List.of("tag1"));
-            stubLoad(original);
-            service.reload();
-
-            service.toggle("a", false);
-
-            Reminder atual = service.getById("a").orElseThrow();
-            assertThat(atual.name()).isEqualTo("Nome original");
-            assertThat(atual.cron()).isEqualTo("0 0 16 * * WED");
-            assertThat(atual.mediaUrl()).isEqualTo("https://exemplo.com/x.mp4");
-            assertThat(atual.targetChatIds()).containsExactly("-100");
-            assertThat(atual.tags()).containsExactly("tag1");
-        }
-
-        @Test
-        @DisplayName("toggle() com id inexistente lança IllegalArgumentException")
-        void toggleInexistente() {
-            stubLoadEmpty();
-            service.reload();
+        @DisplayName("id inexistente: IllegalArgumentException")
+        void idInexistente() {
+            when(repository.findById("x")).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> service.toggle("x", true))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("não encontrado");
+
+            verify(repository, never()).update(any(), anyInt());
+        }
+
+        @Test
+        @DisplayName("conflito de versão: propaga IllegalStateException")
+        void conflitoDeVersao() {
+            when(repository.findById("a")).thenReturn(Optional.of(reminderComVersion("a", 5)));
+            doThrow(new OptimisticLockingFailureException("conflito"))
+                    .when(repository)
+                    .update(any(Reminder.class), eq(5));
+
+            assertThatThrownBy(() -> service.toggle("a", false))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("modificado por outra instância");
         }
     }
 
     // =========================================================================
-    // CRUD — delete()
+    // DELETE
     // =========================================================================
 
     @Nested
@@ -490,335 +374,205 @@ class ReminderServiceTest {
     class Delete {
 
         @Test
-        @DisplayName("delete() remove existente e retorna true")
-        void deleteRemove() {
-            stubLoad(reminder("a", true), reminder("b", true));
-            service.reload();
+        @DisplayName("sucesso: chama deleteById, notifica listener")
+        void sucesso() {
+            when(repository.deleteById("a")).thenReturn(true);
 
-            boolean removido = service.delete("a");
+            AtomicInteger chamadas = new AtomicInteger();
+            service.setReloadListener(chamadas::incrementAndGet);
 
-            assertThat(removido).isTrue();
-            assertThat(service.count()).isEqualTo(1);
-            assertThat(service.getById("a")).isEmpty();
+            assertThat(service.delete("a")).isTrue();
+            verify(repository).deleteById("a");
+            assertThat(chamadas.get()).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("delete() com id inexistente retorna false")
-        void deleteInexistente() {
-            stubLoad(reminder("a", true));
-            service.reload();
+        @DisplayName("id inexistente: retorna false, NÃO notifica listener")
+        void inexistente() {
+            when(repository.deleteById("x")).thenReturn(false);
 
-            assertThat(service.delete("nao-existe")).isFalse();
-            assertThat(service.count()).isEqualTo(1);
+            AtomicInteger chamadas = new AtomicInteger();
+            service.setReloadListener(chamadas::incrementAndGet);
+
+            assertThat(service.delete("x")).isFalse();
+            assertThat(chamadas.get()).isZero();
         }
 
         @ParameterizedTest
         @NullAndEmptySource
         @ValueSource(strings = {"   "})
-        @DisplayName("delete() com id nulo/vazio retorna false sem chamar persist")
-        void deleteIdInvalido(String id) {
-            stubLoad(reminder("a", true));
-            service.reload();
-
+        @DisplayName("id nulo/vazio: false sem tocar no repository")
+        void idInvalido(String id) {
             assertThat(service.delete(id)).isFalse();
-            assertThat(service.count()).isEqualTo(1);
+            verify(repository, never()).deleteById(any());
+        }
+    }
+
+    // =========================================================================
+    // IMPORT ALL
+    // =========================================================================
+
+    @Nested
+    @DisplayName("importAll()")
+    class ImportAll {
+
+        @Test
+        @DisplayName("lista vazia: retorna 0, sem interações")
+        void listaVazia() {
+            assertThat(service.importAll(List.of(), false)).isZero();
+            verifyNoInteractions(repository);
         }
 
         @Test
-        @DisplayName("delete() notifica o listener")
-        void deleteNotificaListener() {
-            stubLoad(reminder("a", true));
-            service.reload();
+        @DisplayName("lista nula: retorna 0, sem interações")
+        void listaNula() {
+            assertThat(service.importAll(null, false)).isZero();
+            verifyNoInteractions(repository);
+        }
+
+        @Test
+        @DisplayName("merge: novos → save, existentes → update com versão atual do banco")
+        void merge() {
+            Reminder novo = reminder("novo", true);
+            Reminder existente = reminder("existente", true);
+            Reminder doBanco = reminderComVersion("existente", 7);
+
+            when(repository.findById("novo")).thenReturn(Optional.empty());
+            when(repository.findById("existente")).thenReturn(Optional.of(doBanco));
+            when(repository.findAll()).thenReturn(List.of(doBanco));
+
             AtomicInteger chamadas = new AtomicInteger();
             service.setReloadListener(chamadas::incrementAndGet);
 
-            service.delete("a");
+            int imported = service.importAll(List.of(novo, existente), false);
 
+            assertThat(imported).isEqualTo(2);
+            verify(repository).save(novo);
+            verify(repository).update(existente, 7);
+            verify(repository, never()).deleteById(any());
             assertThat(chamadas.get()).isEqualTo(1);
         }
 
         @Test
-        @DisplayName("delete() com id inexistente NÃO notifica o listener")
-        void deleteInexistenteNaoNotifica() {
-            stubLoad(reminder("a", true));
-            service.reload();
+        @DisplayName("replace=true: deleta ausentes do lote")
+        void replace() {
+            Reminder novo = reminder("novo", true);
+            Reminder doBanco = reminder("ausente", true);
+
+            when(repository.findById("novo")).thenReturn(Optional.empty());
+            when(repository.findAll()).thenReturn(List.of(doBanco));
+
+            int imported = service.importAll(List.of(novo), true);
+
+            assertThat(imported).isEqualTo(1);
+            verify(repository).save(novo);
+            verify(repository).deleteById("ausente");
+        }
+
+        @Test
+        @DisplayName("replace=false: NÃO deleta ausentes")
+        void naoReplace() {
+            Reminder novo = reminder("novo", true);
+            Reminder doBanco = reminder("preservado", true);
+
+            when(repository.findById("novo")).thenReturn(Optional.empty());
+            when(repository.findAll()).thenReturn(List.of(doBanco));
+
+            service.importAll(List.of(novo), false);
+
+            verify(repository, never()).deleteById(any());
+        }
+
+        @Test
+        @DisplayName("falha no meio do lote: propaga exceção (transação rollbacka no repo)")
+        void falhaNoMeio() {
+            Reminder a = reminder("a", true);
+            Reminder b = reminder("b", true);
+
+            when(repository.findById("a")).thenReturn(Optional.empty());
+            doThrow(new RuntimeException("DB down")).when(repository).save(a);
+
+            // 🔧 FIX (java:S5778): catchThrowable em vez de assertThatThrownBy(lambda).
+            // O Sonar exige que a lambda tenha apenas 1 invocação que possa lançar;
+            // importAll chama findById + save + findAll, então usamos catchThrowable.
+            Throwable thrown = catchThrowable(() -> service.importAll(List.of(a, b), false));
+
+            assertThat(thrown).isInstanceOf(RuntimeException.class).hasMessageContaining("DB down");
+
+            verify(repository, never()).findById("b");
+            verify(repository, never()).save(b);
+        }
+    }
+
+    // =========================================================================
+    // RELOAD
+    // =========================================================================
+
+    @Nested
+    @DisplayName("reload()")
+    class Reload {
+
+        @Test
+        @DisplayName("notifica o listener sem reler do banco")
+        void notificaListener() {
             AtomicInteger chamadas = new AtomicInteger();
             service.setReloadListener(chamadas::incrementAndGet);
 
-            service.delete("nao-existe");
+            service.reload();
 
-            assertThat(chamadas.get()).isZero();
+            assertThat(chamadas.get()).isEqualTo(1);
+            verify(repository, never()).findAll();
         }
     }
 
     // =========================================================================
-    // PERSISTÊNCIA EM DISCO
+    // LISTENER
     // =========================================================================
 
     @Nested
-    @DisplayName("Persistência em disco")
-    class Persistencia {
-
-        private Path remindersFile;
-
-        @BeforeEach
-        void setUpFile() {
-            remindersFile = tempDir.resolve("reminders.json");
-            ReflectionTestUtils.setField(
-                    service, "remindersFile", "file:" + remindersFile.toAbsolutePath());
-            stubLoadEmpty();
-            service.reload();
-        }
+    @DisplayName("Listener")
+    class Listener {
 
         @Test
-        @DisplayName("create() grava o arquivo")
-        void createGrava() throws IOException {
-            service.create(reminder("a", true));
-
-            assertThat(remindersFile).exists();
-            String content = Files.readString(remindersFile);
-            assertThat(content).contains("\"a\"").contains("0 0 16 * * WED");
-        }
-
-        @Test
-        @DisplayName("update() grava o arquivo")
-        void updateGrava() throws IOException {
-            service.create(reminder("a", true));
-            service.update("a", reminder("a", false));
-
-            String content = Files.readString(remindersFile);
-            assertThat(content).contains("\"a\"").contains("\"enabled\" : false");
-        }
-
-        @Test
-        @DisplayName("delete() grava o arquivo sem o removido")
-        void deleteGrava() throws IOException {
-            service.create(reminder("a", true));
-            service.create(reminder("b", true));
-            service.delete("a");
-
-            String content = Files.readString(remindersFile);
-            assertThat(content).doesNotContain("\"a\"").contains("\"b\"");
-        }
-
-        @Test
-        @DisplayName("escrita atômica não deixa .tmp para trás")
-        void escritaAtomica() {
-            service.create(reminder("a", true));
-
-            Path tmp = remindersFile.resolveSibling(remindersFile.getFileName() + ".tmp");
-            assertThat(tmp).doesNotExist();
-        }
-
-        @Test
-        @DisplayName("múltiplas mutações preservam apenas o estado final")
-        void multiplasMutacoes() throws IOException {
-            service.create(reminder("a", true));
-            service.create(reminder("b", true));
-            service.create(reminder("c", true));
-            service.delete("b");
-            service.toggle("a", false);
-
-            String content = Files.readString(remindersFile);
-            assertThat(content).contains("\"a\"").doesNotContain("\"b\"").contains("\"c\"");
-        }
-
-        @Test
-        @DisplayName("lastPersistedAt() retorna timestamp após create")
-        void lastPersistedAtAposCreate() {
-            assertThat(service.lastPersistedAt()).isNull();
-
-            service.create(reminder("a", true));
-
-            assertThat(service.lastPersistedAt()).isNotNull();
-        }
-
-        @Test
-        @DisplayName("lastPersistedAt() retorna null em classpath")
-        void lastPersistedAtClasspath() {
-            ReflectionTestUtils.setField(service, "remindersFile", "classpath:reminders.json");
-            assertThat(service.lastPersistedAt()).isNull();
-        }
-    }
-
-    // =========================================================================
-    // COMPORTAMENTO COM CLASSPATH (não persiste)
-    // =========================================================================
-
-    @Nested
-    @DisplayName("Comportamento com classpath:")
-    class Classpath {
-
-        @Test
-        @DisplayName("create() em memória funciona, sem exception")
-        void createEmMemoria() {
-            stubLoadEmpty();
-            service.reload();
-
-            Reminder criado = service.create(reminder("a", true));
-
-            assertThat(criado.id()).isEqualTo("a");
-            assertThat(service.count()).isEqualTo(1);
-        }
-
-        @Test
-        @DisplayName("update() em memória funciona, sem exception")
-        void updateEmMemoria() {
-            stubLoad(reminder("a", true));
-            service.reload();
-
-            service.update("a", reminder("a", false));
-
-            assertThat(service.getById("a").orElseThrow().enabled()).isFalse();
-        }
-    }
-
-    // =========================================================================
-    // LISTENER DE RELOAD
-    // =========================================================================
-
-    @Nested
-    @DisplayName("Listener de reload")
-    class ListenerReload {
-
-        @Test
-        @DisplayName("setReloadListener(null) instala no-op")
-        void listenerNull() {
-            stubLoadEmpty();
-            service.reload();
+        @DisplayName("setReloadListener(null): instala no-op, não quebra")
+        void listenerNulo() {
+            when(repository.existsById("a")).thenReturn(false);
             service.setReloadListener(null);
 
-            // Não deve lançar mesmo com listener no-op
             assertThatCode(() -> service.create(reminder("a", true))).doesNotThrowAnyException();
         }
 
         @Test
-        @DisplayName("listener que lança não propaga para o caller")
+        @DisplayName("listener que lança: mutação completa, exceção não propaga")
         void listenerLanca() {
-            stubLoadEmpty();
-            service.reload();
+            when(repository.existsById("a")).thenReturn(false);
             service.setReloadListener(
                     () -> {
                         throw new RuntimeException("boom");
                     });
 
-            // create() deve completar com sucesso mesmo com listener falhando
             Reminder criado = service.create(reminder("a", true));
             assertThat(criado.id()).isEqualTo("a");
         }
 
         @Test
         @DisplayName("listener é chamado após cada mutação")
-        void listenerChamadoPorMutacao() {
-            stubLoadEmpty();
-            service.reload();
+        void chamadoPorMutacao() {
+            when(repository.existsById("a")).thenReturn(false);
+            when(repository.findById("a"))
+                    .thenReturn(Optional.of(reminder("a", true)))
+                    .thenReturn(Optional.of(reminder("a", true)));
+            when(repository.deleteById("a")).thenReturn(true);
+
             AtomicInteger chamadas = new AtomicInteger();
             service.setReloadListener(chamadas::incrementAndGet);
 
-            service.create(reminder("a", true)); // 1
-            service.update("a", reminder("a", false)); // 2
-            service.toggle("a", true); // 3
-            service.delete("a"); // 4
+            service.create(reminder("a", true));
+            service.update("a", reminderComVersion("a", 1));
+            service.toggle("a", false);
+            service.delete("a");
 
             assertThat(chamadas.get()).isEqualTo(4);
-        }
-
-        @Test
-        @DisplayName("listener pode ser trocado em runtime")
-        void listenerTrocado() {
-            stubLoadEmpty();
-            service.reload();
-            AtomicInteger primeiro = new AtomicInteger();
-            AtomicInteger segundo = new AtomicInteger();
-
-            service.setReloadListener(primeiro::incrementAndGet);
-            service.create(reminder("a", true));
-
-            service.setReloadListener(segundo::incrementAndGet);
-            service.create(reminder("b", true));
-
-            assertThat(primeiro.get()).isEqualTo(1);
-            assertThat(segundo.get()).isEqualTo(1);
-        }
-    }
-
-    // =========================================================================
-    // CONCORRÊNCIA
-    // =========================================================================
-
-    @Nested
-    @DisplayName("Concorrência")
-    class Concorrencia {
-
-        @Test
-        @DisplayName("create() concorrente de IDs diferentes: ambos persistem, sem corrupção")
-        void createConcorrente() throws Exception {
-            stubLoadEmpty();
-            service.reload();
-
-            int total = 10;
-            CountDownLatch latch = new CountDownLatch(1);
-            ExecutorService pool = Executors.newFixedThreadPool(total);
-            List<Throwable> erros = new ArrayList<>();
-
-            try {
-                for (int i = 0; i < total; i++) {
-                    final int idx = i;
-                    pool.submit(
-                            () -> {
-                                try {
-                                    latch.await();
-                                    service.create(reminder("r-" + idx, true));
-                                } catch (Throwable t) {
-                                    synchronized (erros) {
-                                        erros.add(t);
-                                    }
-                                }
-                            });
-                }
-                latch.countDown();
-            } finally {
-                pool.shutdown();
-                assertThat(pool.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
-            }
-
-            assertThat(erros).isEmpty();
-            assertThat(service.count()).isEqualTo(total);
-        }
-
-        @Test
-        @DisplayName("delete() concorrente do mesmo ID: apenas um retorna true")
-        void deleteConcorrente() throws Exception {
-            stubLoad(reminder("a", true));
-            service.reload();
-
-            int total = 5;
-            AtomicInteger sucessos = new AtomicInteger();
-            CountDownLatch latch = new CountDownLatch(1);
-            ExecutorService pool = Executors.newFixedThreadPool(total);
-
-            try {
-                for (int i = 0; i < total; i++) {
-                    pool.submit(
-                            () -> {
-                                try {
-                                    latch.await();
-                                    if (service.delete("a")) {
-                                        sucessos.incrementAndGet();
-                                    }
-                                } catch (InterruptedException e) {
-                                    Thread.currentThread().interrupt();
-                                }
-                            });
-                }
-                latch.countDown();
-            } finally {
-                pool.shutdown();
-                assertThat(pool.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
-            }
-
-            assertThat(sucessos.get()).isEqualTo(1);
-            assertThat(service.count()).isZero();
         }
     }
 }

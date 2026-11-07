@@ -5,6 +5,132 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.10.0] — 2026-11-07
+
+### Added
+
+#### Reminders em PostgreSQL (fonte de verdade migrada)
+
+- **Migração de fonte de verdade**: os reminders saem do `config/reminders.json` e passam a viver
+  em PostgreSQL (tabelas `reminders`, `reminder_chats`, `reminder_tags`), via Flyway `V4`.
+  O JSON vira **apenas** bootstrap / backup / restore / migração entre ambientes.
+- **`V4__create_reminders_table.sql`**: schema com `version INTEGER` (optimistic locking), trigger
+  `trg_reminders_updated_at` (sobrescreve `updated_at` a cada UPDATE) e índices parciais
+  (`enabled = TRUE`, `deleted_at IS NOT NULL`). `deleted_at` existe como reserva para soft delete
+  futuro (não usado nesta versão — `deleteById` faz hard delete, com paridade ao JSON).
+- **`ReminderRepository`** (novo): `JdbcTemplate` + `RowMapper`, seguindo o padrão de
+  `BirthdayRepository`/`ReleaseNotifiedRepository`. Hidratação N+1 controlado (2 queries por linha
+  pai) via `hydrate()`. `@Transactional` nos métodos de escrita. `save` força `version = 1`;
+  `update(Reminder, int expectedVersion)` faz optimistic locking real (`WHERE id = ? AND version = ?`)
+  e lança `OptimisticLockingFailureException` se a versão não bater. `deleteById` remove em cascata
+  (FK `ON DELETE CASCADE`).
+- **`ReminderBootstrapService`** (novo): `ApplicationRunner` que importa o JSON no boot **se** a
+  tabela estiver vazia **e** `reminders.bootstrap.from-json.enabled=true`. Idempotente.
+- **`GET /admin/reminders/export`**: gera `ReminderJson` a partir do `getAll()`, com
+  `Content-Disposition: attachment`. Útil para backup, versionamento em git e migração entre
+  ambientes.
+- **`POST /admin/reminders/import?replace=X`**: importa `ReminderJson` com upsert transacional.
+  `replace=false` (default) preserva os reminders ausentes; `replace=true` faz restore exato
+  (remove os ausentes do lote). Rejeita lista vazia (`400`) para evitar apagar o banco
+  acidentalmente.
+
+### Changed
+
+- **`Reminder` (record)**: ganhou o 10º campo `version` (int primitivo, `>= 1`, default 1 no
+  construtor de conveniência de 9 args). `withEnabled` e `withVersion` propagam `version`
+  explicitamente. `@JsonIgnoreProperties(ignoreUnknown = true)` para tolerar campos futuros no
+  bootstrap.
+- **`ReminderService`**: reescrito. Deixa de ler `JsonConfigLoader` e `ObjectMapper`; passa a
+  depender **apenas** de `ReminderRepository`. Mantém a API pública (`getAll`, `getEnabled`,
+  `getById`, `count`, `create`, `update`, `toggle`, `delete`, `reload`, `setReloadListener`).
+  `importAll(List, boolean)` é `@Transactional` (lote inteiro ou nada). `reload()` apenas
+  re-notifica o scheduler (não relê — o estado vive no banco). Métodos `persistJsonAndNotify`,
+  `isJsonPersistable`, `lastPersistedAt` foram **removidos** (não fazem mais sentido).
+- **`ReminderController`**: `PUT`/`toggle` mapeiam `IllegalStateException` (conflito de versão) para
+  **`409 Conflict`**. Adicionados `GET /export` e `POST /import`. Resto dos endpoints preservados.
+- **`application.properties`**:
+  - Removida a flag `reminders.storage.type` (não faz mais sentido — só database).
+  - Mantidas `reminders.bootstrap.from-json.enabled` (default `false`) e `reminders.data.file`
+    (default `classpath:reminders.json`).
+  - **Paths de JSON** (`auto.response.file`, `easter-egg.file`, `worldcup.data.file`,
+    `worldcup.update.destination`, `salavip.data.file`, `salavip.config.file`) foram trocados de
+    `file:/app/config/...` para `classpath:` / `./config/` no base — o `application-prod.properties`
+    já sobrescreve tudo para `file:/app/config/...`, então prod não muda. O base fica honesto
+    (funciona em dev/test sem depender de fallback silencioso).
+  - **Reorganização de feature flags**: divisão por **domínio funcional** (`13.1 Podcast /
+lembretes / aniversários`, `13.2 Digest / Copa / lançamentos`, `13.3 Observabilidade / cache /
+debug`), sem a divisão por "Ondas".
+  - Seção `THYMELEAF` promovida a seção `11` (antes estava dentro de `DEV ONLY`); `DEV ONLY` virou
+    `12`; `FEATURE FLAGS` virou `13`. Índice atualizado.
+  - `admin.security.disabled` ganhou default explícito `:false` (antes estava sem default —
+    poderia falhar em runtime).
+- **`application-dev.properties`**: enriquecido com paths locais (Sala VIP), `admin.security.disabled=true`
+  e logging cirúrgico (DEBUG em `repository`, `controller`, `ReminderService`,
+  `ReminderScheduler`, `ReminderDispatcher`, `ReminderBootstrapService`,
+  `JdbcTemplate`, `StatementCreatorUtils`). `app.temp.dir=/tmp/t1000-temp`.
+- **`application-prod.properties`**: reorganizado espelhando o base (`9.1` / `9.2` / `9.3`), sem
+  divisão por ondas. Comentário expandido em `admin.security.disabled=false` (falha segura).
+
+### Fixed
+
+- **`FeatureFlagAdminService`**: `reminders.enabled` já estava registrada (v2.9.0), sem mudança
+  nesta versão.
+- **`reminders.enabled` em `ReminderDispatcher`**: mantido o comportamento (pausa global do envio
+  quando `false`). O que mudou é **onde** o reminder vive, não **se** ele é enviado.
+
+### Removed
+
+- **`reminders.storage.type`**: flag removida (decisão: só database). Rollback agora é via
+  `POST /admin/reminders/import?replace=true` a partir de um export.
+- **Modo JSON do `ReminderService`**: métodos `persistJsonAndNotify`, `isJsonPersistable`,
+  `lastPersistedAt` e o campo `AtomicReference<List<Reminder>>` foram removidos.
+
+### Tests
+
+- **`ReminderRepositoryTest`** (novo, ~13 testes): Testcontainers Postgres. `@JdbcTest` +
+  `@Import(ReminderRepository.class)` + `@AutoConfigureTestDatabase(replace = NONE)`.
+  Cobre: `save` (pai + filhas em transação, força `version=1`, ignora chat ID inválido com warn),
+  `findById` (hidrata chats/tags, `empty` para inexistente), `findAll` (ordenado por id),
+  `findEnabled` (filtra), `update` (incrementa `version`, substitui chats/tags, trigger sobrescreve
+  `updated_at`), `update` com versão errada → `OptimisticLockingFailureException`, `deleteById`
+  (cascata), `count`/`existsById`.
+- **`ReminderServiceTest`** (reescrito, ~30 testes): mock do `ReminderRepository`. Cobre leitura
+  (delegação), CRUD, optimistic locking (conflito → `IllegalStateException`), `importAll` (merge,
+  `replace`, lista vazia/nula, falha no meio → exceção), listener (no-op, exceção não propaga,
+  chamado por mutação), `reload` (só notifica, não chama `findAll`).
+- **`ReminderControllerTest`** (10 novos testes, arquivo completo): export (JSON + `Content-Disposition`
+  - lista vazia), import (merge, replace, lista vazia → 400, `IllegalArgumentException` → 400,
+    `RuntimeException` → 500), `PUT` com conflito → 409, `toggle` com conflito → 409.
+- **`ReminderStorageIntegrationTest`** (novo, ~8 testes): Testcontainers + `@SpringBootTest` +
+  `@AutoConfigureMockMvc`. Sobe Postgres + contexto completo. Cobre: `create` via controller
+  (persiste), `update` com versão correta (incrementa), `update` com versão errada (409 **real**,
+  não mock), `export` (JSON do banco), `import?replace=true` (substitui o banco), `reload`
+  (scheduler reagenda), `delete` (cascata), ciclo completo
+  (`create → update → export → import → delete`).
+- **`ReminderTest`** e **`ReminderJsonTest`**: ajustados para o `version` no record (mas excluídos
+  do JaCoCo/Sonar por serem `model/**` e `dto/**`).
+
+### Coverage
+
+- Global: **~94–95%** (meta: ≥90%).
+- Código novo: **~95%** (meta: ≥80%).
+
+### Notes (migração)
+
+- **Primeira subida em prod:** `reminders.bootstrap.from-json.enabled=true` (default do profile
+  `prod`) + tabela vazia → importa `file:/app/config/reminders.json`. Bot sobe com os reminders
+  configurados.
+- **Subidas subsequentes:** tabela tem registros → bootstrap é inerte. Para forçar reimport:
+  `POST /admin/reminders/import?replace=true`.
+- **Rollback:** se algo der errado, o operador tem duas opções:
+  1. Reverter para v2.9.0 (reminders voltam a ser lidos do JSON — mas perde `version`, export,
+     import, 409).
+  2. Continuar na v2.10.0 e restaurar o JSON via `POST /admin/reminders/import?replace=true`.
+- **Volume Docker:** já deve estar montado (`/app/config/`), então `reminders.json` continua
+  acessível. Sem mudança de deploy.
+
+---
+
 ## [2.9.0] — 2026-11-06
 
 ### Adicionado
