@@ -81,9 +81,7 @@ class FeatureFlagAdminServiceTest {
 
             assertThat(keys)
                     .containsExactlyInAnyOrder(
-                            // ===== Alta prioridade — Onda 3.5.1 =====
                             "podcast.enabled",
-                            "weekly.reminder.enabled",
                             "daily.releases.enabled",
                             "reminders.enabled",
                             "worldcup.reminders30min.enabled",
@@ -122,9 +120,8 @@ class FeatureFlagAdminServiceTest {
         void othersAreEditable() {
             adminService.registerKnownFlags();
 
-            // ===== Alta prioridade =====
             assertThat(flagService.get("podcast.enabled").get().readOnly()).isFalse();
-            assertThat(flagService.get("weekly.reminder.enabled").get().readOnly()).isFalse();
+
             assertThat(flagService.get("daily.releases.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("reminders.enabled").get().readOnly()).isFalse();
 
@@ -133,7 +130,6 @@ class FeatureFlagAdminServiceTest {
             assertThat(flagService.get("easter.eggs.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("admin.features.toggle-enabled").get().readOnly()).isFalse();
 
-            // ===== Média prioridade =====
             assertThat(flagService.get("weekly.digest.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("birthday.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("birthday.group-notification.enabled").get().readOnly())
@@ -142,7 +138,6 @@ class FeatureFlagAdminServiceTest {
             assertThat(flagService.get("ai.digest.custom-period.enabled").get().readOnly())
                     .isFalse();
 
-            // ===== Baixa prioridade =====
             assertThat(flagService.get("metrics.prometheus.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("admin.debug-cache.enabled").get().readOnly()).isFalse();
             assertThat(flagService.get("tmdb.cache.enabled").get().readOnly()).isFalse();
@@ -271,7 +266,7 @@ class FeatureFlagAdminServiceTest {
             adminService.registerKnownFlags();
 
             assertThat(flagService.isEnabled("podcast.enabled")).isTrue();
-            assertThat(flagService.isEnabled("weekly.reminder.enabled")).isTrue();
+
             assertThat(flagService.isEnabled("daily.releases.enabled")).isTrue();
             assertThat(flagService.isEnabled("worldcup.reminders30min.enabled")).isTrue();
             assertThat(flagService.isEnabled("easter.eggs.enabled")).isTrue();
@@ -282,12 +277,11 @@ class FeatureFlagAdminServiceTest {
         @DisplayName("alta prioridade: Environment sobrescreve o default")
         void altaPrioridade_envOverride() {
             when(environment.getProperty("podcast.enabled")).thenReturn("false");
-            when(environment.getProperty("weekly.reminder.enabled")).thenReturn("false");
 
             adminService.registerKnownFlags();
 
             assertThat(flagService.isEnabled("podcast.enabled")).isFalse();
-            assertThat(flagService.isEnabled("weekly.reminder.enabled")).isFalse();
+
             // As demais mantêm o default
             assertThat(flagService.isEnabled("daily.releases.enabled")).isTrue();
             assertThat(flagService.isEnabled("easter.eggs.enabled")).isTrue();
@@ -367,27 +361,22 @@ class FeatureFlagAdminServiceTest {
             assertThat(map)
                     .hasSize(TOTAL_FLAGS)
                     .containsKeys(
-                            // Alta prioridade
                             "podcast.enabled",
-                            "weekly.reminder.enabled",
                             "daily.releases.enabled",
                             "reminders.enabled",
                             "worldcup.reminders30min.enabled",
                             "easter.eggs.enabled",
                             "admin.features.toggle-enabled",
-                            // Média prioridade
                             "weekly.digest.enabled",
                             "birthday.enabled",
                             "birthday.group-notification.enabled",
                             "podcast.fallback-text.enabled",
                             "ai.digest.custom-period.enabled",
-                            // Baixa prioridade
                             "metrics.prometheus.enabled",
                             "admin.debug-cache.enabled",
                             "tmdb.cache.enabled",
                             "telegram.error-fallback.enabled",
                             "kafka.audit.enabled",
-                            // Já existentes
                             "worldcup.enabled",
                             "transcription.enabled",
                             "auto.response.enabled",

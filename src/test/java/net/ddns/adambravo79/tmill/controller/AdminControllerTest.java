@@ -77,7 +77,6 @@ class AdminControllerTest {
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
     @Mock private FileTranscriptionCacheService fileTranscriptionCacheService;
-    @Mock private WeeklyReminderService weeklyReminderService;
     @Mock private AutoResponseService autoResponseService;
     @Mock private WorldCupSchedulerService worldCupSchedulerService;
     @Mock private StaticWorldCupService staticWorldCupService;
@@ -117,7 +116,6 @@ class AdminControllerTest {
                         easterEggService,
                         dailyDigestService,
                         fileTranscriptionCacheService,
-                        weeklyReminderService,
                         autoResponseService,
                         worldCupSchedulerService,
                         staticWorldCupService,
@@ -163,13 +161,13 @@ class AdminControllerTest {
                                 ClassPathResource cpr = new ClassPathResource(fileName);
                                 return cpr.exists() ? cpr : emptyResource;
                             }
-                            // file:/app/config/... e file:./config/... não existem no teste
                             return emptyResource;
                         });
 
         lenient()
                 .when(featureFlagAdminService.isEnabled("admin.debug-cache.enabled"))
                 .thenReturn(true);
+
         this.mockMvc = MockMvcBuilders.standaloneSetup(adminController).build();
     }
 
@@ -267,50 +265,6 @@ class AdminControllerTest {
                 .andExpect(content().string("Dados da Copa recarregados do arquivo JSON"));
 
         verify(staticWorldCupService).reload();
-    }
-
-    // ========================= LEMBRETES =========================
-
-    @Test
-    void testWeeklyReminder_deveDispararERetornarOk() throws Exception {
-        doNothing().when(weeklyReminderService).sendWednesdayReminder();
-
-        mockMvc.perform(post("/admin/test-weekly-reminder"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("Lembrete semanal disparado manualmente."));
-
-        verify(weeklyReminderService).sendWednesdayReminder();
-    }
-
-    @Test
-    void testWeeklyReminderShowcase_deveEnviarParaShowcase() throws Exception {
-        doNothing().when(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
-
-        mockMvc.perform(post("/admin/test-weekly-reminder-showcase"))
-                .andExpect(status().isOk())
-                .andExpect(
-                        content()
-                                .string(
-                                        containsString(
-                                                "Lembrete semanal enviado para o chat"
-                                                        + " -1003703557250")));
-
-        verify(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
-    }
-
-    @Test
-    void testWeeklyReminderShowcase_comChatIdPersonalizado() throws Exception {
-        doNothing().when(weeklyReminderService).sendReminderToChat(999L);
-
-        mockMvc.perform(post("/admin/test-weekly-reminder-showcase").param("chatId", "999"))
-                .andExpect(status().isOk())
-                .andExpect(
-                        content()
-                                .string(
-                                        containsString(
-                                                "Lembrete semanal enviado para o chat 999")));
-
-        verify(weeklyReminderService).sendReminderToChat(999L);
     }
 
     // ========================= DIGEST =========================
@@ -782,19 +736,16 @@ class AdminControllerTest {
     void getConfigFiles_quandoJsonInvalido_deveRetornarMensagemErro() throws Exception {
         reset(resourceLoader);
 
-        // Recurso "válido" que serve de fallback para os outros 2 arquivos
         Resource otherValid = mock(Resource.class);
         when(otherValid.exists()).thenReturn(true);
         when(otherValid.getInputStream())
                 .thenReturn(new ByteArrayInputStream("{\"ok\":true}".getBytes()));
 
-        // Recurso inválido SÓ para easter-eggs
         Resource invalidJsonResource = mock(Resource.class);
         when(invalidJsonResource.exists()).thenReturn(true);
         when(invalidJsonResource.getInputStream())
                 .thenReturn(new ByteArrayInputStream("not-a-valid-json".getBytes()));
 
-        // Mapeia por path: cada arquivo recebe o resource certo, sem depender de ordem
         when(resourceLoader.getResource(anyString()))
                 .thenAnswer(
                         invocation -> {
@@ -828,13 +779,10 @@ class AdminControllerTest {
                         invocation -> {
                             String path = invocation.getArgument(0, String.class);
                             if (path.contains("easter-eggs")) {
-                                return fileResource; // só easter-eggs devolve o JSON válido
+                                return fileResource;
                             }
                             return emptyResource;
                         });
-
-        when(environment.getProperty(eq("easter-egg.file"), anyString()))
-                .thenReturn("file:/app/config/easter-eggs.json");
 
         when(environment.getProperty(eq("easter-egg.file"), anyString()))
                 .thenReturn("file:/app/config/easter-eggs.json");
@@ -892,7 +840,6 @@ class AdminControllerTest {
                 new AutoResponseOverride("Resposta com animação", "https://example.com/video.mp4");
         when(autoResponseService.getResponseRule(any(), anyString(), any()))
                 .thenReturn(java.util.Optional.of(response));
-        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
@@ -1028,7 +975,6 @@ class AdminControllerTest {
                                 HttpStatus.FORBIDDEN, "Forbidden", null, null, null))
                 .when(telegramFacade)
                 .enviarMidia(eq(SHOWCASE_CHAT_ID), anyString(), anyString());
-        // Fallback de texto funciona → conta como sucesso
         doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
@@ -1051,7 +997,6 @@ class AdminControllerTest {
         doThrow(new ResourceAccessException("Timeout"))
                 .when(telegramFacade)
                 .enviarMidia(eq(SHOWCASE_CHAT_ID), anyString(), anyString());
-        // Fallback de texto funciona → conta como sucesso
         doNothing().when(telegramFacade).enviarMensagemHtml(anyLong(), anyString());
 
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
@@ -1076,7 +1021,6 @@ class AdminControllerTest {
                 .when(telegramFacade)
                 .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
 
-        // 🔧 KI-001 fix: o método público agora responde 500 (fallback de texto não é "sucesso")
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().string(containsString("Falha ao enviar")));
@@ -1094,7 +1038,6 @@ class AdminControllerTest {
                 .when(telegramFacade)
                 .enviarMensagemHtml(eq(SHOWCASE_CHAT_ID), anyString());
 
-        // 🔧 KI-001 fix: 500
         mockMvc.perform(post("/admin/test-auto-response").param("message", "teste"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().string(containsString("Falha ao enviar")));
@@ -1426,7 +1369,6 @@ class AdminControllerTest {
         @Test
         @DisplayName("dia que não é sexta: retorna 400")
         void diaNaoSexta_retornaBadRequest() throws Exception {
-            // 2026-10-13 é uma terça-feira
             mockMvc.perform(
                             post("/admin/podcast/resend")
                                     .param("friday", "2026-10-13")
@@ -1524,7 +1466,6 @@ class AdminControllerTest {
                     .when(telegramFacade)
                     .enviarMensagem(anyLong(), anyString());
 
-            // Não deve lançar
             mockMvc.perform(
                             post("/admin/podcast/resend")
                                     .param("friday", "2026-10-09")
@@ -1699,7 +1640,6 @@ class AdminControllerTest {
             when(autoResponseService.getResponseRule(any(), anyString(), any()))
                     .thenReturn(java.util.Optional.of(response));
             when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(false);
-            // Fallback de texto também falha → força 500
             doThrow(new ResourceAccessException("Timeout"))
                     .when(telegramFacade)
                     .enviarMensagemHtml(anyLong(), anyString());
@@ -1720,10 +1660,6 @@ class AdminControllerTest {
     // =========================================================================
     // 🧪 ONDA 3c — Cobertura do AdminController (REST)
     // =========================================================================
-
-    // -------------------------------------------------------------------------
-    // falaT1000
-    // -------------------------------------------------------------------------
 
     @Test
     @DisplayName("falaT1000 com chatId explícito envia mensagem HTML")
@@ -1840,7 +1776,6 @@ class AdminControllerTest {
 
         var temp = java.nio.file.Files.createTempFile("test_azure_", ".mp3");
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
-        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(get("/admin/test-azure-tts"))
@@ -1861,7 +1796,6 @@ class AdminControllerTest {
         when(azureTtsClient.synthesizeFullText(anyString())).thenReturn(new byte[] {1, 2, 3});
         var temp = java.nio.file.Files.createTempFile("tts_", ".mp3");
         when(tempDirService.createTempFile(anyString(), anyString())).thenReturn(temp);
-        // 🔧 Onda 3.4: enviarMidia agora retorna boolean
         when(telegramFacade.enviarMidia(anyLong(), anyString(), anyString())).thenReturn(true);
 
         mockMvc.perform(
@@ -2502,5 +2436,46 @@ class AdminControllerTest {
                 .andExpect(content().string("Lançamentos torrent recarregados"));
 
         verify(torrentLaunchService).carregar();
+    }
+
+    // =========================================================================
+    // RESOLVE TARGET CHAT ID — testes migrados de test-weekly-reminder-showcase
+    // =========================================================================
+
+    @Test
+    @DisplayName("resolveTargetChatId: chatId explícito tem prioridade (via worldcup)")
+    void resolve_chatIdExplicito() {
+        ReflectionTestUtils.setField(adminController, "ownerId", 42L);
+
+        var response = adminController.testWorldCupShowcase(777L);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        verify(worldCupSchedulerService).sendManualTestToChat(777L);
+    }
+
+    @Test
+    @DisplayName("resolveTargetChatId: sem chatId, sem owner, usa showcase (via worldcup)")
+    void resolve_fallbackShowcase() {
+        ReflectionTestUtils.setField(adminController, "ownerId", 0L);
+        ReflectionTestUtils.setField(adminController, "digestChatIds", java.util.Set.of());
+
+        var response = adminController.testWorldCupShowcase(null);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        verify(worldCupSchedulerService).sendManualTestToChat(SHOWCASE_CHAT_ID);
+    }
+
+    @Test
+    @DisplayName(
+            "resolveTargetChatId: sem chatId, sem owner, usa primeiro digestChatId (via worldcup)")
+    void resolve_primeiroDigestChat() {
+        ReflectionTestUtils.setField(adminController, "ownerId", 0L);
+        ReflectionTestUtils.setField(
+                adminController, "digestChatIds", java.util.Set.of(123L, 456L));
+
+        var response = adminController.testWorldCupShowcase(null);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        verify(worldCupSchedulerService).sendManualTestToChat(123L);
     }
 }

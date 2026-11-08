@@ -457,10 +457,6 @@
                     aria-controls="digest" aria-selected="false">📰 Digest</a>
             </li>
             <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-lembretes" data-bs-toggle="tab" href="#lembretes" role="tab"
-                    aria-controls="lembretes" aria-selected="false">📅 Lembretes</a>
-            </li>
-            <li class="nav-item" role="presentation">
                 <a class="nav-link" id="tab-auto" data-bs-toggle="tab" href="#auto" role="tab" aria-controls="auto"
                     aria-selected="false">🤖 Auto-Response</a>
             </li>
@@ -738,27 +734,6 @@
                 </div>
             </div>
 
-            <!-- ==================== ABA LEMBRETES ==================== -->
-            <div class="tab-pane fade" id="lembretes" role="tabpanel" aria-labelledby="tab-lembretes">
-                <div class="btn-group-vertical-mobile mb-2 mt-2" role="group" aria-label="Ações de lembretes">
-                    <form th:action="@{/admin-web/test-weekly-reminder}" method="post" class="d-inline-block">
-                        <button type="submit" class="btn btn-outline-warning">
-                            <i class="bi bi-bell" aria-hidden="true"></i> Lembrete Semanal (padrão)
-                        </button>
-                    </form>
-                    <form th:action="@{/admin-web/test-weekly-reminder-showcase}" method="post" class="d-inline-block">
-                        <div class="d-flex align-items-center gap-1">
-                            <select class="form-select form-select-sm" name="chatId">
-                                <option value="">Vazio (Padrão)</option>
-                                <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
-                            </select>
-                            <button type="submit" class="btn btn-outline-warning btn-sm">
-                                <i class="bi bi-envelope" aria-hidden="true"></i> Enviar para Chat específico
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
 
             <!-- ==================== ABA AUTO-RESPONSE ==================== -->
             <div class="tab-pane fade" id="auto" role="tabpanel" aria-labelledby="tab-auto">
@@ -1325,6 +1300,12 @@
                     </button>
                     <button type="button" class="btn btn-outline-info" onclick="reloadRemindersFromDisk()">
                         <i class="bi bi-hdd" aria-hidden="true"></i> Recarregar do disco
+                    </button>
+                    <!-- 🆕 Atalho para o lembrete semanal (antigo "Lembretes") -->
+                    <button type="button" class="btn btn-outline-warning btn-sm"
+                        onclick="openReminderModal('quatro-horas-quarta')"
+                        title="Editar o lembrete semanal (antigo 'Lembretes')">
+                        <i class="bi bi-bell" aria-hidden="true"></i> Editar "Quatro Horas de Quarta"
                     </button>
                     <span class="text-muted small ms-auto" id="remindersStatus" aria-live="polite"></span>
                 </div>

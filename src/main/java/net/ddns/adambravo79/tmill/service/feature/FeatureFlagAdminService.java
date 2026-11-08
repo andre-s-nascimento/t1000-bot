@@ -28,7 +28,6 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <ul>
  *   <li>{@code podcast.enabled}
- *   <li>{@code weekly.reminder.enabled}
  *   <li>{@code daily.releases.enabled}
  *   <li>{@code worldcup.reminders30min.enabled}
  *   <li>{@code easter.eggs.enabled}
@@ -81,7 +80,6 @@ public class FeatureFlagAdminService {
         // Alta prioridade — Onda 3.5.1
         // =====================================================================
         registerBool("podcast.enabled", true, "Publicação automática semanal do podcast");
-        registerBool("weekly.reminder.enabled", true, "Lembrete semanal de quarta-feira");
         registerBool("reminders.enabled", true, "Envio de anúncios/lembretes configuráveis");
         registerBool("daily.releases.enabled", true, "Notificação de lançamentos a cada 6h");
         registerBool(

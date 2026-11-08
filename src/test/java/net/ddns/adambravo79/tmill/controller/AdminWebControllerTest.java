@@ -57,7 +57,6 @@ import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.TorrentLaunchService;
-import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
@@ -75,7 +74,6 @@ class AdminWebControllerTest {
 
     @Mock private EasterEggService easterEggService;
     @Mock private DailyDigestService dailyDigestService;
-    @Mock private WeeklyReminderService weeklyReminderService;
     @Mock private AutoResponseService autoResponseService;
     @Mock private WorldCupSchedulerService worldCupSchedulerService;
     @Mock private StaticWorldCupService staticWorldCupService;
@@ -114,7 +112,6 @@ class AdminWebControllerTest {
                 new AdminWebController(
                         easterEggService,
                         dailyDigestService,
-                        weeklyReminderService,
                         autoResponseService,
                         worldCupSchedulerService,
                         staticWorldCupService,
@@ -780,30 +777,6 @@ class AdminWebControllerTest {
         controller.testWeeklyDigest(attrs);
 
         verify(dailyReleasesService).sendWeeklyDigest();
-    }
-
-    // =========================================================================
-    // LEMBRETES
-    // =========================================================================
-
-    @Test
-    @DisplayName("testWeeklyReminder: dispara e flash success")
-    void testWeeklyReminder_sucesso() {
-        RedirectAttributes attrs = newRedirectAttributes();
-
-        controller.testWeeklyReminder(attrs);
-
-        verify(weeklyReminderService).sendWednesdayReminder();
-    }
-
-    @Test
-    @DisplayName("testWeeklyReminderShowcase: chatId explícito")
-    void testWeeklyReminderShowcase_chatId() {
-        RedirectAttributes attrs = newRedirectAttributes();
-
-        controller.testWeeklyReminderShowcase(123L, attrs);
-
-        verify(weeklyReminderService).sendReminderToChat(123L);
     }
 
     // =========================================================================
@@ -1534,37 +1507,38 @@ class AdminWebControllerTest {
     // =========================================================================
 
     @Test
-    @DisplayName("resolveTargetChatId: chatId explícito tem prioridade")
+    @DisplayName("resolveTargetChatId: chatId explícito tem prioridade (via worldcup)")
     void resolve_chatIdExplicito() {
         RedirectAttributes attrs = newRedirectAttributes();
 
-        controller.testWeeklyReminderShowcase(777L, attrs);
+        controller.testWorldCupShowcase(777L, attrs);
 
-        verify(weeklyReminderService).sendReminderToChat(777L);
+        verify(worldCupSchedulerService).sendManualTestToChat(777L);
     }
 
     @Test
-    @DisplayName("resolveTargetChatId: sem chatId, sem owner, usa showcase")
+    @DisplayName("resolveTargetChatId: sem chatId, sem owner, usa showcase (via worldcup)")
     void resolve_fallbackShowcase() {
         ReflectionTestUtils.setField(controller, "ownerId", 0L);
         ReflectionTestUtils.setField(controller, "digestChatIdsStr", "");
 
         RedirectAttributes attrs = newRedirectAttributes();
-        controller.testWeeklyReminderShowcase(null, attrs);
+        controller.testWorldCupShowcase(null, attrs);
 
-        verify(weeklyReminderService).sendReminderToChat(SHOWCASE_CHAT_ID);
+        verify(worldCupSchedulerService).sendManualTestToChat(SHOWCASE_CHAT_ID);
     }
 
     @Test
-    @DisplayName("resolveTargetChatId: sem chatId, sem owner, usa primeiro digestChatId")
+    @DisplayName(
+            "resolveTargetChatId: sem chatId, sem owner, usa primeiro digestChatId (via worldcup)")
     void resolve_primeiroDigestChat() {
         ReflectionTestUtils.setField(controller, "ownerId", 0L);
         ReflectionTestUtils.setField(controller, "digestChatIdsStr", "123,456");
 
         RedirectAttributes attrs = newRedirectAttributes();
-        controller.testWeeklyReminderShowcase(null, attrs);
+        controller.testWorldCupShowcase(null, attrs);
 
-        verify(weeklyReminderService).sendReminderToChat(123L);
+        verify(worldCupSchedulerService).sendManualTestToChat(123L);
     }
 
     @Test
