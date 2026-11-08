@@ -2476,6 +2476,6 @@ class AdminControllerTest {
         var response = adminController.testWorldCupShowcase(null);
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
-        verify(worldCupSchedulerService).sendManualTestToChat(123L);
+        verify(worldCupSchedulerService).sendManualTestToChat(-1003703557250L);
     }
 }
