@@ -5,6 +5,51 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.10.0] — 2026-11-08
+
+### Removed
+
+- **`WeeklyReminderService`** (legado) — substituído pelo `ReminderScheduler` +
+  `ReminderDispatcher`. O lembrete "Quatro Horas de Quarta" agora é um `Reminder`
+  configurável via `/admin-web` (aba `📢 Anúncios`) e via API `/admin/reminders`.
+  O registro é criado pela migration `V5__seed_weekly_reminder_as_reminder.sql`
+  (idempotente, `ON CONFLICT DO NOTHING`).
+- Endpoints `POST /admin/test-weekly-reminder` e
+  `POST /admin/test-weekly-reminder-showcase`.
+- Aba `📅 Lembretes` do painel administrativo.
+- Feature flag `weekly.reminder.enabled` (substituída por `reminders.enabled`).
+- Property `weekly.reminder.media-file` (agora é o campo `mediaUrl` do
+  reminder no banco, com resolução de placeholders `${VAR}` no bootstrap).
+
+### Added
+
+- **`config/reminders.json`** — bootstrap do reminder `quatro-horas-quarta`.
+- **`ReminderBootstrapService`** agora resolve placeholders `${VAR:default}` (ex.:
+  `${QUATRO_HORAS_QUARTA_FILE:https://...}`) no JSON de bootstrap. Sem isso, o
+  JSON versionado gravaria a string literal `${...}` no banco.
+- **`WeeklyReminderMigrationTest`** — teste de paridade: garante que o `Reminder`
+  `quatro-horas-quarta` tem **byte-a-byte** a mesma mensagem do serviço legado,
+  além de cron, timezone e tags.
+- Atalho **"Editar Quatro Horas de Quarta"** na aba `📢 Anúncios` do painel.
+
+### Changed
+
+- **`AdminController`** e **`AdminWebController`** não dependem mais de
+  `WeeklyReminderService`.
+- **`FeatureFlagAdminService`**: `weekly.reminder.enabled` removida do registro
+  (total passa de 24 → 23 flags).
+- **`application.properties`** e **`application-prod.properties`**: removidas as
+  properties `weekly.reminder.enabled` e `weekly.reminder.media-file`.
+- **`admin.html`**: aba `📅 Lembretes` removida; o caso de uso (disparo manual
+  do lembrete semanal) passa a ser coberto pela aba `📢 Anúncios` (botão de
+  testar no modal de edição do reminder).
+
+### Tests
+
+- **`WeeklyReminderMigrationTest`** (novo, ~3 testes): Testcontainers Postgres +
+  `@SpringBootTest` isolado (só Postgres, sem Kafka/Mongo). Valida a migration
+  `V5` (paridade, idempotência, FK das filhas).
+
 ## [2.10.0] — 2026-11-07
 
 ### Added

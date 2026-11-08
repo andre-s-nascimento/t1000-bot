@@ -41,7 +41,7 @@ import tools.jackson.databind.ObjectMapper;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class FeatureFlagAdminServiceTest {
 
-    private static final int TOTAL_FLAGS = 24;
+    private static final int TOTAL_FLAGS = 23;
 
     @Mock private Environment environment;
 

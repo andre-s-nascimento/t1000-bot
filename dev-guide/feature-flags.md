@@ -144,7 +144,6 @@ public record FeatureFlagDefinition(
 | Flag                              | Default | Editável | O que controla                                           |
 | --------------------------------- | ------- | -------- | -------------------------------------------------------- |
 | `podcast.enabled`                 | `true`  | ✅       | Publicação automática semanal do podcast (cron de sexta) |
-| `weekly.reminder.enabled`         | `true`  | ✅       | Lembrete semanal de quarta-feira (cron de quarta às 16h) |
 | `daily.releases.enabled`          | `true`  | ✅       | Notificação de lançamentos a cada 6h                     |
 | `worldcup.reminders30min.enabled` | `true`  | ✅       | Aviso 30 min antes de cada jogo da Copa                  |
 | `easter.eggs.enabled`             | `true`  | ✅       | Easter eggs nas buscas de filmes                         |
@@ -190,12 +189,6 @@ public record FeatureFlagDefinition(
 - **Desabilitar NÃO bloqueia:** endpoints admin `/admin/test-podcast`, `/admin/podcast/resend`.
   O admin pode testar mesmo com o cron desabilitado.
 - **Caso de uso:** Azure TTS instável → desliga o cron até estabilizar.
-
-#### `weekly.reminder.enabled`
-
-- **Onde é usada:** `WeeklyReminderService.sendWednesdayReminder()` (cron).
-- **Desabilitar NÃO bloqueia:** `/admin/test-weekly-reminder-showcase`.
-- **Caso de uso:** silenciar o bot durante uma semana de férias coletivas.
 
 #### `daily.releases.enabled`
 
@@ -316,7 +309,7 @@ public record FeatureFlagDefinition(
 - Manutenção no Telegram (ex.: troca de bot, rate limit).
 - Debug de comportamento do scheduler (agendar sem disparar).
 
-**Nota:** o `ReminderDispatcher.dispatchToChat()` (teste manual pelo admin) **não** valida essa flag — é ação explícita do admin. Mesmo padrão do `WeeklyReminderService.sendReminderToChat()`.
+**Nota:** o `ReminderDispatcher.dispatchToChat()` (teste manual pelo admin) **não** valida essa flag — é ação explícita do admin.
 
 **Adicionada em:** v2.9.0
 **Total de flags:** 24 (era 23)
@@ -534,8 +527,7 @@ Suba em dev, acesse `/admin-web` → aba Features, confirme que a nova flag apar
 - **Cache:** algumas features são cacheadas (`@Cacheable`). Ex.: `MovieService.buscarPorId`
   tem cache por `id`; mudar `easter.eggs.enabled` não invalida o cache. Espere o TTL
   (`expireAfterWrite=1h` em `CaffeineConfig`).
-- **Cron:** features que rodam por cron (`podcast`, `weekly.reminder`, `daily.releases`)
-  só veem a mudança na próxima execução.
+- **Cron:** features que rodam por cron (`podcast`, `daily.releases`) — e reminders configuráveis via tabela `reminders`
 - **Flags guarda-chuva:** hoje `admin.features.toggle-enabled` **não bloqueia** o toggle
   (só `toggleWithCheck` respeita). Se você desligou a guarda-chuva esperando congelar o
   painel, esse comportamento ainda não está ativo.

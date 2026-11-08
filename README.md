@@ -140,10 +140,21 @@ util/
 - Fallback de envio como texto se o Telegram rejeitar o áudio (controlado por `podcast.fallback-text.enabled`).
 - **Reenvio por sexta-feira**: endpoint `POST /admin/podcast/resend` permite republicar a edição de uma semana específica, respeitando o intervalo exato de **sexta 12:00 → sexta 11:59:59**.
 
-### 🗓️ Lembrete semanal
+### 🗓️ Lembrete semanal (agora configurável)
 
-- Toda **quarta-feira às 16h** (BRT) envia uma mensagem nos grupos autorizados.
-- Controlado pela flag `weekly.reminder.enabled`.
+> **⚠️ A partir da v2.11.0:** o `WeeklyReminderService` foi removido. O lembrete
+> semanal virou um `Reminder` configurável na aba `📢 Anúncios` (ou via
+> `/admin/reminders`), com o mesmo cron e mensagem. Veja a seção
+> [📢 Anúncios / Reminders Configuráveis](#-anúncios--reminders-configuráveis).
+
+- O registro `quatro-horas-quarta` é criado pela migration
+  `V5__seed_weekly_reminder_as_reminder.sql`.
+- O cron é `0 0 16 * * WED` (quarta às 16h BRT), timezone
+  `America/Sao_Paulo`.
+- Para editar a mensagem ou os chats: aba `📢 Anúncios` → botão
+  **"Editar Quatro Horas de Quarta"** → salvar.
+- Para testar manualmente: botão **"Testar"** dentro do modal (ou
+  `POST /admin/reminders/quatro-horas-quarta/test?chatId=...`).
 
 ### 📢 Anúncios / Reminders Configuráveis
 
@@ -241,7 +252,7 @@ Para adicionar novos gatilhos, edite o arquivo `auto-responses.json` e recarregu
 curl -X POST http://localhost:8082/admin/reload-auto-responses
 ````
 
-### 🎛️ Feature Flags (24 no total)
+### 🎛️ Feature Flags (23 no total)
 
 Todas as funcionalidades críticas podem ser ligadas/desligadas em runtime via painel admin ou API.
 
@@ -449,7 +460,7 @@ Opcionais:
 
 **Feature flags via env var** (todas as 23 suportam override):
 
-- `PODCAST_ENABLED`, `WEEKLY_REMINDER_ENABLED`, `DAILY_RELEASES_ENABLED`, etc.
+- `PODCAST_ENABLED`, `DAILY_RELEASES_ENABLED`, `REMINDERS_ENABLED`, etc.
 
 📖 Ver [Dev Guide → Feature Flags](./docs/dev-guide/feature-flags.md) para a lista completa.
 
