@@ -59,6 +59,7 @@ import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
+import net.ddns.adambravo79.tmill.service.ReminderDispatcher;
 import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
@@ -166,6 +167,7 @@ public class AdminWebController {
     private final SalaVipService salaVipService;
     private final SalaVipConfigService salaVipConfigService;
     private final TorrentLaunchService torrentLaunchService;
+    private final ReminderDispatcher reminderDispatcher;
 
     // =========================================================================
     // @Value
@@ -1391,6 +1393,27 @@ public class AdminWebController {
             redirectAttrs.addFlashAttribute(ERROR, MSG_ERRO_INTERNO);
         }
         return REDIRECT_ADMIN_WEB;
+    }
+
+    @PostMapping("/reminders/{id}/test")
+    @ResponseBody
+    public ResponseEntity<String> testReminderWeb(
+            @PathVariable("id") String id, @RequestParam("chatId") long chatId) {
+        try {
+            boolean enviado = reminderDispatcher.dispatchToChat(id, chatId);
+            if (enviado) {
+                log.info(
+                        "🧪 [web] Teste manual do anúncio '{}' para chat {} concluído", id, chatId);
+                return ResponseEntity.ok("Teste enviado para o chat " + chatId);
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Falha ao enviar. Verifique os logs.");
+            }
+        } catch (Exception e) {
+            log.error("Erro ao testar anúncio '{}'", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erro: " + e.getMessage());
+        }
     }
 
     // =========================================================================

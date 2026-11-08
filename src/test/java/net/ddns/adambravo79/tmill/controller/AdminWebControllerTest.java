@@ -52,6 +52,7 @@ import net.ddns.adambravo79.tmill.service.DailyReleasesService;
 import net.ddns.adambravo79.tmill.service.EasterEggService;
 import net.ddns.adambravo79.tmill.service.MigrationService;
 import net.ddns.adambravo79.tmill.service.PodcastPublisherService;
+import net.ddns.adambravo79.tmill.service.ReminderDispatcher;
 import net.ddns.adambravo79.tmill.service.SalaVipService;
 import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
@@ -100,6 +101,7 @@ class AdminWebControllerTest {
     @Mock private SalaVipService salaVipService;
     @Mock private SalaVipConfigService salaVipConfigService;
     @Mock private TorrentLaunchService torrentLaunchService;
+    @Mock private ReminderDispatcher reminderDispatcher;
 
     private AdminWebController controller;
     private MockMvc mockMvc;
@@ -137,7 +139,8 @@ class AdminWebControllerTest {
                         telegramModerationService,
                         salaVipService, // ← adicionar
                         salaVipConfigService,
-                        torrentLaunchService); // ← adicionar
+                        torrentLaunchService,
+                        reminderDispatcher); // ← adicionar
 
         ReflectionTestUtils.setField(controller, "worldcupEnabled", true);
         ReflectionTestUtils.setField(controller, "ownerId", 999L);
@@ -1778,5 +1781,57 @@ class AdminWebControllerTest {
         assertThat(java.nio.file.Files.exists(destino)).isTrue();
         verify(torrentLaunchService).carregar();
         assertThat(attrs.getFlashAttributes().get("success")).isNotNull();
+    }
+
+    // =========================================================================
+    // 🧪 TESTE MANUAL DE ANÚNCIO (2.11.1 FIX)
+    // =========================================================================
+
+    @Nested
+    @DisplayName("POST /admin-web/reminders/{id}/test")
+    class TestReminderWeb {
+
+        @Test
+        @DisplayName("Sucesso: dispara o teste e retorna 200")
+        void testReminder_sucesso() throws Exception {
+            when(reminderDispatcher.dispatchToChat("quatro-horas-quarta", 123L)).thenReturn(true);
+
+            mockMvc.perform(
+                            post("/admin-web/reminders/quatro-horas-quarta/test")
+                                    .param("chatId", "123"))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string(containsString("Teste enviado para o chat 123")));
+
+            verify(reminderDispatcher).dispatchToChat("quatro-horas-quarta", 123L);
+        }
+
+        @Test
+        @DisplayName("Falha no envio: retorna 500")
+        void testReminder_falhaNoEnvio() throws Exception {
+            when(reminderDispatcher.dispatchToChat("quatro-horas-quarta", 123L)).thenReturn(false);
+
+            mockMvc.perform(
+                            post("/admin-web/reminders/quatro-horas-quarta/test")
+                                    .param("chatId", "123"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(content().string(containsString("Falha ao enviar")));
+
+            verify(reminderDispatcher).dispatchToChat("quatro-horas-quarta", 123L);
+        }
+
+        @Test
+        @DisplayName("Exceção no dispatcher: retorna 500 com a mensagem")
+        void testReminder_excecao() throws Exception {
+            when(reminderDispatcher.dispatchToChat("quatro-horas-quarta", 123L))
+                    .thenThrow(new RuntimeException("Telegram offline"));
+
+            mockMvc.perform(
+                            post("/admin-web/reminders/quatro-horas-quarta/test")
+                                    .param("chatId", "123"))
+                    .andExpect(status().isInternalServerError())
+                    .andExpect(content().string(containsString("Erro: Telegram offline")));
+
+            verify(reminderDispatcher).dispatchToChat("quatro-horas-quarta", 123L);
+        }
     }
 }

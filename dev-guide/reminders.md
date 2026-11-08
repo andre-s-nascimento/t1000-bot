@@ -222,6 +222,26 @@ curl -X POST http://localhost:8082/admin/reminders \
 3. Alternativa: ligar `reminders.bootstrap.from-json.enabled=true` **e** truncar a tabela
    `reminders` antes do boot.
 
+## 🧪 Testando Anúncios Manualmente
+
+A partir da v2.11.1, o painel de Anúncios permite testar qualquer anúncio (ativo ou pausado)
+sem precisar esperar o cron.
+
+### Pelo Painel Web
+
+1. Vá em `📢 Anúncios`.
+2. Na tabela, clique no botão **"Testar"** (ícone de avião de papel) ao lado do anúncio.
+3. Digite o Chat ID de destino (ou deixe em branco para usar o showcase padrão).
+4. O bot enviará a mensagem e/ou mídia imediatamente.
+
+### Pela API REST / Terminal
+
+```bash
+curl -X POST "http://localhost:8082/admin/reminders/quatro-horas-quarta/test?chatId=-100123"
+```
+
+> Nota: o teste manual ignora a feature flag reminders.enabled e o campo enabled do anúncio.
+
 ## Troubleshooting
 
 | Sintoma                                                              | Causa provável                                                   | Solução                                                           |
