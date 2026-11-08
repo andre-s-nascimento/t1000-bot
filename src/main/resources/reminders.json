@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-08T00:00:00Z",
+  "reminders": [
+    {
+      "id": "quatro-horas-quarta",
+      "name": "Quatro Horas de Quarta",
+      "enabled": true,
+      "cron": "0 0 16 * * WED",
+      "timezone": "America/Sao_Paulo",
+      "message": "<i>\"São quatro horas da tarde de uma quarta-feira, não é? Semana praticamente encerrada...</i>\"\n\n<b>Muito Prazer (1979) - David Neves</b>",
+      "mediaUrl": "${QUATRO_HORAS_QUARTA_FILE:https://andre-s-nascimento.github.io/t1000-bot/videos/quatro-horas-de-quarta-feira.mp4}",
+      "targetChatIds": [],
+      "tags": ["cinema", "semanal"]
+    }
+  ]
+}

@@ -133,7 +133,7 @@ src/main/java/net/ddns/adambravo79/tmill
 │   ├── TranscriptStoreService.java
 │   ├── UserInteractionLogger.java
 │   ├── WeeklyReleasesService.java
-│   ├── WeeklyReminderService.java
+│   ├── (WeeklyReminderService removido na v2.10.0 — substituído por ReminderScheduler)
 │   ├── WorldCupSchedulerService.java
 │   ├── WorldCupUpdaterService.java
 │   ├── cache
