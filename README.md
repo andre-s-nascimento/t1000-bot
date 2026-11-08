@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.10.0** | Branch: `main` | Último build: 2026-11-07
+> **Versão atual: v2.11.0** | Branch: `main` | Último build: 2026-11-08
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
