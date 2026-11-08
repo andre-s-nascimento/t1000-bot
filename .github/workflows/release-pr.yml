@@ -29,20 +29,43 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.ref_name }}
         run: |
-          # 🔒 BRANCH_NAME vem via env, não via '$ {{ }}' dentro de run
+          # BRANCH_NAME vem via env, não via '$ {{ }}' dentro de run
           VERSION=$(echo "$BRANCH_NAME" | sed -E 's/^release\/v?//')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "📦 Versão extraída: $VERSION"
+
+      - name: Coletar issues fechadas pelas features mergeadas na release
+        id: issues
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          # Lista PRs mergeados cuja base é esta branch de release
+          # e extrai "Closes #N" / "Fixes #N" / "Resolves #N" do body.
+          # O GitHub aceita close/closes/closed/fix/fixes/fixed/resolve/resolves/resolved
+          ISSUES=$(gh pr list \
+            --base "$BRANCH_NAME" \
+            --state merged \
+            --limit 100 \
+            --json number,body \
+            --jq '.[] | "\(.number)\t\(.body)"' \
+            | grep -oiP '(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#\d+' \
+            | grep -oP '\d+' \
+            | sort -u \
+            | tr '\n' ' ')
+
+          echo "closed_issues=$ISSUES" >> "$GITHUB_OUTPUT"
+          echo "📋 Issues que serão fechadas pela release: $ISSUES"
 
       - name: Create Pull Request to main
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           BRANCH_NAME: ${{ github.ref_name }}
           VERSION: ${{ steps.vars.outputs.version }}
+          CLOSED_ISSUES: ${{ steps.issues.outputs.closed_issues }}
         run: |
           PR_TITLE="chore: release v${VERSION}"
 
-          # 🔒 Corpo do PR via arquivo temporário
           BODY_FILE=$(mktemp)
           cat > "$BODY_FILE" <<EOF
           ## 🧾 Descrição
@@ -57,6 +80,18 @@ jobs:
           - [ ] Sincronizar \`develop\` após o merge (automático)
           EOF
 
+          # 🆕 Injeta "Closes #N" para cada issue coletada
+          if [ -n "$CLOSED_ISSUES" ]; then
+            echo "" >> "$BODY_FILE"
+            echo "## 🔗 Issues resolvidas nesta release" >> "$BODY_FILE"
+            echo "" >> "$BODY_FILE"
+            for issue in $CLOSED_ISSUES; do
+              echo "Closes #$issue" >> "$BODY_FILE"
+            done
+            echo "" >> "$BODY_FILE"
+            echo "<!-- issues coletadas automaticamente dos PRs mergeados em $BRANCH_NAME -->" >> "$BODY_FILE"
+          fi
+
           # Verifica se o PR já existe
           EXISTING_PR=$(gh pr list \
             --base main \
@@ -67,6 +102,23 @@ jobs:
 
           if [ -n "$EXISTING_PR" ]; then
             echo "✅ PR #$EXISTING_PR já existe para $BRANCH_NAME → main"
+            # 🆕 Atualiza o body do PR existente com as issues coletadas
+            if [ -n "$CLOSED_ISSUES" ]; then
+              EXISTING_BODY=$(gh pr view "$EXISTING_PR" --json body --jq '.body')
+              if ! echo "$EXISTING_BODY" | grep -q "Issues resolvidas nesta release"; then
+                {
+                  echo "$EXISTING_BODY"
+                  echo ""
+                  echo "## 🔗 Issues resolvidas nesta release"
+                  echo ""
+                  for issue in $CLOSED_ISSUES; do
+                    echo "Closes #$issue"
+                  done
+                } > "$BODY_FILE"
+                gh pr edit "$EXISTING_PR" --body-file "$BODY_FILE"
+                echo "✏️ Body do PR #$EXISTING_PR atualizado com as issues"
+              fi
+            fi
           else
             gh pr create \
               --base main \
