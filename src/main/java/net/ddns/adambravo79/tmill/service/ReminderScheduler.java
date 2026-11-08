@@ -12,7 +12,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.scheduling.support.CronTrigger;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -59,7 +59,7 @@ import net.ddns.adambravo79.tmill.model.Reminder;
  * integração nativa com elas no Spring Boot 4.
  */
 @Slf4j
-@Component
+@Service
 public class ReminderScheduler {
 
     /** Tamanho do pool — suficiente para centenas de reminders com disparos curtos. */

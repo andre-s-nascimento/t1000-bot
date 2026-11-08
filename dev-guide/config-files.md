@@ -71,12 +71,33 @@ Cobertura completa em `src/test/java/.../util/DateParserUtilsTest.java` (~60 tes
 
 ## `reminders.json`
 
-**Localização padrão:** `classpath:reminders.json` (dev/testes), `file:/app/config/reminders.json` (prod)
+**Localização padrão:**
+
+- Dev/test: `classpath:reminders.json`
+- Prod: `file:/app/config/reminders.json`
+
 **Property:** `reminders.data.file`
-**Loader:** `ReminderService` (via `JsonConfigLoader`)
+
+**Loader:** `JsonConfigLoader` — chamado **apenas** por:
+
+- `ReminderBootstrapService` (no boot, se a tabela `reminders` estiver vazia e a flag
+  `reminders.bootstrap.from-json.enabled=true`).
+- `ReminderController.export` (para gerar o JSON a partir do banco — na verdade, o export usa o
+  `ObjectMapper` direto, não o loader).
+
 **Model:** `ReminderJson` → `List<Reminder>`
 
-**Estrutura:**
+**Mudança importante (v2.10.0):**
+
+> ⚠️ **O JSON não é mais fonte de verdade.** A partir da v2.10.0, a fonte de verdade é o
+> PostgreSQL (tabelas `reminders`, `reminder_chats`, `reminder_tags`). O JSON é **apenas**:
+>
+> - **Bootstrap:** importado no boot se a tabela estiver vazia (configurável via flag).
+> - **Backup:** gerado por `GET /admin/reminders/export`.
+> - **Restore:** consumido por `POST /admin/reminders/import`.
+> - **Migração entre ambientes:** dev → prod, prod → dev.
+
+**Estrutura (envelope):**
 
 ```json
 {
@@ -96,4 +117,28 @@ Cobertura completa em `src/test/java/.../util/DateParserUtilsTest.java` (~60 tes
     }
   ]
 }
+```
+
+**Notas:**
+
+- O campo `version` do envelope é sempre `1` (`ReminderJson.CURRENT_VERSION`). O `version` de cada
+  `Reminder` individual **não** aparece no JSON de entrada (é ignorado no import — o banco é a
+  fonte de verdade na criação). No **export**, o `version` de cada reminder é incluído (útil para
+  diagnóstico, mas ignorado no reimport).
+- `id` deve ser slug kebab-case (`^[a-z][a-z0-9-]*$`).
+- `cron` deve ter 6 campos (segundos, minutos, horas, dia do mês, mês, dia da semana).
+- `targetChatIds` são strings (IDs numéricos do Telegram), parseadas para `BIGINT` no banco.
+- `mediaUrl` é opcional. Se preenchido, o envio usa `enviarMidia` (com fallback de texto); se vazio,
+  usa `enviarMensagemHtml`.
+
+**Onde o JSON é usado:**
+
+| Fluxo     | Quem lê/escreve                                          | Quando                          |
+| --------- | -------------------------------------------------------- | ------------------------------- |
+| Bootstrap | `ReminderBootstrapService` (lê)                          | Boot, se tabela vazia + flag on |
+| Export    | `ReminderController.export` (escreve via `ObjectMapper`) | `GET /admin/reminders/export`   |
+| Import    | `ReminderController.import` (lê via `@RequestBody`)      | `POST /admin/reminders/import`  |
+
+```
+
 ```

@@ -1,115 +1,95 @@
 /* (c) 2026 | 06/11/2026 */
 package net.ddns.adambravo79.tmill.service;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.ddns.adambravo79.tmill.dto.ReminderJson;
 import net.ddns.adambravo79.tmill.model.Reminder;
-import net.ddns.adambravo79.tmill.service.config.JsonConfigLoader;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
+import net.ddns.adambravo79.tmill.repository.ReminderRepository;
 
 /**
  * Registry central dos lembretes configuráveis.
  *
- * <p><b>Responsabilidades:</b>
+ * <p><b>Fonte de verdade:</b> PostgreSQL, via {@link ReminderRepository}. O JSON
+ * ({@code config/reminders.json}) é apenas import/export (bootstrap, backup, migração
+ * entre ambientes) — nunca lido nem escrito em runtime por este service.
  *
- * <ol>
- *   <li>Carregar {@code config/reminders.json} no boot ({@link #init()}).
- *   <li>Manter o estado atual em memória ({@link AtomicReference}) para leitura O(1).
- *   <li>Expor operações CRUD ({@link #create}, {@link #update}, {@link #delete}, {@link #toggle}).
- *   <li>Persistir cada mutação no disco de forma atômica ({@code .tmp} + {@link
- *       StandardCopyOption#ATOMIC_MOVE}).
- *   <li>Notificar o {@link ReminderScheduler} (via {@link #setReloadListener(Runnable)}) para
- *       reagendar tarefas após cada mutação.
- * </ol>
+ * <h2>Optimistic locking</h2>
  *
- * <h2>Thread-safety</h2>
+ * <p>{@link #update(String, Reminder)} passa {@code reminder.version()} ao repository,
+ * que executa {@code UPDATE ... WHERE id = ? AND version = ?}. Se outra instância já
+ * atualizou o registro, o UPDATE afeta 0 linhas, o repository lança {@link
+ * OptimisticLockingFailureException}, e o service relança como {@link
+ * IllegalStateException} (o controller traduz para HTTP 409).
  *
- * <p>O estado é mantido em {@link AtomicReference} — garante visibilidade e atomicidade das trocas,
- * sem o problema de {@code volatile} sobre tipo mutável (SonarQube {@code java:S3077}). O conteúdo
- * interno é sempre uma lista imutável ({@link List#copyOf}) e nunca é mutado após a publicação.
+ * <p>O cliente (admin) deve reler o reminder via {@link #getById(String)} e reenviar
+ * o body com a nova {@code version}. É o padrão de optimistic locking.
  *
- * <p>As operações CRUD são {@code synchronized} para serializar escritas e evitar condição de
- * corrida entre dois admins alterando simultaneamente. Leituras ({@link #getAll()}, {@link
- * #getById(String)}, etc.) não são sincronizadas — {@link AtomicReference#get()} é lock-free.
+ * <h2>Importação em lote</h2>
  *
- * <h2>Estratégia de persistência</h2>
+ * <p>{@link #importAll(List, boolean)} substitui o estado do banco pelo lote informado
+ * (ou faz merge, se {@code replace=false}). Roda em uma única transação: ou o
+ * lote completo commita, ou nada. Para cada item:
  *
  * <ul>
- *   <li><b>Arquivo em disco</b> ({@code file:/app/config/reminders.json}) — persiste de verdade.
- *   <li><b>Classpath</b> ({@code classpath:reminders.json}) — carrega apenas para leitura;
- *       mutações atualizam memória mas não gravam (útil em dev/testes).
- *   <li><b>Path nulo/vazio</b> — mesmo comportamento do classpath, mas loga warning explícito.
+ *   <li>Se já existe (mesmo id): usa {@link ReminderRepository#update(Reminder, int)}
+ *       com a versão atual do banco — não dá conflito.
+ *   <li>Se não existe: usa {@link ReminderRepository#save(Reminder)} com versão 1.
  * </ul>
  *
- * <p>Escrita atômica: grava em {@code reminders.json.tmp} e move via {@link
- * StandardCopyOption#ATOMIC_MOVE}. Se o processo cair no meio, o arquivo original permanece
- * intacto (nunca corrompido).
+ * <p>Com {@code replace=true}, os reminders que existem no banco mas não estão no lote
+ * são removidos. Com {@code replace=false}, são preservados (merge).
  *
  * <h2>Listener de reload</h2>
  *
- * <p>Após cada mutação, este serviço chama o {@link Runnable} registrado via {@link
- * #setReloadListener(Runnable)}. O {@link ReminderScheduler} usa esse gancho para cancelar e
- * reagendar todas as tarefas — desacoplando o registry do scheduler (evita dependência circular).
+ * <p>Após cada mutação (create/update/delete/toggle/reload/import) o {@link Runnable}
+ * registrado via {@link #setReloadListener(Runnable)} é invocado. O {@link
+ * ReminderScheduler} usa esse gancho para cancelar e reagendar todas as tarefas.
+ *
+ * <h2>Thread-safety</h2>
+ *
+ * <p>As operações CRUD são {@code synchronized} para serializar escritas. As leituras
+ * delegam direto ao repository (que é thread-safe — {@link
+ * org.springframework.jdbc.core.JdbcTemplate} usa conexões do pool).
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ReminderService {
 
-    /** Nome do arquivo de configuração para o {@link JsonConfigLoader}. */
-    private static final String CONFIG_FILE_NAME = "reminders.json";
-
-    private final JsonConfigLoader jsonConfigLoader;
-    private final ObjectMapper objectMapper;
-
-    /** Path do arquivo (property-driven; aceita {@code file:} ou {@code classpath:}). */
-    @Value("${reminders.data.file:classpath:reminders.json}")
-    private String remindersFile;
-
-    /** Estado atual — lista imutável trocada atomicamente. */
-    private final AtomicReference<List<Reminder>> remindersRef = new AtomicReference<>(List.of());
+    private final ReminderRepository repository;
 
     /** Callback opcional para o scheduler reagendar (evita dependência circular). */
     private final AtomicReference<Runnable> reloadListener = new AtomicReference<>(() -> {});
-
-    public ReminderService(JsonConfigLoader jsonConfigLoader, ObjectMapper objectMapper) {
-        this.jsonConfigLoader = jsonConfigLoader;
-        this.objectMapper = objectMapper;
-    }
 
     // =========================================================================
     // CICLO DE VIDA
     // =========================================================================
 
-    /** Carrega o arquivo no boot. Falhas não impedem o boot (lista vazia + warning). */
+    /**
+     * Loga o estado inicial no boot. Não faz mais nada — o estado vive no banco,
+     * o scheduler lê via {@link #getEnabled()} quando precisar.
+     */
     @PostConstruct
     public void init() {
-        reload();
+        int total = repository.count();
+        int enabled = repository.findEnabled().size();
+        log.info("📢 ReminderService inicializado: {} reminders ({} habilitados)", total, enabled);
     }
 
     /**
-     * Registra um callback para ser invocado após cada mutação (create/update/delete/toggle) e após
-     * {@link #reload()}.
-     *
-     * <p>O {@link ReminderScheduler} usa este gancho para reagendar todos os reminders. Se o
-     * callback lançar, o erro é logado mas a mutação é considerada bem-sucedida (o arquivo já foi
-     * gravado).
+     * Registra um callback para ser invocado após cada mutação e após {@link #reload()}.
      *
      * @param listener callback (nunca nulo; se nulo, instala um no-op)
      */
@@ -127,71 +107,69 @@ public class ReminderService {
     }
 
     // =========================================================================
-    // LEITURA (lock-free)
+    // LEITURA
     // =========================================================================
 
-    /** Retorna todos os reminders (imutável, nunca {@code null}). */
+    /** Retorna todos os reminders (habilitados + desabilitados). */
     public List<Reminder> getAll() {
-        return remindersRef.get();
+        return repository.findAll();
     }
 
-    /** Retorna apenas os reminders habilitados. */
-    @SuppressWarnings("null")
+    /** Retorna apenas os reminders habilitados (usado pelo scheduler). */
     public List<Reminder> getEnabled() {
-        return remindersRef.get().stream().filter(Reminder::enabled).toList();
+        return repository.findEnabled();
     }
 
     /** Busca por ID; {@link Optional#empty()} se não existir. */
     public Optional<Reminder> getById(String id) {
-        if (id == null || id.isBlank()) {
-            return Optional.empty();
-        }
-        return remindersRef.get().stream().filter(r -> id.equals(r.id())).findFirst();
+        return repository.findById(id);
     }
 
     /** Retorna o total de reminders (habilitados + desabilitados). */
     public int count() {
-        return remindersRef.get().size();
+        return repository.count();
     }
 
     // =========================================================================
-    // CRUD (synchronized — serializa escritas)
+    // CRUD
     // =========================================================================
 
     /**
      * Cria um novo reminder.
      *
-     * @param reminder record já validado
-     * @return o reminder criado
+     * <p>O {@code version} do record é ignorado — o banco grava {@code 1}. Ver
+     * {@link ReminderRepository#save(Reminder)}.
+     *
+     * @param reminder record já validado (id, cron, message não vazios)
+     * @return o reminder criado (com {@code version = 1})
      * @throws IllegalArgumentException se já existir um reminder com o mesmo {@code id}
      */
     public synchronized Reminder create(Reminder reminder) {
         Objects.requireNonNull(reminder, "reminder não pode ser nulo");
 
-        List<Reminder> current = remindersRef.get();
-        if (current.stream().anyMatch(r -> r.id().equals(reminder.id()))) {
+        if (repository.existsById(reminder.id())) {
             throw new IllegalArgumentException("Reminder com id '" + reminder.id() + "' já existe");
         }
 
-        List<Reminder> updated = new ArrayList<>(current);
-        updated.add(reminder);
-        remindersRef.set(List.copyOf(updated));
-
+        repository.save(reminder);
         log.info("📢 Reminder criado: id='{}' cron='{}'", reminder.id(), reminder.cron());
-        persistAndNotify();
-        return reminder;
+        notifyReload();
+        return reminder.withVersion(1);
     }
 
     /**
      * Atualiza um reminder existente (substitui todos os campos exceto {@code id}).
      *
-     * <p>O {@code id} do record recebido deve ser igual ao {@code id} do path; caso contrário, a
-     * operação falha com {@link IllegalArgumentException} para evitar renames implícitos.
+     * <p><b>Optimistic locking:</b> o caller deve enviar {@code version} igual à versão
+     * lida via {@link #getById(String)}. Se outra instância atualizou entre a leitura e a
+     * escrita, o repository lança {@link OptimisticLockingFailureException} e este método
+     * relança como {@link IllegalStateException} (o controller traduz para HTTP 409).
      *
      * @param id identificador do reminder a atualizar
-     * @param reminder novo conteúdo
-     * @return o reminder atualizado
+     * @param reminder novo conteúdo (com {@code version} atual)
+     * @return o reminder atualizado (com {@code version} incrementada)
      * @throws IllegalArgumentException se não existir ou se {@code id} divergir
+     * @throws IllegalStateException se houver conflito de versão
      */
     public synchronized Reminder update(String id, Reminder reminder) {
         Objects.requireNonNull(reminder, "reminder não pode ser nulo");
@@ -203,19 +181,32 @@ public class ReminderService {
                     "id do path ('" + id + "') diverge do id do body ('" + reminder.id() + "')");
         }
 
-        List<Reminder> current = remindersRef.get();
-        boolean exists = current.stream().anyMatch(r -> r.id().equals(id));
-        if (!exists) {
-            throw new IllegalArgumentException("Reminder '" + id + "' não encontrado");
+        int expectedVersion = reminder.version();
+
+        try {
+            repository.update(reminder, expectedVersion);
+        } catch (OptimisticLockingFailureException e) {
+            log.warn(
+                    "⚠️ Conflito de versão no reminder '{}' (expectedVersion={})",
+                    id,
+                    expectedVersion);
+            throw new IllegalStateException(
+                    "Reminder '"
+                            + id
+                            + "' foi modificado por outra instância. Recarregue e tente"
+                            + " novamente.",
+                    e);
         }
 
-        List<Reminder> updated =
-                current.stream().map(r -> r.id().equals(id) ? reminder : r).toList();
-        remindersRef.set(updated);
-
-        log.info("📢 Reminder atualizado: id='{}' cron='{}'", reminder.id(), reminder.cron());
-        persistAndNotify();
-        return reminder;
+        Reminder updated = reminder.withVersion(expectedVersion + 1);
+        log.info(
+                "📢 Reminder atualizado: id='{}' cron='{}' (version {} → {})",
+                id,
+                reminder.cron(),
+                expectedVersion,
+                updated.version());
+        notifyReload();
+        return updated;
     }
 
     /**
@@ -225,6 +216,7 @@ public class ReminderService {
      * @param enabled novo valor
      * @return o reminder atualizado
      * @throws IllegalArgumentException se não existir
+     * @throws IllegalStateException se houver conflito de versão
      */
     public synchronized Reminder toggle(String id, boolean enabled) {
         Reminder current =
@@ -234,8 +226,7 @@ public class ReminderService {
                                         new IllegalArgumentException(
                                                 "Reminder '" + id + "' não encontrado"));
 
-        Reminder updated = current.withEnabled(enabled);
-        return update(id, updated);
+        return update(id, current.withEnabled(enabled));
     }
 
     /**
@@ -248,141 +239,97 @@ public class ReminderService {
         if (id == null || id.isBlank()) {
             return false;
         }
-        List<Reminder> current = remindersRef.get();
-        List<Reminder> updated = current.stream().filter(r -> !r.id().equals(id)).toList();
-        if (updated.size() == current.size()) {
+        boolean removed = repository.deleteById(id);
+        if (removed) {
+            log.info("🗑️ Reminder removido: id='{}'", id);
+            notifyReload();
+        } else {
             log.warn("⚠️ Tentativa de remover reminder inexistente: id='{}'", id);
-            return false;
         }
-
-        remindersRef.set(updated);
-        log.info("🗑️ Reminder removido: id='{}'", id);
-        persistAndNotify();
-        return true;
+        return removed;
     }
 
     // =========================================================================
-    // RELOAD / PERSISTÊNCIA
+    // IMPORTAÇÃO EM LOTE (bootstrap / restore / migração entre ambientes)
     // =========================================================================
 
     /**
-     * Recarrega o arquivo de configuração, substituindo o estado em memória.
+     * Importa um lote de reminders do JSON (bootstrap, restore, migração entre ambientes).
      *
-     * <p>Em caso de falha (arquivo ausente, JSON inválido), mantém o estado anterior e loga
-     * warning — o bot continua funcional com a última configuração válida.
+     * <p><b>Estratégia:</b> para cada reminder do lote:
+     *
+     * <ul>
+     *   <li>Se já existe (mesmo id): atualiza via {@link ReminderRepository#update} com a
+     *       versão atual do banco. Isso <b>não</b> dispara optimistic locking, porque a versão
+     *       lida e enviada são as mesmas.
+     *   <li>Se não existe: insere via {@link ReminderRepository#save} com versão 1.
+     * </ul>
+     *
+     * <p>Com {@code replace=true}, os reminders que existem no banco mas <b>não</b> estão no
+     * lote são removidos. Com {@code replace=false}, são preservados (merge — útil para
+     * bootstrap, onde o operador pode ter criado reminders extras).
+     *
+     * <p><b>Transação:</b> o lote inteiro roda em uma única transação. Se falhar no meio,
+     * nada é gravado (rollback total).
+     *
+     * @param reminders lista de reminders a importar
+     * @param replace se {@code true}, deleta os reminders ausentes do lote
+     * @return quantos reminders foram criados/atualizados
+     */
+    @SuppressWarnings("null")
+    @Transactional
+    public synchronized int importAll(List<Reminder> reminders, boolean replace) {
+        if (reminders == null || reminders.isEmpty()) {
+            log.warn("⚠️ Import recebido com lista vazia — nada a fazer");
+            return 0;
+        }
+
+        int imported = 0;
+        for (Reminder r : reminders) {
+            Optional<Reminder> existing = repository.findById(r.id());
+            if (existing.isPresent()) {
+                Reminder current = existing.get();
+                // Atualiza com a versão ATUAL do banco — não dispara optimistic locking
+                repository.update(r, current.version());
+            } else {
+                repository.save(r);
+            }
+            imported++;
+        }
+
+        if (replace) {
+            Set<String> importedIds =
+                    reminders.stream().map(Reminder::id).collect(Collectors.toSet());
+            for (Reminder current : repository.findAll()) {
+                if (!importedIds.contains(current.id())) {
+                    repository.deleteById(current.id());
+                }
+            }
+        }
+
+        log.info(
+                "📥 {} reminders importados{}",
+                imported,
+                replace ? " (substituição completa)" : " (merge)");
+        notifyReload();
+        return imported;
+    }
+
+    // =========================================================================
+    // RELOAD
+    // =========================================================================
+
+    /**
+     * Re-notifica o listener para o scheduler reagendar tudo.
+     *
+     * <p>Não há cache local a invalidar — o estado vive no banco e {@link #getEnabled()}
+     * lê direto. O nome é mantido para compatibilidade com o endpoint
+     * {@code POST /admin/reminders/reload}.
      */
     public synchronized void reload() {
-        try {
-            Optional<ReminderJson> loaded =
-                    jsonConfigLoader.loadConfig(
-                            CONFIG_FILE_NAME,
-                            ReminderJson.class,
-                            (remindersFile == null || remindersFile.isBlank())
-                                    ? null
-                                    : remindersFile);
-
-            if (loaded.isEmpty()) {
-                log.warn(
-                        "⚠️ {} não encontrado em nenhum local — iniciando com lista vazia",
-                        CONFIG_FILE_NAME);
-                remindersRef.set(List.of());
-                notifyReload();
-                return;
-            }
-
-            List<Reminder> reminders = loaded.get().reminders();
-            remindersRef.set(reminders);
-            log.info("✅ {} reminders carregados de {}", reminders.size(), remindersFile);
-            notifyReload();
-        } catch (Exception e) {
-            log.error(
-                    "❌ Falha ao carregar {} — mantendo os {} reminders anteriores",
-                    CONFIG_FILE_NAME,
-                    remindersRef.get().size(),
-                    e);
-        }
-    }
-
-    /**
-     * Persiste o estado atual em disco e notifica o listener.
-     *
-     * <p>Se o arquivo está no classpath (ou o path é nulo/vazio), apenas notifica e loga warning —
-     * a mutação vale só em memória e se perde no próximo restart.
-     */
-    private void persistAndNotify() {
-        persistToDisk();
+        int total = repository.count();
+        int enabled = repository.findEnabled().size();
+        log.info("🔄 Reminders recarregados: {} total, {} habilitados", total, enabled);
         notifyReload();
-    }
-
-    private void persistToDisk() {
-        if (!isPersistable()) {
-            log.warn(
-                    "⚠️ Mutações não serão persistidas (path='{}'). Configure "
-                            + "'reminders.data.file' para um arquivo em disco (ex.: "
-                            + "'file:/app/config/reminders.json').",
-                    remindersFile);
-            return;
-        }
-
-        Path path = toPath(remindersFile);
-        try {
-            Files.createDirectories(path.getParent());
-
-            ReminderJson json = ReminderJson.of(remindersRef.get());
-            String content = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(json);
-
-            // Escrita atômica: grava em .tmp e move
-            Path tmp = path.resolveSibling(path.getFileName() + ".tmp");
-            Files.writeString(tmp, content);
-            Files.move(
-                    tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-
-            log.info(
-                    "💾 {} reminders persistidos em {} (updatedAt={})",
-                    remindersRef.get().size(),
-                    path,
-                    json.updatedAt());
-        } catch (IOException | JacksonException e) {
-            log.error("❌ Falha ao persistir reminders em {}", path, e);
-        }
-    }
-
-    // =========================================================================
-    // HELPERS
-    // =========================================================================
-
-    /** Retorna {@code true} se o path atual permite persistência (file:, não classpath). */
-    private boolean isPersistable() {
-        return remindersFile != null
-                && !remindersFile.isBlank()
-                && !remindersFile.startsWith("classpath:");
-    }
-
-    /** Converte o path configurado (com ou sem prefixo {@code file:}) em {@link Path}. */
-    private static Path toPath(String uriOrPath) {
-        String clean =
-                uriOrPath.startsWith("file:") ? uriOrPath.substring("file:".length()) : uriOrPath;
-        return Paths.get(clean).toAbsolutePath().normalize();
-    }
-
-    /**
-     * Exposto para testes: retorna o timestamp da última persistência bem-sucedida (ou {@code
-     * null} se nunca persistiu).
-     *
-     * <p>Não usado em produção — apenas para diagnósticos em testes de integração.
-     */
-    Instant lastPersistedAt() {
-        if (!isPersistable()) {
-            return null;
-        }
-        Path path = toPath(remindersFile);
-        if (!Files.exists(path)) {
-            return null;
-        }
-        try {
-            return Files.getLastModifiedTime(path).toInstant();
-        } catch (IOException e) {
-            return null;
-        }
     }
 }
