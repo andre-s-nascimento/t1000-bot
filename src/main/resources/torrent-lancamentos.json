@@ -17,7 +17,9 @@
       "data_lancamento": "03/11",
       "tipo": "filme",
       "diretor": "Lance Oppenheim",
-      "atores": ["Robert Pattinson"],
+      "atores": [
+        "Robert Pattinson"
+      ],
       "letterboxd_url": "https://letterboxd.com/film/primetime/",
       "temporada": null
     },
@@ -26,7 +28,10 @@
       "data_lancamento": "03/11",
       "tipo": "filme",
       "diretor": "Georgia Oakley",
-      "atores": ["Daisy Edgar-Jones", "Esmé Creed-Miles"],
+      "atores": [
+        "Daisy Edgar-Jones",
+        "Esmé Creed-Miles"
+      ],
       "letterboxd_url": "https://letterboxd.com/film/sense-and-sensibility/",
       "temporada": null
     },
@@ -35,7 +40,9 @@
       "data_lancamento": "03/11",
       "tipo": "filme",
       "diretor": null,
-      "atores": ["Mahershala Ali"],
+      "atores": [
+        "Mahershala Ali"
+      ],
       "letterboxd_url": "https://letterboxd.com/film/your-mother-your-mother-your-mother/",
       "temporada": null
     },
@@ -53,7 +60,11 @@
       "data_lancamento": "17/11",
       "tipo": "filme",
       "diretor": "Christopher Nolan",
-      "atores": ["Matt Damon", "Anne Hathaway", "Tom Holland"],
+      "atores": [
+        "Matt Damon",
+        "Anne Hathaway",
+        "Tom Holland"
+      ],
       "letterboxd_url": "https://letterboxd.com/film/the-odyssey-2026/",
       "temporada": null
     },
@@ -62,8 +73,23 @@
       "data_lancamento": "20/11",
       "tipo": "filme",
       "diretor": "Gabriel Martins",
-      "atores": ["Rejane Faria"],
+      "atores": [
+        "Rejane Faria"
+      ],
       "letterboxd_url": "https://letterboxd.com/film/vicentina-pede-desculpas/",
+      "temporada": null
+    },
+    {
+      "titulo": "O Outro Lado das Redes",
+      "data_lancamento": "24/11",
+      "tipo": "filme",
+      "diretor": "Aaron Sorkin",
+      "atores": [
+        "Jeremy Strong",
+        "Mikey Madison",
+        "Jeremy Allen White"
+      ],
+      "letterboxd_url": "https://letterboxd.com/film/the-social-reckoning/",
       "temporada": null
     },
     {
@@ -71,7 +97,10 @@
       "data_lancamento": "25/11",
       "tipo": "serie",
       "diretor": null,
-      "atores": ["Michelle Yeoh", "Hunter Schaffer"],
+      "atores": [
+        "Michelle Yeoh",
+        "Hunter Schaffer"
+      ],
       "letterboxd_url": "https://letterboxd.com/tv/blade-runner-2099/",
       "temporada": 1
     }

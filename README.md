@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.8.1** | Branch: `main` | Último build: 2026-11-06
+> **Versão atual: v2.10.0** | Branch: `main` | Último build: 2026-11-07
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
@@ -12,7 +12,7 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenA
 ![Tests](https://img.shields.io/badge/tests-360%2B_passing-success)
 ![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v2.8.1-blueviolet)
+![Status](https://img.shields.io/badge/status-v2.10.0-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
@@ -147,30 +147,43 @@ util/
 
 ### 📢 Anúncios / Reminders Configuráveis
 
-Sistema genérico de envios agendados, substituindo o `WeeklyReminderService` hardcoded. Cada anúncio tem seu próprio **cron**, **timezone**, **mensagem (HTML)**, **mídia opcional** e **lista de chats alvo**. Tudo configurável em runtime via painel admin ou API REST, sem reiniciar a aplicação.
+Sistema genérico de envios agendados, substituindo o `WeeklyReminderService` hardcoded. Cada
+anúncio tem seu próprio **cron**, **timezone**, **mensagem (HTML)**, **mídia opcional** e **lista
+de chats alvo**. Tudo configurável em runtime via painel admin ou API REST, sem reiniciar.
+
+**A partir da v2.10.0:** a fonte de verdade é o **PostgreSQL** (tabelas `reminders`,
+`reminder_chats`, `reminder_tags`). O JSON (`config/reminders.json`) é usado **apenas** para
+bootstrap inicial, backup (`export`) e restore (`import`).
 
 **Painel Admin (`📢 Anúncios`):**
 
 - Tabela com ID, nome, cron, status (habilitado/desabilitado), chats e ações.
 - Modal de criação/edição com validação JS (cron, ID slug, chats obrigatórios).
-- Toggle enable/disable, delete com confirmação, reload do disco.
+- Toggle enable/disable, delete com confirmação, reload.
 - Painel de diagnóstico: `total`, `enabled`, `scheduled`, `scheduledIds`.
+- Botões **Exportar JSON** e **Importar JSON** (com opção `replace`).
 
 **API REST (`/admin/reminders`):**
 
-| Método | Endpoint                                    | Descrição                               |
-| ------ | ------------------------------------------- | --------------------------------------- |
-| GET    | `/admin/reminders`                          | Lista todos os reminders                |
-| GET    | `/admin/reminders/{id}`                     | Busca por ID                            |
-| POST   | `/admin/reminders`                          | Cria novo (body = JSON do `Reminder`)   |
-| PUT    | `/admin/reminders/{id}`                     | Substitui (ID do body deve bater)       |
-| POST   | `/admin/reminders/{id}/toggle?enabled=true` | Alterna `enabled`                       |
-| DELETE | `/admin/reminders/{id}`                     | Remove                                  |
-| POST   | `/admin/reminders/{id}/test?chatId=123`     | Envia manualmente para um chat          |
-| POST   | `/admin/reminders/reload`                   | Recarrega do disco                      |
-| GET    | `/admin/reminders/status`                   | Diagnóstico (total, enabled, scheduled) |
+| Método | Endpoint                                 | Descrição                                   |
+| ------ | ---------------------------------------- | ------------------------------------------- |
+| GET    | `/admin/reminders`                       | Lista todos                                 |
+| GET    | `/admin/reminders/{id}`                  | Busca por ID                                |
+| POST   | `/admin/reminders`                       | Cria novo (body = `Reminder`)               |
+| PUT    | `/admin/reminders/{id}`                  | Atualiza (`version` do body deve bater)     |
+| POST   | `/admin/reminders/{id}/toggle?enabled=X` | Alterna `enabled`                           |
+| DELETE | `/admin/reminders/{id}`                  | Remove                                      |
+| POST   | `/admin/reminders/{id}/test?chatId=X`    | Envia manualmente para um chat              |
+| POST   | `/admin/reminders/reload`                | Reagenda (não relê do banco — já lê sempre) |
+| GET    | `/admin/reminders/status`                | Diagnóstico                                 |
+| GET    | `/admin/reminders/export`                | Exporta como `ReminderJson` (backup)        |
+| POST   | `/admin/reminders/import?replace=X`      | Importa `ReminderJson` (bootstrap/restore)  |
 
-**Exemplo de `config/reminders.json`:**
+**Conflito de versão (optimistic locking):** o `PUT` exige que o `version` do body bata com o
+banco. Se outra instância atualizou entre o GET e o PUT, retorna **`409 Conflict`** — recarregue
+via `GET` e reenvie.
+
+**Exemplo de `config/reminders.json` (usado apenas em bootstrap/export/import):**
 
 ````json
 {
@@ -772,6 +785,37 @@ Andre Nascimento
 - ✅ `CommandHandlerTest` (refatorado drasticamente) — ~30 testes
 
 **Cobertura:** ~94% global (meta: ≥90%).
+
+🆕 **v2.10.0 — Reminders em PostgreSQL** (2026-11-07)
+
+**Migração:**
+
+- ✅ **Fonte de verdade** dos reminders saiu do `config/reminders.json` para o **PostgreSQL**
+  (tabelas `reminders`, `reminder_chats`, `reminder_tags` — Flyway `V4`).
+- ✅ **`ReminderRepository`** (JDBC + `RowMapper`) com **optimistic locking** (`version` + trigger
+  `updated_at`). `PUT` com versão errada → **`409 Conflict`**.
+- ✅ **`ReminderBootstrapService`**: importa o JSON no boot **só** se a tabela estiver vazia
+  (`reminders.bootstrap.from-json.enabled`, default `false` em dev/test, `true` em prod).
+- ✅ **`GET /admin/reminders/export`** e **`POST /admin/reminders/import?replace=X`** para
+  backup / restore / migração entre ambientes. Import em transação única.
+- ✅ **JSON vira import/export** — não é mais lido nem escrito em runtime pelo service.
+
+**Refatoração de config:**
+
+- ✅ `application.properties` reorganizado (feature flags por domínio, sem divisão por "Ondas").
+  Paths `file:/app/config/...` movidos para o profile `prod`; o base usa `classpath:` / `./config/`.
+- ✅ `application-dev.properties` enriquecido (paths locais, `admin.security.disabled=true`, logging
+  cirúrgico, `app.temp.dir=/tmp/t1000-temp`).
+- ✅ `application-prod.properties` reorganizado espelhando o base (`9.1` / `9.2` / `9.3`).
+
+**Testes (novos/reescritos):**
+
+- ✅ `ReminderRepositoryTest` (~13) — Testcontainers Postgres.
+- ✅ `ReminderServiceTest` (~30) — reescrito (mock do repository).
+- ✅ `ReminderControllerTest` (+10) — export, import, 409.
+- ✅ `ReminderStorageIntegrationTest` (~8) — ciclo ponta-a-ponta.
+
+**Cobertura:** ~95% global, ~95% código novo.
 
 ### 🆕 v2.6.3 — Moderação de Grupos e Comando de Ajuda
 

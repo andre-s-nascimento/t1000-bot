@@ -88,3 +88,4 @@ config/prod-ca-2021.crt
 .sonar/spring-context-model.json
 
 /frontend
+src/main/resources/torrent-lancamentos.json

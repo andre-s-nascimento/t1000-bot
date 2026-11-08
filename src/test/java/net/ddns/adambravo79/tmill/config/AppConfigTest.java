@@ -11,8 +11,6 @@ import org.springframework.core.task.support.TaskExecutorAdapter;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 
-import tools.jackson.databind.ObjectMapper;
-
 class AppConfigTest {
 
     private AppConfig appConfig;
@@ -57,12 +55,5 @@ class AppConfigTest {
         RestClient restClient = appConfig.restClient();
 
         assertThat(restClient).isNotNull();
-    }
-
-    @Test
-    void toolsObjectMapper_deveCriarObjectMapper() {
-        ObjectMapper objectMapper = appConfig.toolsObjectMapper();
-
-        assertThat(objectMapper).isNotNull();
     }
 }
