@@ -67,7 +67,6 @@ import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.TorrentLaunchService;
-import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
@@ -102,7 +101,6 @@ public class AdminController {
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
     private final FileTranscriptionCacheService fileTranscriptionCacheService;
-    private final WeeklyReminderService weeklyReminderService;
     private final AutoResponseService autoResponseService;
     private final WorldCupSchedulerService worldCupSchedulerService;
     private final StaticWorldCupService staticWorldCupService;
@@ -226,20 +224,6 @@ public class AdminController {
     public ResponseEntity<String> reloadAutoResponses() {
         autoResponseService.reload();
         return ResponseEntity.ok("Respostas automáticas recarregadas");
-    }
-
-    @PostMapping("/test-weekly-reminder")
-    public ResponseEntity<String> testWeeklyReminder() {
-        weeklyReminderService.sendWednesdayReminder();
-        return ResponseEntity.ok("Lembrete semanal disparado manualmente.");
-    }
-
-    @PostMapping("/test-weekly-reminder-showcase")
-    public ResponseEntity<String> testWeeklyReminderShowcase(
-            @RequestParam(value = "chatId", required = false) Long chatId) {
-        long targetChatId = chatId != null ? chatId : adminConfigService.getShowcaseChatId();
-        weeklyReminderService.sendReminderToChat(targetChatId);
-        return ResponseEntity.ok("Lembrete semanal enviado para o chat " + targetChatId);
     }
 
     @PostMapping("/reload-easter-eggs")
@@ -470,9 +454,6 @@ public class AdminController {
         props.put("auto.response.enabled", environment.getProperty("auto.response.enabled"));
         props.put(AUTO_RESPONSE_FILE, environment.getProperty(AUTO_RESPONSE_FILE));
         props.put(EASTER_EGG_FILE, environment.getProperty(EASTER_EGG_FILE));
-        props.put(
-                "weekly.reminder.media-file",
-                environment.getProperty("weekly.reminder.media-file"));
         props.put("transcription.enabled", environment.getProperty("transcription.enabled"));
         props.put("t1000.audio.max-size-mb", environment.getProperty("t1000.audio.max-size-mb"));
         props.put("bot.allowed-chats", environment.getProperty("bot.allowed-chats"));

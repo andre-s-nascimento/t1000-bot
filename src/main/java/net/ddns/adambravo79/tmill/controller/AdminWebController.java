@@ -64,7 +64,6 @@ import net.ddns.adambravo79.tmill.service.StaticWorldCupService;
 import net.ddns.adambravo79.tmill.service.TelegramModerationService;
 import net.ddns.adambravo79.tmill.service.TempDirService;
 import net.ddns.adambravo79.tmill.service.TorrentLaunchService;
-import net.ddns.adambravo79.tmill.service.WeeklyReminderService;
 import net.ddns.adambravo79.tmill.service.WorldCupSchedulerService;
 import net.ddns.adambravo79.tmill.service.cache.FileTranscriptionCacheService;
 import net.ddns.adambravo79.tmill.service.config.AdminConfigService;
@@ -141,7 +140,6 @@ public class AdminWebController {
 
     private final EasterEggService easterEggService;
     private final DailyDigestService dailyDigestService;
-    private final WeeklyReminderService weeklyReminderService;
     private final AutoResponseService autoResponseService;
     private final WorldCupSchedulerService worldCupSchedulerService;
     private final StaticWorldCupService staticWorldCupService;
@@ -668,28 +666,6 @@ public class AdminWebController {
     public String testWeeklyDigest(RedirectAttributes redirectAttrs) {
         dailyReleasesService.sendWeeklyDigest();
         redirectAttrs.addFlashAttribute(SUCCESS, "Giro semanal executado.");
-        return REDIRECT_ADMIN_WEB;
-    }
-
-    // =========================================================================
-    // LEMBRETES
-    // =========================================================================
-
-    @PostMapping("/test-weekly-reminder")
-    public String testWeeklyReminder(RedirectAttributes redirectAttrs) {
-        weeklyReminderService.sendWednesdayReminder();
-        redirectAttrs.addFlashAttribute(SUCCESS, "Lembrete semanal disparado.");
-        return REDIRECT_ADMIN_WEB;
-    }
-
-    @PostMapping("/test-weekly-reminder-showcase")
-    public String testWeeklyReminderShowcase(
-            @RequestParam(value = "chatId", required = false) Long chatId,
-            RedirectAttributes redirectAttrs) {
-        long targetChatId = resolveTargetChatId(chatId);
-        weeklyReminderService.sendReminderToChat(targetChatId);
-        redirectAttrs.addFlashAttribute(
-                SUCCESS, "Lembrete semanal enviado para o chat " + targetChatId);
         return REDIRECT_ADMIN_WEB;
     }
 
@@ -1320,9 +1296,6 @@ public class AdminWebController {
         props.put("auto.response.enabled", environment.getProperty("auto.response.enabled"));
         props.put(PROP_AUTO_RESPONSE_FILE, environment.getProperty(PROP_AUTO_RESPONSE_FILE));
         props.put(PROP_EASTER_EGG_FILE, environment.getProperty(PROP_EASTER_EGG_FILE));
-        props.put(
-                "weekly.reminder.media-file",
-                environment.getProperty("weekly.reminder.media-file"));
         props.put("transcription.enabled", environment.getProperty("transcription.enabled"));
         props.put("t1000.audio.max-size-mb", environment.getProperty("t1000.audio.max-size-mb"));
         props.put("bot.allowed-chats", environment.getProperty("bot.allowed-chats"));
