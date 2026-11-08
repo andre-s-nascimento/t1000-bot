@@ -1,6 +1,6 @@
 # 🎬 T-1000 Bot
 
-> **Versão atual: v2.11.0** | Branch: `main` | Último build: 2026-11-08
+> **Versão atual: v2.11.1** | Branch: `main` | Último build: 2026-11-08
 >
 > _Evolução do T1000 Bot — de bot simples para plataforma de entretenimento inteligente, assíncrona e observável._
 
@@ -12,7 +12,7 @@ Bot para Telegram que **transcreve áudios** com IA (Whisper + refinamento OpenA
 ![Tests](https://img.shields.io/badge/tests-360%2B_passing-success)
 ![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Status](https://img.shields.io/badge/status-v2.10.0-blueviolet)
+![Status](https://img.shields.io/badge/status-v2.11.1-blueviolet)
 ![CI](https://github.com/andre-s-nascimento/t1000-bot/actions/workflows/ci.yml/badge.svg)
 
 ---
@@ -189,6 +189,14 @@ bootstrap inicial, backup (`export`) e restore (`import`).
 | GET    | `/admin/reminders/status`                | Diagnóstico                                 |
 | GET    | `/admin/reminders/export`                | Exporta como `ReminderJson` (backup)        |
 | POST   | `/admin/reminders/import?replace=X`      | Importa `ReminderJson` (bootstrap/restore)  |
+
+**Teste Manual (v2.11.1):**
+Para testar um anúncio sem esperar o cron ou alterar o status de ativação, clique no botão
+**"Testar"** (ícone de avião de papel) na tabela de anúncios ou no modal de edição. O sistema
+pedirá o Chat ID de destino e enviará a mensagem/mídia instantaneamente.
+
+Via API (exige estar logado no painel ou liberar as rotas):
+`POST /admin-web/reminders/{id}/test?chatId=123456789`
 
 **Conflito de versão (optimistic locking):** o `PUT` exige que o `version` do body bata com o
 banco. Se outra instância atualizou entre o GET e o PUT, retorna **`409 Conflict`** — recarregue
