@@ -1925,6 +1925,11 @@
                             'aria-label="' + (r.enabled ? 'Desabilitar' : 'Habilitar') + ' anúncio ' + safeId + '">' +
                             '<i class="bi bi-' + (r.enabled ? 'pause' : 'play') + '" aria-hidden="true"></i>' +
                             '</button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-success me-1" ' +
+                            'onclick="testReminder(\'' + safeId + '\')" ' +
+                            'aria-label="Testar anúncio ' + safeId + '">' +
+                            '<i class="bi bi-send" aria-hidden="true"></i>' +
+                            '</button>' +
                             '<button type="button" class="btn btn-sm btn-outline-primary me-1" ' +
                             'onclick="openReminderModal(\'' + safeId + '\')" ' +
                             'aria-label="Editar anúncio ' + safeId + '">' +
@@ -2089,8 +2094,17 @@
                         modal.hide();
                         await loadReminders();
                     } catch (e) {
-                        errDiv.textContent = e.message;
-                        errDiv.style.display = 'block';
+                        if (e.message.includes("Conflito de versão")) {
+                            showToast('O anúncio foi alterado em outra aba. Recarregando dados...', 'warning');
+                            // Recarrega os dados do servidor e preenche o formulário novamente
+                            const r = await fetchJson(API + '/' + encodeURIComponent(editingId));
+                            fillReminderForm(r);
+                            errDiv.textContent = "O registro foi atualizado para a versão mais recente. Clique em Salvar novamente.";
+                            errDiv.style.display = 'block';
+                        } else {
+                            errDiv.textContent = e.message;
+                            errDiv.style.display = 'block';
+                        }
                     }
                 };
 
@@ -2142,6 +2156,34 @@
                         await loadReminders();
                     } catch (e) {
                         showToast('Erro: ' + e.message, 'danger');
+                    }
+                };
+
+                // ============================================================
+                // TESTAR ANÚNCIO MANUALMENTE
+                // ============================================================
+                window.testReminder = async function (id) {
+                    // Pergunta para qual chat enviar o teste (default: showcase)
+                    const defaultChat = availableChatIds.length > 0 ? availableChatIds[0] : "";
+                    const chatId = prompt("Para qual Chat ID deseja enviar este teste?\n(Deixe vazio para usar o padrão do sistema)", defaultChat);
+
+                    if (chatId === null) return; // usuário cancelou
+
+                    const targetChat = chatId.trim();
+                    if (!targetChat) {
+                        showToast("Chat ID é obrigatório para teste.", "warning");
+                        return;
+                    }
+
+                    try {
+                        showToast("Enviando teste...", "info");
+                        await fetchJson(API + '/' + encodeURIComponent(id) + '/test?chatId=' + targetChat, {
+                            method: 'POST',
+                            headers: csrfHeaders()
+                        });
+                        showToast('✅ Teste enviado com sucesso!', 'success');
+                    } catch (e) {
+                        showToast('Erro ao testar: ' + e.message, 'danger');
                     }
                 };
 

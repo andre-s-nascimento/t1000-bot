@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.11.1] — 2026-11-08
+
+### Fixed
+
+- **Teste Manual de Anúncios no Painel Web:** adicionado botão "Testar" (avião de papel) na tabela de anúncios e no modal de edição. Agora é possível validar a configuração de um anúncio (incluindo mídia e legenda) sem precisar habilitar o cron ou usar o terminal via `curl`.
+- **Validação de `chatId` no teste:** o endpoint `POST /admin-web/reminders/{id}/test` agora exige o `chatId`, evitando envios acidentais para todos os chats de produção.
+
+### Added
+
+- **Endpoint `POST /admin-web/reminders/{id}/test`**: proxy do `ReminderDispatcher.dispatchToChat()` para uso no painel web (Thymeleaf), contornando bloqueios de CSRF/OAuth da API REST no browser.
+- **JavaScript `testReminder(id)`:** função no `admin.html` que solicita o Chat ID (com fallback para o showcase) e dispara o teste.
+- **`AdminWebControllerTest`**: 3 novos testes cobrindo o sucesso, falha de envio e exceção no endpoint de teste manual.
+
 ## [2.11.0] — 2026-11-08
 
 ### Removed
