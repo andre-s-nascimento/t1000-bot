@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- CSRF (opcional — só existe quando security está ativo) -->
     <meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}" />
@@ -11,8 +11,12 @@
     <meta th:if="${_csrf != null}" name="_csrf_parameter" th:content="${_csrf.parameterName}" />
 
     <title>Painel Administrativo - T-Mill</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Fase 1: assets locais (self-host) — elimina Web:S5725 -->
+    <link rel="stylesheet" th:href="@{/css/bootstrap.min.css}"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" th:href="@{/icons/bootstrap-icons.min.css}"
+        integrity="sha384-x24Hsw8mL3azIETVv3bGJZIh1gXLf7HxIDTv8oH1004HYfHwfjQjngF2jLbJd8qR" crossorigin="anonymous">
 
     <script>
         // Aplica o tema ANTES do CSS renderizar (evita flash branco)
@@ -49,7 +53,7 @@
             letter-spacing: -0.02em;
         }
 
-        .navbar-brand i {
+        .navbar-brand .bi {
             font-size: 1.5rem;
             vertical-align: middle;
         }
@@ -144,6 +148,9 @@
             display: flex;
             flex-direction: column;
             gap: 0.4rem;
+            border: 0;
+            padding: 0;
+            margin: 0;
         }
 
         .btn-group-vertical-mobile .btn {
@@ -152,7 +159,7 @@
             justify-content: flex-start;
         }
 
-        .btn-group-vertical-mobile .btn i {
+        .btn-group-vertical-mobile .btn .bi {
             margin-right: 0.5rem;
         }
 
@@ -201,7 +208,7 @@
             display: inline-block;
         }
 
-        .btn i {
+        .btn .bi {
             margin-right: 0.3rem;
         }
 
@@ -344,24 +351,18 @@
         /* ============================================================
    Ajustes de modal (scroll em telas pequenas)
    ============================================================ */
-
-        /* Em telas onde o modal não cabe, deixa o BODY do modal rolar */
         .modal-dialog.modal-dialog-scrollable .modal-content {
             max-height: calc(100dvh - 3.5rem);
-            /* dvh = dynamic viewport height (funciona com barra de URL mobile) */
             display: flex;
             flex-direction: column;
         }
 
         .modal-dialog.modal-dialog-scrollable .modal-body {
             overflow-y: auto;
-            /* fallback para navegadores antigos que não conhecem dvh */
             max-height: calc(100vh - 12rem);
             -webkit-overflow-scrolling: touch;
-            /* rolagem suave no iOS */
         }
 
-        /* Mobile: modal ocupa quase a tela toda, sem cortar o rodapé */
         @media (max-width: 576px) {
             .modal-dialog {
                 margin: 0.5rem;
@@ -372,7 +373,6 @@
             }
         }
 
-        /* 🆕 Reenvio de podcast — destaque sutil */
         .podcast-resend {
             border-left: 3px solid var(--bs-warning);
             padding-left: 0.75rem;
@@ -386,8 +386,8 @@
     <!-- NAVBAR -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top" aria-label="Navegação principal">
         <div class="container">
-            <a class="navbar-brand" href="#" aria-label="Página inicial do painel">
-                <i class="bi bi-robot" aria-hidden="true"></i> T-Mill Admin
+            <a class="navbar-brand" th:href="@{/admin}" aria-label="Página inicial do painel">
+                <span class="bi bi-robot" aria-hidden="true"></span> T-Mill Admin
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
                 aria-controls="navbarNav" aria-expanded="false" aria-label="Alternar navegação">
@@ -398,18 +398,19 @@
                     <li class="nav-item">
                         <button type="button" class="theme-toggle" onclick="toggleTheme()"
                             aria-label="Alternar tema claro/escuro">
-                            <i class="bi bi-moon-stars" id="themeIcon" aria-hidden="true"></i>
+                            <span class="bi bi-moon-stars" id="themeIcon" aria-hidden="true"></span>
                             <span id="themeLabel" class="d-none d-lg-inline">Escuro</span>
                         </button>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#" onclick="location.reload();" aria-label="Recarregar página">
-                            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Recarregar
-                        </a>
+                        <button type="button" class="nav-link btn btn-link" onclick="location.reload();"
+                            aria-label="Recarregar página">
+                            <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Recarregar
+                        </button>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/logout" aria-label="Sair do sistema">
-                            <i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sair
+                            <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Sair
                         </a>
                     </li>
                 </ul>
@@ -418,7 +419,7 @@
     </nav>
 
     <!-- CONTEÚDO -->
-    <div class="container" role="main" aria-label="Painel administrativo">
+    <main class="container" aria-label="Painel administrativo">
 
         <!-- Status bar -->
         <div class="status-bar" aria-live="polite" aria-atomic="true">
@@ -431,13 +432,13 @@
         <!-- Flash messages -->
         <div th:if="${success}" class="alert alert-success flash-message alert-dismissible fade show" role="alert"
             aria-live="assertive">
-            <i class="bi bi-check-circle" aria-hidden="true"></i>
+            <span class="bi bi-check-circle" aria-hidden="true"></span>
             <span th:text="${success}"></span>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar mensagem"></button>
         </div>
         <div th:if="${error}" class="alert alert-danger flash-message alert-dismissible fade show" role="alert"
             aria-live="assertive">
-            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+            <span class="bi bi-exclamation-triangle" aria-hidden="true"></span>
             <span th:text="${error}"></span>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar mensagem"></button>
         </div>
@@ -494,19 +495,19 @@
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-chat" aria-hidden="true"></i> Enviar Mensagem (Texto)
+                                <span class="bi bi-chat" aria-hidden="true"></span> Enviar Mensagem (Texto)
                             </div>
                             <div class="card-body">
                                 <form id="falaForm" onsubmit="submitAction(event, '/admin-web/fala-t1000', this)"
                                     aria-label="Formulário de envio de mensagem">
                                     <div class="mb-2">
                                         <label for="falaMsg" class="form-label">Mensagem</label>
-                                        <textarea class="form-control" id="falaMsg" name="message" rows="2" required
-                                            aria-required="true"></textarea>
+                                        <textarea class="form-control" id="falaMsg" name="message" rows="2"
+                                            required></textarea>
                                     </div>
                                     <div class="mb-2">
                                         <label for="falaChat" class="form-label">Chat ID (opcional)</label>
-                                        <select class="form-select" name="chatId" aria-label="Chat ID" id="falaChat">
+                                        <select class="form-select" name="chatId" id="falaChat">
                                             <option value="">-- Vazio (Padrão) --</option>
                                             <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
                                             </option>
@@ -520,45 +521,45 @@
                                         </select>
                                     </div>
                                     <button type="submit" class="btn btn-primary" aria-label="Enviar mensagem">
-                                        <i class="bi bi-send" aria-hidden="true"></i> Enviar
+                                        <span class="bi bi-send" aria-hidden="true"></span> Enviar
                                     </button>
-                                    <div class="spinner-border spinner text-primary ms-2" role="status"
-                                        aria-hidden="true"></div>
-                                    <span class="sr-only">Enviando...</span>
+                                    <output class="spinner-border spinner text-primary ms-2" aria-live="polite"
+                                        aria-label="Enviando mensagem"></output>
                                 </form>
-                                <div id="falaResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
+                                <output id="falaResult" class="result-box d-block" aria-live="polite"
+                                    aria-atomic="true"></output>
                             </div>
                         </div>
                     </div>
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-mic" aria-hidden="true"></i> Sintetizar e Enviar Áudio (TTS)
+                                <span class="bi bi-mic" aria-hidden="true"></span> Sintetizar e Enviar Áudio (TTS)
                             </div>
                             <div class="card-body">
                                 <form id="ttsForm" onsubmit="submitAction(event, '/admin-web/fala-t1000-tts', this)"
                                     aria-label="Formulário de síntese de áudio">
                                     <div class="mb-2">
                                         <label for="ttsMsg" class="form-label">Texto</label>
-                                        <textarea class="form-control" id="ttsMsg" name="message" rows="2" required
-                                            aria-required="true"></textarea>
+                                        <textarea class="form-control" id="ttsMsg" name="message" rows="2"
+                                            required></textarea>
                                     </div>
                                     <div class="mb-2">
                                         <label for="ttsChat" class="form-label">Chat ID (opcional)</label>
-                                        <select class="form-select" name="chatId" aria-label="Chat ID" id="ttsChat">
+                                        <select class="form-select" name="chatId" id="ttsChat">
                                             <option value="">-- Vazio (Padrão) --</option>
                                             <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
                                             </option>
                                         </select>
                                     </div>
                                     <button type="submit" class="btn btn-success" aria-label="Gerar e enviar áudio">
-                                        <i class="bi bi-file-earmark-play" aria-hidden="true"></i> Gerar e Enviar
+                                        <span class="bi bi-file-earmark-play" aria-hidden="true"></span> Gerar e Enviar
                                     </button>
-                                    <div class="spinner-border spinner text-success ms-2" role="status"
-                                        aria-hidden="true"></div>
-                                    <span class="sr-only">Processando áudio...</span>
+                                    <output class="spinner-border spinner text-success ms-2" aria-live="polite"
+                                        aria-label="Processando áudio"></output>
                                 </form>
-                                <div id="ttsResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
+                                <output id="ttsResult" class="result-box d-block" aria-live="polite"
+                                    aria-atomic="true"></output>
                             </div>
                         </div>
                     </div>
@@ -568,7 +569,7 @@
                         <form th:action="@{/admin-web/test-azure-tts}" method="post">
                             <button type="submit" class="btn btn-outline-secondary"
                                 aria-label="Testar Azure TTS com mensagem fixa">
-                                <i class="bi bi-cloud" aria-hidden="true"></i> Testar Azure TTS (fixo)
+                                <span class="bi bi-cloud" aria-hidden="true"></span> Testar Azure TTS (fixo)
                             </button>
                         </form>
                     </div>
@@ -577,81 +578,87 @@
 
             <!-- ==================== ABA COPA ==================== -->
             <div class="tab-pane fade" id="copa" role="tabpanel" aria-labelledby="tab-copa">
-                <div class="btn-group-vertical-mobile mb-2 mt-2" role="group" aria-label="Ações da Copa">
+                <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações da Copa">
+                    <legend class="sr-only">Ações da Copa</legend>
                     <form th:action="@{/admin-web/test-worldcup}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-warning" th:disabled="${!worldcupEnabled}"
                             aria-label="Enviar manual para todos os chats">
-                            <i class="bi bi-send" aria-hidden="true"></i> Enviar Manual (todos)
+                            <span class="bi bi-send" aria-hidden="true"></span> Enviar Manual (todos)
                         </button>
                     </form>
                     <form th:action="@{/admin-web/test-worldcup-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+                            <label for="copaShowcaseChat" class="visually-hidden">Chat ID opcional</label>
+                            <select class="form-select form-select-sm" name="chatId" id="copaShowcaseChat">
                                 <option value="">Vazio (Padrão)</option>
                                 <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
                             </select>
                             <button type="submit" class="btn btn-warning btn-sm" th:disabled="${!worldcupEnabled}"
                                 aria-label="Enviar manual para showcase">
-                                <i class="bi bi-star" aria-hidden="true"></i> Showcase
+                                <span class="bi bi-star" aria-hidden="true"></span> Showcase
                             </button>
                         </div>
                     </form>
                     <form th:action="@{/admin-web/reload-worldcup}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-info" aria-label="Recarregar dados da Copa">
-                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Recarregar Dados
+                            <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Dados
                         </button>
                     </form>
                     <form th:action="@{/admin-web/reload-worldcup-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+                            <label for="copaReloadChat" class="visually-hidden">Chat ID opcional</label>
+                            <select class="form-select form-select-sm" name="chatId" id="copaReloadChat">
                                 <option value="">Vazio (Padrão)</option>
                                 <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
                             </select>
                             <button type="submit" class="btn btn-info btn-sm" aria-label="Recarregar e notificar">
-                                <i class="bi bi-bell" aria-hidden="true"></i> Reload + Notificar
+                                <span class="bi bi-bell" aria-hidden="true"></span> Reload + Notificar
                             </button>
                         </div>
                     </form>
-                </div>
+                </fieldset>
 
-                <div class="btn-group-vertical-mobile mb-2" role="group" aria-label="Horários da Copa">
+                <fieldset class="btn-group-vertical-mobile mb-2" aria-label="Horários da Copa">
+                    <legend class="sr-only">Horários da Copa</legend>
                     <form th:action="@{/admin-web/test-worldcup-noon}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-secondary" th:disabled="${!worldcupEnabled}"
                             aria-label="Enviar jogos do meio-dia">
-                            <i class="bi bi-sun" aria-hidden="true"></i> Meio-dia
+                            <span class="bi bi-sun" aria-hidden="true"></span> Meio-dia
                         </button>
                     </form>
                     <form th:action="@{/admin-web/test-worldcup-noon-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+                            <label for="copaNoonChat" class="visually-hidden">Chat ID opcional</label>
+                            <select class="form-select form-select-sm" name="chatId" id="copaNoonChat">
                                 <option value="">Vazio (Padrão)</option>
                                 <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
                             </select>
                             <button type="submit" class="btn btn-secondary btn-sm" th:disabled="${!worldcupEnabled}"
                                 aria-label="Enviar meio-dia para showcase">
-                                <i class="bi bi-star" aria-hidden="true"></i> Meio-dia Showcase
+                                <span class="bi bi-star" aria-hidden="true"></span> Meio-dia Showcase
                             </button>
                         </div>
                     </form>
                     <form th:action="@{/admin-web/test-worldcup-evening}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-secondary" th:disabled="${!worldcupEnabled}"
                             aria-label="Enviar jogos da noite">
-                            <i class="bi bi-moon" aria-hidden="true"></i> Noite
+                            <span class="bi bi-moon" aria-hidden="true"></span> Noite
                         </button>
                     </form>
                     <form th:action="@{/admin-web/test-worldcup-evening-showcase}" method="post" class="d-inline-block">
                         <div class="d-flex align-items-center gap-1">
-                            <select class="form-select form-select-sm" name="chatId" aria-label="Chat ID opcional">
+                            <label for="copaEveningChat" class="visually-hidden">Chat ID opcional</label>
+                            <select class="form-select form-select-sm" name="chatId" id="copaEveningChat">
                                 <option value="">Vazio (Padrão)</option>
                                 <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}"></option>
                             </select>
                             <button type="submit" class="btn btn-secondary btn-sm" th:disabled="${!worldcupEnabled}"
                                 aria-label="Enviar noite para showcase">
-                                <i class="bi bi-star" aria-hidden="true"></i> Noite Showcase
+                                <span class="bi bi-star" aria-hidden="true"></span> Noite Showcase
                             </button>
                         </div>
                     </form>
-                </div>
+                </fieldset>
 
                 <div class="row mt-2">
                     <div class="col-12 col-md-8">
@@ -672,7 +679,7 @@
                             </div>
                             <div class="col-auto">
                                 <button type="submit" class="btn btn-dark" th:disabled="${!worldcupEnabled}">
-                                    <i class="bi bi-list-ul" aria-hidden="true"></i> Enviar Resultados
+                                    <span class="bi bi-list-ul" aria-hidden="true"></span> Enviar Resultados
                                 </button>
                             </div>
                         </form>
@@ -682,28 +689,29 @@
 
             <!-- ==================== ABA DIGEST ==================== -->
             <div class="tab-pane fade" id="digest" role="tabpanel" aria-labelledby="tab-digest">
-                <div class="btn-group-vertical-mobile mb-2 mt-2" role="group" aria-label="Ações de Digest">
+                <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações de Digest">
+                    <legend class="sr-only">Ações de Digest</legend>
                     <form th:action="@{/admin-web/test-morning-digest}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-outline-primary">
-                            <i class="bi bi-sunrise" aria-hidden="true"></i> Morning Digest
+                            <span class="bi bi-sunrise" aria-hidden="true"></span> Morning Digest
                         </button>
                     </form>
                     <form th:action="@{/admin-web/test-evening-digest}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-outline-primary">
-                            <i class="bi bi-moon-stars" aria-hidden="true"></i> Evening Digest
+                            <span class="bi bi-moon-stars" aria-hidden="true"></span> Evening Digest
                         </button>
                     </form>
                     <form th:action="@{/admin-web/test-daily-releases}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-outline-success">
-                            <i class="bi bi-calendar-day" aria-hidden="true"></i> Daily Releases
+                            <span class="bi bi-calendar-day" aria-hidden="true"></span> Daily Releases
                         </button>
                     </form>
                     <form th:action="@{/admin-web/test-weekly-digest}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-outline-success">
-                            <i class="bi bi-calendar-week" aria-hidden="true"></i> Weekly Digest
+                            <span class="bi bi-calendar-week" aria-hidden="true"></span> Weekly Digest
                         </button>
                     </form>
-                </div>
+                </fieldset>
 
                 <div class="row mt-2">
                     <div class="col-12 col-md-8">
@@ -726,7 +734,7 @@
                             </div>
                             <div class="col-auto">
                                 <button type="submit" class="btn btn-outline-info">
-                                    <i class="bi bi-pencil-square" aria-hidden="true"></i> Custom Digest
+                                    <span class="bi bi-pencil-square" aria-hidden="true"></span> Custom Digest
                                 </button>
                             </div>
                         </form>
@@ -741,7 +749,7 @@
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-robot" aria-hidden="true"></i> Testar Auto-Response
+                                <span class="bi bi-robot" aria-hidden="true"></span> Testar Auto-Response
                             </div>
                             <div class="card-body">
                                 <form id="autoTestForm"
@@ -770,19 +778,20 @@
                                             placeholder="ex: 14:30">
                                     </div>
                                     <button type="submit" class="btn btn-primary">
-                                        <i class="bi bi-play" aria-hidden="true"></i> Testar
+                                        <span class="bi bi-play" aria-hidden="true"></span> Testar
                                     </button>
-                                    <div class="spinner-border spinner text-primary ms-2" role="status"
-                                        aria-hidden="true"></div>
+                                    <output class="spinner-border spinner text-primary ms-2" aria-live="polite"
+                                        aria-label="Testando auto-response"></output>
                                 </form>
-                                <div id="autoTestResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
+                                <output id="autoTestResult" class="result-box d-block" aria-live="polite"
+                                    aria-atomic="true"></output>
                             </div>
                         </div>
                     </div>
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-search" aria-hidden="true"></i> Debug Auto-Response
+                                <span class="bi bi-search" aria-hidden="true"></span> Debug Auto-Response
                             </div>
                             <div class="card-body">
                                 <form id="debugForm" onsubmit="debugAutoResponse(event, this)">
@@ -791,7 +800,7 @@
                                         <input type="text" class="form-control" id="debugUserId" name="userId"
                                             placeholder="1241644136">
                                         <div class="form-text text-warning">
-                                            <i class="bi bi-exclamation-triangle"></i>
+                                            <span class="bi bi-exclamation-triangle" aria-hidden="true"></span>
                                             Triggers como "bom dia" só respondem 1x por dia por usuário. Deixe em branco
                                             para ignorar essa regra no teste.
                                         </div>
@@ -807,10 +816,11 @@
                                             placeholder="ex: 14:30">
                                     </div>
                                     <button type="submit" class="btn btn-info">
-                                        <i class="bi bi-bug" aria-hidden="true"></i> Debug
+                                        <span class="bi bi-bug" aria-hidden="true"></span> Debug
                                     </button>
                                 </form>
-                                <div id="debugResult" class="result-box" aria-live="polite" aria-atomic="true"></div>
+                                <output id="debugResult" class="result-box d-block" aria-live="polite"
+                                    aria-atomic="true"></output>
                             </div>
                         </div>
                     </div>
@@ -819,7 +829,7 @@
                 <div class="row mt-2">
                     <div class="col-12">
                         <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-secondary">
-                            <i class="bi bi-list" aria-hidden="true"></i> Listar Regras (JSON)
+                            <span class="bi bi-list" aria-hidden="true"></span> Listar Regras (JSON)
                         </a>
                     </div>
                 </div>
@@ -831,29 +841,31 @@
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-cake2" aria-hidden="true"></i> Disparar Parabéns Manualmente
+                                <span class="bi bi-cake2" aria-hidden="true"></span> Disparar Parabéns Manualmente
                             </div>
                             <div class="card-body">
                                 <form th:action="@{/admin-web/test-birthday}" method="post"
                                     class="row g-2 align-items-center mb-3">
                                     <div class="col-auto">
-                                        <input type="number" class="form-control" name="day" min="1" max="31"
-                                            placeholder="Dia" required>
+                                        <label for="birthdayDay" class="visually-hidden">Dia</label>
+                                        <input type="number" class="form-control" id="birthdayDay" name="day" min="1"
+                                            max="31" placeholder="Dia" required>
                                     </div>
                                     <div class="col-auto">
-                                        <input type="number" class="form-control" name="month" min="1" max="12"
-                                            placeholder="Mês" required>
+                                        <label for="birthdayMonth" class="visually-hidden">Mês</label>
+                                        <input type="number" class="form-control" id="birthdayMonth" name="month"
+                                            min="1" max="12" placeholder="Mês" required>
                                     </div>
                                     <div class="col-auto">
                                         <button type="submit" class="btn btn-primary">
-                                            <i class="bi bi-send" aria-hidden="true"></i> Disparar
+                                            <span class="bi bi-send" aria-hidden="true"></span> Disparar
                                         </button>
                                     </div>
                                 </form>
 
                                 <form th:action="@{/admin-web/test-birthday-today}" method="post">
                                     <button type="submit" class="btn btn-success w-100">
-                                        <i class="bi bi-calendar-check" aria-hidden="true"></i>
+                                        <span class="bi bi-calendar-check" aria-hidden="true"></span>
                                         Disparar para hoje
                                     </button>
                                 </form>
@@ -868,22 +880,21 @@
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-list-ul" aria-hidden="true"></i> Aniversários Cadastrados
+                                <span class="bi bi-list-ul" aria-hidden="true"></span> Aniversários Cadastrados
                             </div>
                             <div class="card-body">
-                                <div id="birthdaysList">
-                                    <div class="spinner-border text-primary" role="status"></div>
-                                </div>
+                                <output id="birthdaysList" aria-live="polite" aria-busy="true" class="d-block">
+                                    <span class="spinner-border text-primary" aria-label="Carregando"></span>
+                                </output>
                                 <div class="mt-2 d-flex gap-2 flex-wrap">
                                     <a href="/admin-web/birthdays-json" target="_blank"
                                         class="btn btn-outline-secondary btn-sm">
-                                        <i class="bi bi-file-earmark-code" aria-hidden="true"></i> Ver JSON
+                                        <span class="bi bi-file-earmark-code" aria-hidden="true"></span> Ver JSON
                                     </a>
                                     <form th:action="@{/admin-web/clear-birthdays}" method="post"
-                                        onsubmit="return confirm('Apagar TODOS os aniversários?')"
-                                        class="d-inline-block">
+                                        data-confirm="Apagar TODOS os aniversários?" class="d-inline-block">
                                         <button type="submit" class="btn btn-danger btn-sm">
-                                            <i class="bi bi-trash3" aria-hidden="true"></i> Limpar Todos
+                                            <span class="bi bi-trash3" aria-hidden="true"></span> Limpar Todos
                                         </button>
                                     </form>
                                 </div>
@@ -897,21 +908,19 @@
             <div class="tab-pane fade" id="features" role="tabpanel" aria-labelledby="tab-features">
                 <div class="card mt-2">
                     <div class="card-header">
-                        <i class="bi bi-toggles" aria-hidden="true"></i> Feature Flags (runtime)
+                        <span class="bi bi-toggles" aria-hidden="true"></span> Feature Flags (runtime)
                         <button type="button" class="btn btn-sm btn-outline-secondary float-end"
                             onclick="loadFeatureFlags()" aria-label="Recarregar feature flags">
-                            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Recarregar
+                            <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Recarregar
                         </button>
                     </div>
-                    <div class="card-body p-0" id="featureFlagsContainer">
+                    <div class="card-body p-0" id="featureFlagsContainer" aria-live="polite" aria-busy="true">
                         <div class="text-center p-3">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="sr-only">Carregando...</span>
-                            </div>
+                            <output class="spinner-border text-primary" aria-label="Carregando feature flags"></output>
                         </div>
                     </div>
                     <div class="card-footer text-muted small">
-                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        <span class="bi bi-info-circle" aria-hidden="true"></span>
                         Alterações aplicam-se imediatamente, sem reiniciar a aplicação.
                         Flags marcadas como <span class="badge text-bg-warning">read-only</span>
                         só podem ser alteradas no <code>application.properties</code> e exigem restart.
@@ -925,7 +934,7 @@
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-mic-mute" aria-hidden="true"></i> Silenciar Usuário (Mute)
+                                <span class="bi bi-mic-mute" aria-hidden="true"></span> Silenciar Usuário (Mute)
                             </div>
                             <div class="card-body">
                                 <form th:action="@{/admin-web/mute}" method="post">
@@ -952,8 +961,8 @@
                                         </select>
                                     </div>
                                     <button type="submit" class="btn btn-danger w-100"
-                                        onclick="return confirm('Silenciar este usuário?')">
-                                        <i class="bi bi-mic-mute" aria-hidden="true"></i> Aplicar Silenciamento
+                                        data-confirm="Silenciar este usuário?">
+                                        <span class="bi bi-mic-mute" aria-hidden="true"></span> Aplicar Silenciamento
                                     </button>
                                 </form>
                             </div>
@@ -962,7 +971,7 @@
                     <div class="col-12 col-md-6">
                         <div class="card">
                             <div class="card-header">
-                                <i class="bi bi-mic" aria-hidden="true"></i> Remover Silenciamento (Unmute)
+                                <span class="bi bi-mic" aria-hidden="true"></span> Remover Silenciamento (Unmute)
                             </div>
                             <div class="card-body">
                                 <form th:action="@{/admin-web/unmute}" method="post">
@@ -980,8 +989,8 @@
                                             required placeholder="ex: 1400513378">
                                     </div>
                                     <button type="submit" class="btn btn-success w-100" style="margin-top: 31px;"
-                                        onclick="return confirm('Remover silenciamento deste usuário?')">
-                                        <i class="bi bi-mic" aria-hidden="true"></i> Remover Restrição
+                                        data-confirm="Remover silenciamento deste usuário?">
+                                        <span class="bi bi-mic" aria-hidden="true"></span> Remover Restrição
                                     </button>
                                 </form>
                             </div>
@@ -994,53 +1003,58 @@
             <div class="tab-pane fade" id="admin" role="tabpanel" aria-labelledby="tab-admin">
 
                 <!-- Limpeza e Recarregamentos -->
-                <div class="btn-group-vertical-mobile mb-2 mt-2" role="group" aria-label="Ações administrativas">
+                <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações administrativas">
+                    <legend class="sr-only">Ações administrativas</legend>
                     <form th:action="@{/admin-web/clear-releases}" method="post"
-                        onsubmit="return confirm('Tem certeza que deseja limpar a tabela de releases?')"
-                        class="d-inline-block">
+                        data-confirm="Tem certeza que deseja limpar a tabela de releases?" class="d-inline-block">
                         <button type="submit" class="btn btn-danger">
-                            <i class="bi bi-trash3" aria-hidden="true"></i> Limpar Releases
+                            <span class="bi bi-trash3" aria-hidden="true"></span> Limpar Releases
                         </button>
                     </form>
                     <form th:action="@{/admin-web/clear-all-data}" method="post"
-                        onsubmit="return confirm('Isso apagará TODOS os dados. Continuar?')" class="d-inline-block">
+                        data-confirm="Isso apagará TODOS os dados. Continuar?" class="d-inline-block">
                         <button type="submit" class="btn btn-danger">
-                            <i class="bi bi-database-x" aria-hidden="true"></i> Limpar Todos os Dados
+                            <span class="bi bi-database-x" aria-hidden="true"></span> Limpar Todos os Dados
                         </button>
                     </form>
                     <form th:action="@{/admin-web/reload-prompts}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-warning">
-                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Recarregar Prompts
+                            <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Prompts
                         </button>
                     </form>
                     <form th:action="@{/admin-web/reload-auto-responses}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-secondary">
-                            <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Recarregar Auto-Responses
+                            <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Auto-Responses
                         </button>
                     </form>
                     <form th:action="@{/admin-web/reload-easter-eggs}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-secondary">
-                            <i class="bi bi-emoji-smile" aria-hidden="true"></i> Recarregar Easter Eggs
+                            <span class="bi bi-emoji-smile" aria-hidden="true"></span> Recarregar Easter Eggs
                         </button>
                     </form>
-                </div>
+                </fieldset>
 
                 <!-- Podcast -->
                 <div class="card mt-3">
                     <div class="card-header">
-                        <i class="bi bi-podcast" aria-hidden="true"></i> Podcast
+                        <span class="bi bi-podcast" aria-hidden="true"></span> Podcast
                     </div>
                     <div class="card-body">
                         <form th:action="@{/admin-web/test-podcast}" method="post"
                             class="row g-2 align-items-center mb-2">
                             <div class="col-auto">
-                                <input type="date" class="form-control" name="start" placeholder="Data início">
+                                <label for="podcastStart" class="visually-hidden">Data início</label>
+                                <input type="date" class="form-control" id="podcastStart" name="start"
+                                    placeholder="Data início">
                             </div>
                             <div class="col-auto">
-                                <input type="date" class="form-control" name="end" placeholder="Data fim">
+                                <label for="podcastEnd" class="visually-hidden">Data fim</label>
+                                <input type="date" class="form-control" id="podcastEnd" name="end"
+                                    placeholder="Data fim">
                             </div>
                             <div class="col-auto">
-                                <select class="form-select" name="chatId">
+                                <label for="podcastChat" class="visually-hidden">Chat ID</label>
+                                <select class="form-select" name="chatId" id="podcastChat">
                                     <option value="">-- Vazio (Padrão) --</option>
                                     <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
                                     </option>
@@ -1048,7 +1062,7 @@
                             </div>
                             <div class="col-auto">
                                 <button type="submit" class="btn btn-outline-dark">
-                                    <i class="bi bi-podcast" aria-hidden="true"></i> Gerar Podcast
+                                    <span class="bi bi-podcast" aria-hidden="true"></span> Gerar Podcast
                                 </button>
                             </div>
                         </form>
@@ -1056,29 +1070,31 @@
                         <div class="d-flex gap-2 flex-wrap">
                             <form th:action="@{/admin-web/test-podcast-latest}" method="post" class="d-inline-block">
                                 <button type="submit" class="btn btn-outline-dark btn-sm">
-                                    <i class="bi bi-clock-history" aria-hidden="true"></i> Últimos 7 dias
+                                    <span class="bi bi-clock-history" aria-hidden="true"></span> Últimos 7 dias
                                 </button>
                             </form>
 
                             <form th:action="@{/admin-web/test-podcast-days}" method="post"
                                 class="d-flex align-items-center gap-1">
-                                <input type="number" class="form-control form-control-sm" name="days" value="3" min="1"
-                                    max="30" style="width: 80px">
-                                <select class="form-select form-select-sm" name="chatId">
+                                <label for="podcastDays" class="visually-hidden">Dias</label>
+                                <input type="number" class="form-control form-control-sm" id="podcastDays" name="days"
+                                    value="3" min="1" max="30" style="width: 80px">
+                                <label for="podcastDaysChat" class="visually-hidden">Chat ID</label>
+                                <select class="form-select form-select-sm" name="chatId" id="podcastDaysChat">
                                     <option value="">Vazio</option>
                                     <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
                                     </option>
                                 </select>
                                 <button type="submit" class="btn btn-outline-dark btn-sm">
-                                    <i class="bi bi-calendar-range" aria-hidden="true"></i> N dias
+                                    <span class="bi bi-calendar-range" aria-hidden="true"></span> N dias
                                 </button>
                             </form>
                         </div>
 
-                        <!-- 🆕 Reenvio de podcast por sexta-feira -->
+                        <!-- Reenvio de podcast por sexta-feira -->
                         <div class="podcast-resend">
                             <h6 class="mb-2">
-                                <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+                                <span class="bi bi-arrow-repeat" aria-hidden="true"></span>
                                 Reenviar Podcast por Semana
                             </h6>
                             <p class="text-muted small mb-2">
@@ -1090,7 +1106,7 @@
 
                             <form th:action="@{/admin-web/podcast/resend}" method="post"
                                 class="row g-2 align-items-center"
-                                onsubmit="return confirm('Reenviar o podcast da semana escolhida?')">
+                                data-confirm="Reenviar o podcast da semana escolhida?">
 
                                 <div class="col-auto">
                                     <label for="resendFriday" class="form-label small mb-0">
@@ -1114,7 +1130,7 @@
 
                                 <div class="col-auto align-self-end">
                                     <button type="submit" class="btn btn-warning">
-                                        <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
+                                        <span class="bi bi-arrow-repeat" aria-hidden="true"></span>
                                         Reenviar Podcast da Semana
                                     </button>
                                 </div>
@@ -1126,7 +1142,7 @@
                 <!-- Sala VIP -->
                 <div class="card mt-3">
                     <div class="card-header">
-                        <i class="bi bi-film" aria-hidden="true"></i> Sala VIP (Letterboxd)
+                        <span class="bi bi-film" aria-hidden="true"></span> Sala VIP (Letterboxd)
                     </div>
                     <div class="card-body">
                         <p class="text-muted small mb-3">
@@ -1134,29 +1150,28 @@
                             O <b>Sync</b> busca os filmes da lista; o <b>Reload</b> recarrega o
                             <code>salavip-config.json</code> (URL, cron, etc.) sem reiniciar a aplicação.
                         </p>
-                        <div class="btn-group-vertical-mobile" role="group" aria-label="Ações da Sala VIP">
+                        <fieldset class="btn-group-vertical-mobile" aria-label="Ações da Sala VIP">
+                            <legend class="sr-only">Ações da Sala VIP</legend>
                             <form th:action="@{/admin-web/salavip/sync}" method="post" class="d-inline-block"
-                                onsubmit="return confirm('Forçar sincronização da lista do Letterboxd agora?')">
+                                data-confirm="Forçar sincronização da lista do Letterboxd agora?">
                                 <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-arrow-repeat" aria-hidden="true"></i> Forçar Sincronização
+                                    <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Forçar Sincronização
                                 </button>
                             </form>
                             <form th:action="@{/admin-web/salavip/reload}" method="post" class="d-inline-block"
-                                onsubmit="return confirm('Recarregar o salavip-config.json?')">
+                                data-confirm="Recarregar o salavip-config.json?">
                                 <button type="submit" class="btn btn-secondary">
-                                    <i class="bi bi-gear" aria-hidden="true"></i> Recarregar Configurações (JSON)
+                                    <span class="bi bi-gear" aria-hidden="true"></span> Recarregar Configurações (JSON)
                                 </button>
                             </form>
-                        </div>
+                        </fieldset>
                     </div>
                 </div>
 
-                <!-- ============================================================
-     Upload de arquivos de configuração (.json)
-     ============================================================ -->
+                <!-- Upload de arquivos de configuração (.json) -->
                 <div class="card mt-3">
                     <div class="card-header">
-                        <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                        <span class="bi bi-cloud-arrow-up" aria-hidden="true"></span>
                         Carregar Arquivo de Configuração (.json)
                     </div>
                     <div class="card-body">
@@ -1199,7 +1214,7 @@
                             <div class="col-12 col-md-3">
                                 <button type="submit" class="btn btn-primary w-100"
                                     aria-label="Enviar e recarregar JSON">
-                                    <i class="bi bi-upload" aria-hidden="true"></i> Enviar e Recarregar
+                                    <span class="bi bi-upload" aria-hidden="true"></span> Enviar e Recarregar
                                 </button>
                             </div>
                         </form>
@@ -1208,11 +1223,11 @@
                 <!-- Migração -->
                 <div class="card mt-3">
                     <div class="card-header">
-                        <i class="bi bi-database-up" aria-hidden="true"></i> Migração SQLite → Postgres/Mongo
+                        <span class="bi bi-database-up" aria-hidden="true"></span> Migração SQLite → Postgres/Mongo
                     </div>
                     <div class="card-body">
                         <div class="alert alert-warning small mb-3">
-                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                            <span class="bi bi-exclamation-triangle" aria-hidden="true"></span>
                             <b>Atenção:</b> a migração <b>não é idempotente</b>. Rode uma única vez em ambiente limpo.
                             Sempre faça <b>preview</b> e <b>dry-run</b> antes da migração real.
                         </div>
@@ -1220,69 +1235,73 @@
                         <div class="d-flex gap-2 flex-wrap">
                             <button type="button" class="btn btn-outline-info" onclick="previewMigration()"
                                 aria-label="Preview da migração">
-                                <i class="bi bi-search" aria-hidden="true"></i> Preview
+                                <span class="bi bi-search" aria-hidden="true"></span> Preview
                             </button>
 
                             <form th:action="@{/admin-web/migrate-sqlite}" method="post" class="d-inline-block"
-                                onsubmit="return confirm('Rodar migração em DRY-RUN (não grava nada)?')">
+                                data-confirm="Rodar migração em DRY-RUN (não grava nada)?">
                                 <input type="hidden" name="dryRun" value="true">
                                 <button type="submit" class="btn btn-outline-warning">
-                                    <i class="bi bi-clipboard-check" aria-hidden="true"></i> Dry-run
+                                    <span class="bi bi-clipboard-check" aria-hidden="true"></span> Dry-run
                                 </button>
                             </form>
 
                             <form th:action="@{/admin-web/migrate-sqlite}" method="post" class="d-inline-block"
-                                onsubmit="return confirm('⚠️ Rodar migração REAL? Isso vai gravar nos bancos novos.')">
+                                data-confirm="⚠️ Rodar migração REAL? Isso vai gravar nos bancos novos.">
                                 <input type="hidden" name="dryRun" value="false">
                                 <button type="submit" class="btn btn-danger">
-                                    <i class="bi bi-database-add" aria-hidden="true"></i> Migrar de verdade
+                                    <span class="bi bi-database-add" aria-hidden="true"></span> Migrar de verdade
                                 </button>
                             </form>
                         </div>
 
-                        <div id="migrationPreview" class="result-box mt-3" style="display:none"></div>
+                        <output id="migrationPreview" class="result-box d-block" style="display:none"
+                            aria-live="polite"></output>
                     </div>
                 </div>
             </div>
 
             <!-- ==================== ABA MONITOR ==================== -->
             <div class="tab-pane fade" id="monitor" role="tabpanel" aria-labelledby="tab-monitor">
-                <div class="btn-group-vertical-mobile mt-2 mb-2" role="group" aria-label="Monitoramento">
+                <fieldset class="btn-group-vertical-mobile mt-2 mb-2" aria-label="Monitoramento">
+                    <legend class="sr-only">Monitoramento</legend>
                     <a href="/admin-web/cache-stats" target="_blank" class="btn btn-outline-info">
-                        <i class="bi bi-database" aria-hidden="true"></i> Cache Stats
+                        <span class="bi bi-database" aria-hidden="true"></span> Cache Stats
                     </a>
                     <a href="/admin-web/properties" target="_blank" class="btn btn-outline-info">
-                        <i class="bi bi-gear" aria-hidden="true"></i> Propriedades
+                        <span class="bi bi-gear" aria-hidden="true"></span> Propriedades
                     </a>
                     <a href="/admin-web/config-files" target="_blank" class="btn btn-outline-info">
-                        <i class="bi bi-file-earmark-code" aria-hidden="true"></i> Arquivos de Config
+                        <span class="bi bi-file-earmark-code" aria-hidden="true"></span> Arquivos de Config
                     </a>
                     <a href="/admin-web/auto-response-rules" target="_blank" class="btn btn-outline-info">
-                        <i class="bi bi-list-ul" aria-hidden="true"></i> Regras Auto-Response
+                        <span class="bi bi-list-ul" aria-hidden="true"></span> Regras Auto-Response
                     </a>
                     <a href="#admin" class="btn btn-outline-warning" data-bs-toggle="tab" role="tab"
                         onclick="setTimeout(() => document.getElementById('uploadTarget').focus(), 150)">
-                        <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Substituir arquivo JSON
+                        <span class="bi bi-cloud-arrow-up" aria-hidden="true"></span> Substituir arquivo JSON
                     </a>
-                </div>
+                </fieldset>
 
                 <div class="card mt-3">
                     <div class="card-header">
-                        <i class="bi bi-bug" aria-hidden="true"></i> Debug Cache (por fileId)
+                        <span class="bi bi-bug" aria-hidden="true"></span> Debug Cache (por fileId)
                     </div>
                     <div class="card-body">
                         <form onsubmit="debugCache(event, this)" class="row g-2 align-items-center">
                             <div class="col-auto flex-grow-1">
-                                <input type="text" class="form-control" name="fileId"
+                                <label for="debugCacheFileId" class="visually-hidden">fileId do Telegram</label>
+                                <input type="text" class="form-control" id="debugCacheFileId" name="fileId"
                                     placeholder="fileId do Telegram (ex: AwACAgEAAyEFAAT...)" required>
                             </div>
                             <div class="col-auto">
                                 <button type="submit" class="btn btn-info">
-                                    <i class="bi bi-search" aria-hidden="true"></i> Consultar cache
+                                    <span class="bi bi-search" aria-hidden="true"></span> Consultar cache
                                 </button>
                             </div>
                         </form>
-                        <div id="cacheDebugResult" class="result-box mt-3" style="display:none"></div>
+                        <output id="cacheDebugResult" class="result-box d-block" style="display:none"
+                            aria-live="polite"></output>
                     </div>
                 </div>
             </div>
@@ -1293,19 +1312,18 @@
                 <!-- Barra de ações -->
                 <div class="d-flex flex-wrap align-items-center gap-2 mt-2 mb-3">
                     <button type="button" class="btn btn-primary" onclick="openReminderModal()">
-                        <i class="bi bi-plus-circle" aria-hidden="true"></i> Novo Anúncio
+                        <span class="bi bi-plus-circle" aria-hidden="true"></span> Novo Anúncio
                     </button>
                     <button type="button" class="btn btn-outline-secondary" onclick="loadReminders()">
-                        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Recarregar
+                        <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Recarregar
                     </button>
                     <button type="button" class="btn btn-outline-info" onclick="reloadRemindersFromDisk()">
-                        <i class="bi bi-hdd" aria-hidden="true"></i> Recarregar do disco
+                        <span class="bi bi-hdd" aria-hidden="true"></span> Recarregar do disco
                     </button>
-                    <!-- 🆕 Atalho para o lembrete semanal (antigo "Lembretes") -->
                     <button type="button" class="btn btn-outline-warning btn-sm"
                         onclick="openReminderModal('quatro-horas-quarta')"
                         title="Editar o lembrete semanal (antigo 'Lembretes')">
-                        <i class="bi bi-bell" aria-hidden="true"></i> Editar "Quatro Horas de Quarta"
+                        <span class="bi bi-bell" aria-hidden="true"></span> Editar "Quatro Horas de Quarta"
                     </button>
                     <span class="text-muted small ms-auto" id="remindersStatus" aria-live="polite"></span>
                 </div>
@@ -1313,21 +1331,19 @@
                 <!-- Container da lista -->
                 <div id="remindersContainer" aria-live="polite" aria-busy="true">
                     <div class="text-center p-4">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Carregando anúncios...</span>
-                        </div>
+                        <output class="spinner-border text-primary" aria-label="Carregando anúncios"></output>
                     </div>
                 </div>
 
                 <!-- Painel de diagnóstico (status) -->
                 <details class="mt-3">
                     <summary class="text-muted small" style="cursor: pointer;">
-                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        <span class="bi bi-info-circle" aria-hidden="true"></span>
                         Diagnóstico (total vs. agendados)
                     </summary>
-                    <div id="remindersDiagnostics" class="result-box mt-2" aria-live="polite">
+                    <output id="remindersDiagnostics" class="result-box d-block mt-2" aria-live="polite">
                         <span class="text-muted small">Clique para carregar.</span>
-                    </div>
+                    </output>
                 </details>
             </div>
 
@@ -1339,7 +1355,7 @@
 
                         <div class="modal-header">
                             <h5 class="modal-title" id="reminderModalLabel">
-                                <i class="bi bi-megaphone" aria-hidden="true"></i>
+                                <span class="bi bi-megaphone" aria-hidden="true"></span>
                                 <span id="reminderModalTitle">Novo Anúncio</span>
                             </h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"
@@ -1462,7 +1478,7 @@
                                     Cancelar
                                 </button>
                                 <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-check-lg" aria-hidden="true"></i> Salvar
+                                    <span class="bi bi-check-lg" aria-hidden="true"></span> Salvar
                                 </button>
                             </div>
                         </form>
@@ -1476,10 +1492,12 @@
         <footer class="text-muted text-center py-3">
             <small>&copy; 2026 T-Mill Bot — Painel Administrativo</small>
         </footer>
-    </div>
+    </main>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script th:src="@{/js/bootstrap.bundle.min.js}"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
     <script>
         (function () {
             "use strict";
@@ -1535,8 +1553,6 @@
 
             // ================================================================
             // FETCH SEGURO — sempre lê como texto e tenta parsear JSON
-            // 🔧 FIX: evita o erro "Unexpected token '<'" quando o servidor
-            // devolve HTML (login, erro do Spring) em vez de JSON.
             // ================================================================
             async function fetchJson(url, options) {
                 var resp = await fetch(url, options);
@@ -1546,7 +1562,6 @@
                 try {
                     data = text ? JSON.parse(text) : {};
                 } catch (e) {
-                    // Servidor devolveu algo que não é JSON (provavelmente HTML de login/erro)
                     var preview = text.substring(0, 200).replace(/\s+/g, ' ');
                     var msg =
                         'Servidor retornou HTTP ' + resp.status +
@@ -1574,13 +1589,35 @@
             });
 
             // ================================================================
+            // CONFIRM DATA-ATTR (substitui onsubmit="return confirm(...)")
+            // ================================================================
+            document.addEventListener('DOMContentLoaded', function () {
+                document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+                    form.addEventListener('submit', function (e) {
+                        if (!confirm(form.dataset.confirm)) {
+                            e.preventDefault();
+                        }
+                    });
+                });
+                document.querySelectorAll('button[data-confirm]').forEach(function (btn) {
+                    var form = btn.closest('form');
+                    if (!form) return;
+                    form.addEventListener('submit', function (e) {
+                        if (!confirm(btn.dataset.confirm)) {
+                            e.preventDefault();
+                        }
+                    });
+                });
+            });
+
+            // ================================================================
             // AJAX GENÉRICO (fala-t1000, tts, etc.)
             // ================================================================
             window.submitAction = async function (event, url, form) {
                 event.preventDefault();
                 var formData = new FormData(form);
                 var params = new URLSearchParams(formData);
-                var resultDiv = form.parentElement.querySelector('[id$="Result"]');
+                var resultDiv = form.parentElement.querySelector('output[id$="Result"]');
                 var spinner = form.querySelector('.spinner');
 
                 if (spinner) {
@@ -1588,7 +1625,7 @@
                     form.setAttribute('aria-busy', 'true');
                 }
                 if (resultDiv) {
-                    resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+                    resultDiv.innerHTML = '<span class="spinner-border text-primary" role="status"></span>';
                 }
 
                 try {
@@ -1623,7 +1660,7 @@
                     time: document.getElementById('debugTime').value
                 });
                 var resultDiv = document.getElementById('debugResult');
-                resultDiv.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+                resultDiv.innerHTML = '<span class="spinner-border text-primary" role="status"></span>';
 
                 try {
                     var data = await fetchJson('/admin-web/debug-auto-response?' + params.toString());
@@ -1657,22 +1694,33 @@
                             '<td>' + dia + '/' + mes + '</td>' +
                             '<td>' + (b.lastSentYear || '-') + '</td>' +
                             '<td>' +
-                            '<form action="/admin-web/delete-birthday" method="post" style="display:inline">' +
+                            '<form action="/admin-web/delete-birthday" method="post" style="display:inline" ' +
+                            'data-confirm="Remover aniversário?">' +
                             csrfFields +
                             '<input type="hidden" name="userId" value="' + b.userId + '">' +
                             '<button type="submit" class="btn btn-sm btn-outline-danger" ' +
-                            'onclick="return confirm(\'Remover aniversário?\')">' +
-                            '<i class="bi bi-trash3"></i>' +
+                            'aria-label="Remover aniversário de ' + escapeHtml(b.userName) + '">' +
+                            '<span class="bi bi-trash3" aria-hidden="true"></span>' +
                             '</button></form></td></tr>';
                     }).join('');
 
                     container.innerHTML =
                         '<table class="table table-sm mb-0">' +
-                        '<thead><tr><th>Nome</th><th>Data</th><th>Último envio</th><th></th></tr></thead>' +
+                        '<thead><tr><th scope="col">Nome</th><th scope="col">Data</th>' +
+                        '<th scope="col">Último envio</th><th scope="col"><span class="visually-hidden">Ações</span></th>' +
+                        '</tr></thead>' +
                         '<tbody>' + rows + '</tbody></table>' +
                         '<p class="text-muted small mt-2 mb-0">Total: ' + data.total + '</p>';
+
+                    container.querySelectorAll('form[data-confirm]').forEach(function (form) {
+                        form.addEventListener('submit', function (e) {
+                            if (!confirm(form.dataset.confirm)) e.preventDefault();
+                        });
+                    });
                 } catch (e) {
                     container.innerHTML = '<div class="alert alert-danger mb-0">Erro: ' + e.message + '</div>';
+                } finally {
+                    container.removeAttribute('aria-busy');
                 }
             };
 
@@ -1682,17 +1730,20 @@
             window.loadFeatureFlags = async function () {
                 var container = document.getElementById('featureFlagsContainer');
                 if (!container) return;
+                container.setAttribute('aria-busy', 'true');
                 container.innerHTML = '<div class="text-center p-3">' +
-                    '<div class="spinner-border text-primary" role="status"></div></div>';
+                    '<span class="spinner-border text-primary" role="status"></span></div>';
 
                 try {
                     var data = await fetchJson('/admin-web/features');
                     renderFeatureFlags(container, data);
                 } catch (e) {
                     container.innerHTML = '<div class="alert alert-warning m-3 mb-0">' +
-                        '<i class="bi bi-info-circle"></i> ' +
+                        '<span class="bi bi-info-circle" aria-hidden="true"></span> ' +
                         'Erro ao carregar feature flags: ' + e.message +
                         '</div>';
+                } finally {
+                    container.removeAttribute('aria-busy');
                 }
             };
 
@@ -1705,18 +1756,21 @@
                 Object.keys(flags).sort().forEach(function (key) {
                     var f = flags[key];
                     var checked = f.enabled ? 'checked' : '';
-                    var disabled = f.readOnly ? 'disabled' : '';
+                    var disabled = f.readOnly ? 'disabled aria-disabled="true"' : '';
+                    var ariaChecked = f.enabled ? 'true' : 'false';
                     var roBadge = f.readOnly
                         ? '<span class="badge text-bg-warning ms-2">read-only</span>'
                         : '';
                     html += '<div class="feature-flag-row">' +
                         '<div class="flex-grow-1 me-3">' +
-                        '<div class="flag-name">' + key + roBadge + '</div>' +
-                        '<div class="flag-desc">' + (f.description || '') + '</div>' +
+                        '<div class="flag-name">' + escapeHtml(key) + roBadge + '</div>' +
+                        '<div class="flag-desc">' + escapeHtml(f.description || '') + '</div>' +
                         '</div>' +
                         '<div class="form-check form-switch">' +
                         '<input class="form-check-input" type="checkbox" role="switch" ' +
-                        'id="flag-' + key + '" ' + checked + ' ' + disabled + ' ' +
+                        'id="flag-' + escapeHtml(key) + '" ' + checked + ' ' + disabled + ' ' +
+                        'aria-checked="' + ariaChecked + '" ' +
+                        'aria-label="Ativar/desativar flag ' + escapeHtml(key) + '" ' +
                         'onchange="toggleFeatureFlag(\'' + key + '\', this.checked, this)">' +
                         '</div></div>';
                 });
@@ -1726,7 +1780,6 @@
             window.toggleFeatureFlag = async function (key, enabled, checkbox) {
                 checkbox.disabled = true;
                 try {
-                    // 🔧 FIX: usa fetchJson (que trata resposta não-JSON com mensagem clara)
                     var data = await fetchJson('/admin/features/' + encodeURIComponent(key), {
                         method: 'POST',
                         headers: Object.assign(
@@ -1735,6 +1788,7 @@
                         ),
                         body: 'enabled=' + enabled
                     });
+                    checkbox.setAttribute('aria-checked', data.enabled ? 'true' : 'false');
                     showToast(
                         'Flag "' + key + '" ' + (data.enabled ? 'ativada' : 'desativada'),
                         'success'
@@ -1742,6 +1796,7 @@
                 } catch (e) {
                     showToast('Erro ao alterar flag: ' + e.message, 'danger');
                     checkbox.checked = !enabled;
+                    checkbox.setAttribute('aria-checked', (!enabled) ? 'true' : 'false');
                 } finally {
                     checkbox.disabled = false;
                 }
@@ -1773,7 +1828,7 @@
             window.previewMigration = async function () {
                 var div = document.getElementById('migrationPreview');
                 div.style.display = 'block';
-                div.innerHTML = '<div class="spinner-border text-info" role="status"></div>';
+                div.innerHTML = '<span class="spinner-border text-info" role="status"></span>';
                 try {
                     var data = await fetchJson('/admin-web/migrate-sqlite/preview');
                     div.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
@@ -1790,7 +1845,7 @@
                 var fileId = form.fileId.value;
                 var div = document.getElementById('cacheDebugResult');
                 div.style.display = 'block';
-                div.innerHTML = '<div class="spinner-border text-info" role="status"></div>';
+                div.innerHTML = '<span class="spinner-border text-info" role="status"></span>';
                 try {
                     var data = await fetchJson('/admin-web/debug/cache/' + encodeURIComponent(fileId));
                     div.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
@@ -1814,6 +1869,20 @@
             };
 
             // ================================================================
+            // ESCAPE HTML (helper global)
+            // ================================================================
+            if (typeof window.escapeHtml !== 'function') {
+                window.escapeHtml = function (s) {
+                    return String(s == null ? '' : s)
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#39;');
+                };
+            }
+
+            // ================================================================
             // ANÚNCIOS (REMINDERS) — CRUD + agendamento dinâmico
             // ================================================================
             (function () {
@@ -1821,27 +1890,21 @@
 
                 var API = '/admin/reminders';
 
-                // Referências cacheadas
                 var modalEl = null;
                 var modal = null;
                 var editingId = null;
                 var availableChatIds = [];
 
-                // ============================================================
-                // BOOTSTRAP DO MÓDULO
-                // ============================================================
                 function initRemindersModule() {
                     modalEl = document.getElementById('reminderModal');
                     if (modalEl) {
                         modal = new bootstrap.Modal(modalEl);
                     }
-                    // Lista de chats disponíveis vem do Thymeleaf (já no DOM)
                     availableChatIds = collectAvailableChatIds();
                     populateChatsSelect();
                 }
 
                 function collectAvailableChatIds() {
-                    // Coleta de todos os <select name="chatId"> do painel e do Thymeleaf
                     var ids = new Set();
                     document.querySelectorAll('select[name="chatId"] option').forEach(function (opt) {
                         var v = (opt.value || '').trim();
@@ -1866,9 +1929,6 @@
                     });
                 }
 
-                // ============================================================
-                // LISTAGEM
-                // ============================================================
                 window.loadReminders = async function () {
                     var container = document.getElementById('remindersContainer');
                     var status = document.getElementById('remindersStatus');
@@ -1876,8 +1936,8 @@
 
                     container.setAttribute('aria-busy', 'true');
                     container.innerHTML = '<div class="text-center p-4">' +
-                        '<div class="spinner-border text-primary" role="status">' +
-                        '<span class="visually-hidden">Carregando anúncios...</span></div></div>';
+                        '<span class="spinner-border text-primary" role="status">' +
+                        '</span></div>';
 
                     try {
                         var data = await fetchJson(API);
@@ -1885,7 +1945,7 @@
                         if (status) status.textContent = data.length + ' anúncio(s)';
                     } catch (e) {
                         container.innerHTML = '<div class="alert alert-danger mb-0">' +
-                            '<i class="bi bi-exclamation-triangle" aria-hidden="true"></i> ' +
+                            '<span class="bi bi-exclamation-triangle" aria-hidden="true"></span> ' +
                             'Erro ao carregar anúncios: ' + escapeHtml(e.message) + '</div>';
                         if (status) status.textContent = '';
                     } finally {
@@ -1897,7 +1957,7 @@
                     var container = document.getElementById('remindersContainer');
                     if (!reminders || reminders.length === 0) {
                         container.innerHTML = '<div class="alert alert-light border mb-0 text-center">' +
-                            '<i class="bi bi-inbox" aria-hidden="true"></i> ' +
+                            '<span class="bi bi-inbox" aria-hidden="true"></span> ' +
                             'Nenhum anúncio cadastrado. Clique em <b>Novo Anúncio</b> para começar.</div>';
                         return;
                     }
@@ -1923,22 +1983,17 @@
                             '<button type="button" class="btn btn-sm btn-outline-secondary me-1" ' +
                             'onclick="toggleReminder(\'' + safeId + '\', ' + (!r.enabled) + ')" ' +
                             'aria-label="' + (r.enabled ? 'Desabilitar' : 'Habilitar') + ' anúncio ' + safeId + '">' +
-                            '<i class="bi bi-' + (r.enabled ? 'pause' : 'play') + '" aria-hidden="true"></i>' +
-                            '</button>' +
-                            '<button type="button" class="btn btn-sm btn-outline-success me-1" ' +
-                            'onclick="testReminder(\'' + safeId + '\')" ' +
-                            'aria-label="Testar anúncio ' + safeId + '">' +
-                            '<i class="bi bi-send" aria-hidden="true"></i>' +
+                            '<span class="bi bi-' + (r.enabled ? 'pause' : 'play') + '" aria-hidden="true"></span>' +
                             '</button>' +
                             '<button type="button" class="btn btn-sm btn-outline-primary me-1" ' +
                             'onclick="openReminderModal(\'' + safeId + '\')" ' +
                             'aria-label="Editar anúncio ' + safeId + '">' +
-                            '<i class="bi bi-pencil" aria-hidden="true"></i>' +
+                            '<span class="bi bi-pencil" aria-hidden="true"></span>' +
                             '</button>' +
                             '<button type="button" class="btn btn-sm btn-outline-danger" ' +
                             'onclick="deleteReminder(\'' + safeId + '\')" ' +
                             'aria-label="Excluir anúncio ' + safeId + '">' +
-                            '<i class="bi bi-trash3" aria-hidden="true"></i>' +
+                            '<span class="bi bi-trash3" aria-hidden="true"></span>' +
                             '</button>' +
                             '</td></tr>';
                     }).join('');
@@ -1958,9 +2013,6 @@
                         '</table></div>';
                 }
 
-                // ============================================================
-                // MODAL (criar / editar)
-                // ============================================================
                 window.openReminderModal = async function (id) {
                     if (!modal) {
                         showToast('Modal não disponível. Recarregue a página.', 'danger');
@@ -1992,6 +2044,7 @@
 
                     document.getElementById('reminderId').disabled = false;
                     document.getElementById('reminderEnabled').checked = true;
+                    document.getElementById('reminderEnabled').setAttribute('aria-checked', 'true');
                     document.getElementById('reminderTimezone').value = 'America/Sao_Paulo';
                     document.getElementById('reminderId').value = '';
                     document.getElementById('reminderName').value = '';
@@ -2003,7 +2056,6 @@
                     var err = document.getElementById('reminderFormError');
                     if (err) { err.style.display = 'none'; err.textContent = ''; }
 
-                    // Recarrega chats e limpa seleção
                     populateChatsSelect();
                     Array.from(document.getElementById('reminderChats').options).forEach(function (o) {
                         o.selected = false;
@@ -2012,19 +2064,18 @@
 
                 function fillReminderForm(r) {
                     document.getElementById('reminderId').value = r.id || '';
-                    document.getElementById('reminderId').disabled = true; // não permite rename
+                    document.getElementById('reminderId').disabled = true;
                     document.getElementById('reminderName').value = r.name || '';
                     document.getElementById('reminderEnabled').checked = !!r.enabled;
+                    document.getElementById('reminderEnabled').setAttribute('aria-checked', r.enabled ? 'true' : 'false');
                     document.getElementById('reminderCron').value = r.cron || '';
                     document.getElementById('reminderTimezone').value = r.timezone || 'America/Sao_Paulo';
                     document.getElementById('reminderMessage').value = r.message || '';
                     document.getElementById('reminderMediaUrl').value = r.mediaUrl || '';
                     document.getElementById('reminderTags').value = (r.tags || []).join(', ');
 
-                    // Marca os chats alvo
                     var sel = document.getElementById('reminderChats');
                     var alvo = new Set(r.targetChatIds || []);
-                    // Adiciona chats do anúncio que não estão na lista global
                     alvo.forEach(function (id) {
                         if (!availableChatIds.includes(id)) {
                             var opt = document.createElement('option');
@@ -2038,9 +2089,6 @@
                     });
                 }
 
-                // ============================================================
-                // SALVAR (criar ou atualizar)
-                // ============================================================
                 window.saveReminder = async function (event) {
                     event.preventDefault();
 
@@ -2094,17 +2142,8 @@
                         modal.hide();
                         await loadReminders();
                     } catch (e) {
-                        if (e.message.includes("Conflito de versão")) {
-                            showToast('O anúncio foi alterado em outra aba. Recarregando dados...', 'warning');
-                            // Recarrega os dados do servidor e preenche o formulário novamente
-                            const r = await fetchJson(API + '/' + encodeURIComponent(editingId));
-                            fillReminderForm(r);
-                            errDiv.textContent = "O registro foi atualizado para a versão mais recente. Clique em Salvar novamente.";
-                            errDiv.style.display = 'block';
-                        } else {
-                            errDiv.textContent = e.message;
-                            errDiv.style.display = 'block';
-                        }
+                        errDiv.textContent = e.message;
+                        errDiv.style.display = 'block';
                     }
                 };
 
@@ -2124,9 +2163,6 @@
                     return null;
                 }
 
-                // ============================================================
-                // TOGGLE
-                // ============================================================
                 window.toggleReminder = async function (id, enabled) {
                     try {
                         await fetchJson(API + '/' + encodeURIComponent(id) + '/toggle?enabled=' + enabled, {
@@ -2140,9 +2176,6 @@
                     }
                 };
 
-                // ============================================================
-                // EXCLUIR
-                // ============================================================
                 window.deleteReminder = async function (id) {
                     if (!confirm('Excluir o anúncio "' + id + '"?\n\nEssa ação remove o agendamento imediatamente.')) {
                         return;
@@ -2159,37 +2192,6 @@
                     }
                 };
 
-                // ============================================================
-                // TESTAR ANÚNCIO MANUALMENTE
-                // ============================================================
-                window.testReminder = async function (id) {
-                    // Pergunta para qual chat enviar o teste (default: showcase)
-                    const defaultChat = availableChatIds.length > 0 ? availableChatIds[0] : "";
-                    const chatId = prompt("Para qual Chat ID deseja enviar este teste?\n(Deixe vazio para usar o padrão do sistema)", defaultChat);
-
-                    if (chatId === null) return; // usuário cancelou
-
-                    const targetChat = chatId.trim();
-                    if (!targetChat) {
-                        showToast("Chat ID é obrigatório para teste.", "warning");
-                        return;
-                    }
-
-                    try {
-                        showToast("Enviando teste...", "info");
-                        await fetchJson(API + '/' + encodeURIComponent(id) + '/test?chatId=' + targetChat, {
-                            method: 'POST',
-                            headers: csrfHeaders()
-                        });
-                        showToast('✅ Teste enviado com sucesso!', 'success');
-                    } catch (e) {
-                        showToast('Erro ao testar: ' + e.message, 'danger');
-                    }
-                };
-
-                // ============================================================
-                // RECARREGAR DO DISCO
-                // ============================================================
                 window.reloadRemindersFromDisk = async function () {
                     if (!confirm('Recarregar os anúncios do disco?\n\nAlterações não salvas em memória serão perdidas.')) {
                         return;
@@ -2206,9 +2208,6 @@
                     }
                 };
 
-                // ============================================================
-                // DIAGNÓSTICO (total vs. agendados)
-                // ============================================================
                 function loadRemindersDiagnostics() {
                     var el = document.getElementById('remindersDiagnostics');
                     if (!el) return;
@@ -2227,23 +2226,6 @@
                     });
                 }
 
-                // ============================================================
-                // HELPER — escapeHtml (se ainda não existir no admin.html)
-                // ============================================================
-                if (typeof window.escapeHtml !== 'function') {
-                    window.escapeHtml = function (s) {
-                        return String(s == null ? '' : s)
-                            .replace(/&/g, '&amp;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;')
-                            .replace(/"/g, '&quot;')
-                            .replace(/'/g, '&#39;');
-                    };
-                }
-
-                // ============================================================
-                // REGISTRO DOS LISTENERS DE BOOT
-                // ============================================================
                 document.addEventListener('DOMContentLoaded', function () {
                     initRemindersModule();
 
