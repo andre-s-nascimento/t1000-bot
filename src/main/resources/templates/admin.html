@@ -378,6 +378,100 @@
             padding-left: 0.75rem;
             margin-top: 1rem;
         }
+
+        /* ============================================================
+           Fase 2a — MOBILE BASE (a11y + responsividade)
+           ============================================================ */
+
+        /* iOS: evita zoom automático ao focar input (font-size < 16px) */
+        @media (max-width: 767.98px) {
+
+            .form-control,
+            .form-select,
+            textarea {
+                font-size: 16px !important;
+            }
+
+            /* Alvos de toque mínimos (WCAG 2.5.5) */
+            .btn,
+            .nav-link,
+            .btn-close {
+                min-height: 44px;
+                min-width: 44px;
+            }
+
+            .btn-sm {
+                min-height: 40px;
+                min-width: 40px;
+            }
+
+            .form-check-input[role="switch"] {
+                min-height: 32px;
+                min-width: 56px;
+            }
+
+            /* Cards ocupam largura toda com respiro */
+            .row>[class*="col-"] {
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+
+            /* Status bar quebra em coluna sem bagunça */
+            .status-bar {
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            /* Tabelas: scroll horizontal controlado + toque suave */
+            .table-responsive {
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+
+        /* Abas com scroll-snap para parar em cada aba */
+        .nav-tabs {
+            scroll-snap-type: x proximity;
+        }
+
+        .nav-tabs .nav-item {
+            scroll-snap-align: start;
+        }
+
+        /* Indicador visual de overflow à direita (mobile/tablet) */
+        .nav-tabs-wrapper {
+            position: relative;
+        }
+
+        .nav-tabs-wrapper::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 32px;
+            background: linear-gradient(to right, transparent, var(--bs-body-bg));
+            pointer-events: none;
+            opacity: 0.9;
+            border-radius: 0 0.5rem 0 0;
+        }
+
+        @media (min-width: 992px) {
+            .nav-tabs-wrapper::after {
+                display: none;
+                /* desktop: tudo cabe, sem fade */
+            }
+        }
+
+        /* Modal: rodapé sticky em mobile para "Salvar/Cancelar" sempre visível */
+        @media (max-width: 575.98px) {
+            .modal-dialog-scrollable .modal-footer {
+                position: sticky;
+                bottom: 0;
+                background: var(--bs-body-bg);
+                z-index: 2;
+                border-top: 1px solid var(--bs-border-color);
+            }
+        }
     </style>
 </head>
 
@@ -444,49 +538,50 @@
         </div>
 
         <!-- TABS -->
-        <ul class="nav nav-tabs" id="adminTabs" role="tablist" aria-label="Navegação por abas">
-            <li class="nav-item" role="presentation">
-                <a class="nav-link active" id="tab-mensagens" data-bs-toggle="tab" href="#mensagens" role="tab"
-                    aria-controls="mensagens" aria-selected="true">📨 Mensagens</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-copa" data-bs-toggle="tab" href="#copa" role="tab" aria-controls="copa"
-                    aria-selected="false">⚽ Copa</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-digest" data-bs-toggle="tab" href="#digest" role="tab"
-                    aria-controls="digest" aria-selected="false">📰 Digest</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-auto" data-bs-toggle="tab" href="#auto" role="tab" aria-controls="auto"
-                    aria-selected="false">🤖 Auto-Response</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-aniversarios" data-bs-toggle="tab" href="#aniversarios" role="tab"
-                    aria-controls="aniversarios" aria-selected="false">🎂 Aniversários</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-features" data-bs-toggle="tab" href="#features" role="tab"
-                    aria-controls="features" aria-selected="false">🎛️ Features</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-admin" data-bs-toggle="tab" href="#admin" role="tab" aria-controls="admin"
-                    aria-selected="false">⚙️ Admin</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-mod" data-bs-toggle="tab" href="#moderacao" role="tab"
-                    aria-controls="moderacao" aria-selected="false">🔨 Moderação</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-monitor" data-bs-toggle="tab" href="#monitor" role="tab"
-                    aria-controls="monitor" aria-selected="false">📊 Monitor</a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link" id="tab-reminders" data-bs-toggle="tab" href="#reminders" role="tab"
-                    aria-controls="reminders" aria-selected="false">📢 Anúncios</a>
-            </li>
-        </ul>
-
+        <div class="nav-tabs-wrapper">
+            <ul class="nav nav-tabs" id="adminTabs" role="tablist" aria-label="Navegação por abas">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link active" id="tab-mensagens" data-bs-toggle="tab" href="#mensagens" role="tab"
+                        aria-controls="mensagens" aria-selected="true">📨 Mensagens</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-copa" data-bs-toggle="tab" href="#copa" role="tab" aria-controls="copa"
+                        aria-selected="false">⚽ Copa</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-digest" data-bs-toggle="tab" href="#digest" role="tab"
+                        aria-controls="digest" aria-selected="false">📰 Digest</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-auto" data-bs-toggle="tab" href="#auto" role="tab" aria-controls="auto"
+                        aria-selected="false">🤖 Auto-Response</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-aniversarios" data-bs-toggle="tab" href="#aniversarios" role="tab"
+                        aria-controls="aniversarios" aria-selected="false">🎂 Aniversários</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-features" data-bs-toggle="tab" href="#features" role="tab"
+                        aria-controls="features" aria-selected="false">🎛️ Features</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-admin" data-bs-toggle="tab" href="#admin" role="tab"
+                        aria-controls="admin" aria-selected="false">⚙️ Admin</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-mod" data-bs-toggle="tab" href="#moderacao" role="tab"
+                        aria-controls="moderacao" aria-selected="false">🔨 Moderação</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-monitor" data-bs-toggle="tab" href="#monitor" role="tab"
+                        aria-controls="monitor" aria-selected="false">📊 Monitor</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="tab-reminders" data-bs-toggle="tab" href="#reminders" role="tab"
+                        aria-controls="reminders" aria-selected="false">📢 Anúncios</a>
+                </li>
+            </ul>
+        </div>
         <div class="tab-content">
 
             <!-- ==================== ABA MENSAGENS ==================== -->
