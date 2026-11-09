@@ -380,6 +380,62 @@
         }
 
         /* ============================================================
+           Fase 3 — Feature Flags (feedback visual)
+           ============================================================ */
+
+        /* Estado padrão: elemento habilitado (sem estilo extra) */
+        [data-feature] {
+            transition: opacity 0.2s ease;
+        }
+
+        /* Módulo desabilitado via feature flag:
+           - opacidade reduzida
+           - não clicável
+           - cursor padrão
+           - não focável via teclado (os filhos são disabled no JS) */
+        [data-feature-disabled="true"] {
+            opacity: 0.45;
+            position: relative;
+        }
+
+        [data-feature-disabled="true"] * {
+            pointer-events: none;
+        }
+
+        /* Badge de cadeado visível (não depende de title, funciona em touch) */
+        .feature-off-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-left: 0.5rem;
+            padding: 0.15rem 0.4rem;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--bs-secondary-color);
+            background: var(--bs-tertiary-bg);
+            border: 1px solid var(--bs-border-color-translucent);
+            border-radius: 0.35rem;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        /* Em telas pequenas, o badge pode quebrar para a linha de baixo */
+        @media (max-width: 575.98px) {
+            .feature-off-badge {
+                display: block;
+                margin-left: 0;
+                margin-top: 0.25rem;
+                width: fit-content;
+            }
+        }
+
+        /* Feedback visual no hover do card (não interativo) */
+        [data-feature-disabled="true"]:hover {
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+            /* sem "elevação" */
+        }
+
+        /* ============================================================
            Fase 2a — MOBILE BASE (a11y + responsividade)
            ============================================================ */
 
@@ -544,7 +600,7 @@
                     <a class="nav-link active" id="tab-mensagens" data-bs-toggle="tab" href="#mensagens" role="tab"
                         aria-controls="mensagens" aria-selected="true">📨 Mensagens</a>
                 </li>
-                <li class="nav-item" role="presentation">
+                <li class="nav-item" role="presentation" data-feature="reminders.enabled">
                     <a class="nav-link" id="tab-reminders" data-bs-toggle="tab" href="#reminders" role="tab"
                         aria-controls="reminders" aria-selected="false">📢 Anúncios</a>
                 </li>
@@ -552,12 +608,12 @@
                     <a class="nav-link" id="tab-digest" data-bs-toggle="tab" href="#digest" role="tab"
                         aria-controls="digest" aria-selected="false">📰 Digest</a>
                 </li>
-                <li class="nav-item" role="presentation">
+                <li class="nav-item" role="presentation" data-feature="worldcup.enabled">
                     <a class="nav-link" id="tab-copa" data-bs-toggle="tab" href="#copa" role="tab" aria-controls="copa"
                         aria-selected="false">⚽ Copa</a>
                 </li>
 
-                <li class="nav-item" role="presentation">
+                <li class="nav-item" role="presentation" data-feature="auto.response.enabled">
                     <a class="nav-link" id="tab-auto" data-bs-toggle="tab" href="#auto" role="tab" aria-controls="auto"
                         aria-selected="false">🤖 Auto-Response</a>
                 </li>
@@ -630,9 +686,10 @@
                         </div>
                     </div>
                     <div class="col-12 col-md-6">
-                        <div class="card">
+                        <div class="card" data-feature="transcription.enabled">
                             <div class="card-header">
                                 <span class="bi bi-mic" aria-hidden="true"></span> Sintetizar e Enviar Áudio (TTS)
+                                <span class="feature-off-badge" hidden>🔒 Desativado</span>
                             </div>
                             <div class="card-body">
                                 <form id="ttsForm" onsubmit="submitAction(event, '/admin-web/fala-t1000-tts', this)"
@@ -664,7 +721,8 @@
                 </div>
                 <div class="row mt-2">
                     <div class="col-12 col-md-6">
-                        <form th:action="@{/admin-web/test-azure-tts}" method="post">
+                        <form th:action="@{/admin-web/test-azure-tts}" method="post"
+                            data-feature="transcription.enabled">
                             <button type="submit" class="btn btn-outline-secondary"
                                 aria-label="Testar Azure TTS com mensagem fixa">
                                 <span class="bi bi-cloud" aria-hidden="true"></span> Testar Azure TTS (fixo)
@@ -675,9 +733,12 @@
             </div>
 
             <!-- ==================== ABA COPA ==================== -->
-            <div class="tab-pane fade" id="copa" role="tabpanel" aria-labelledby="tab-copa">
-                <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações da Copa">
+            <div class="tab-pane fade" id="copa" role="tabpanel" aria-labelledby="tab-copa"
+                data-feature="worldcup.enabled">
+                <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações da Copa"
+                    data-feature="worldcup.enabled">
                     <legend class="sr-only">Ações da Copa</legend>
+                    <span class="feature-off-badge" hidden>🔒 Desativado</span>
                     <form th:action="@{/admin-web/test-worldcup}" method="post" class="d-inline-block">
                         <button type="submit" class="btn btn-warning" th:disabled="${!worldcupEnabled}"
                             aria-label="Enviar manual para todos os chats">
@@ -789,31 +850,35 @@
             <div class="tab-pane fade" id="digest" role="tabpanel" aria-labelledby="tab-digest">
                 <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações de Digest">
                     <legend class="sr-only">Ações de Digest</legend>
-                    <form th:action="@{/admin-web/test-morning-digest}" method="post" class="d-inline-block">
+                    <form th:action="@{/admin-web/test-morning-digest}" method="post" class="d-inline-block"
+                        data-feature="digest.enabled">
                         <button type="submit" class="btn btn-outline-primary">
                             <span class="bi bi-sunrise" aria-hidden="true"></span> Morning Digest
                         </button>
                     </form>
-                    <form th:action="@{/admin-web/test-evening-digest}" method="post" class="d-inline-block">
+                    <form th:action="@{/admin-web/test-evening-digest}" method="post" class="d-inline-block"
+                        data-feature="digest.enabled">
                         <button type="submit" class="btn btn-outline-primary">
                             <span class="bi bi-moon-stars" aria-hidden="true"></span> Evening Digest
                         </button>
                     </form>
-                    <form th:action="@{/admin-web/test-daily-releases}" method="post" class="d-inline-block">
+                    <form th:action="@{/admin-web/test-daily-releases}" method="post" class="d-inline-block"
+                        data-feature="daily.releases.enabled">
                         <button type="submit" class="btn btn-outline-success">
                             <span class="bi bi-calendar-day" aria-hidden="true"></span> Daily Releases
                         </button>
                     </form>
-                    <form th:action="@{/admin-web/test-weekly-digest}" method="post" class="d-inline-block">
+                    <form th:action="@{/admin-web/test-weekly-digest}" method="post" class="d-inline-block"
+                        data-feature="weekly.digest.enabled">
                         <button type="submit" class="btn btn-outline-success">
                             <span class="bi bi-calendar-week" aria-hidden="true"></span> Weekly Digest
                         </button>
                     </form>
                 </fieldset>
-
                 <div class="row mt-2">
                     <div class="col-12 col-md-8">
-                        <form th:action="@{/admin-web/custom-digest}" method="post" class="row g-2 align-items-center">
+                        <form th:action="@{/admin-web/custom-digest}" method="post" class="row g-2 align-items-center"
+                            data-feature="ai.digest.custom-period.enabled">
                             <div class="col-auto">
                                 <label for="customStart" class="visually-hidden">Data início</label>
                                 <input type="date" class="form-control" id="customStart" name="start" required>
@@ -842,7 +907,8 @@
 
 
             <!-- ==================== ABA AUTO-RESPONSE ==================== -->
-            <div class="tab-pane fade" id="auto" role="tabpanel" aria-labelledby="tab-auto">
+            <div class="tab-pane fade" id="auto" role="tabpanel" aria-labelledby="tab-auto"
+                data-feature="auto.response.enabled">
                 <div class="row g-3 mt-1">
                     <div class="col-12 col-md-6">
                         <div class="card">
@@ -937,9 +1003,10 @@
             <div class="tab-pane fade" id="aniversarios" role="tabpanel" aria-labelledby="tab-aniversarios">
                 <div class="row g-3 mt-1">
                     <div class="col-12 col-md-6">
-                        <div class="card">
+                        <div class="card" data-feature="birthday.enabled">
                             <div class="card-header">
                                 <span class="bi bi-cake2" aria-hidden="true"></span> Disparar Parabéns Manualmente
+                                <span class="feature-off-badge" hidden>🔒 Desativado</span>
                             </div>
                             <div class="card-body">
                                 <form th:action="@{/admin-web/test-birthday}" method="post"
@@ -1115,7 +1182,8 @@
                             <span class="bi bi-database-x" aria-hidden="true"></span> Limpar Todos os Dados
                         </button>
                     </form>
-                    <form th:action="@{/admin-web/reload-prompts}" method="post" class="d-inline-block">
+                    <form th:action="@{/admin-web/reload-prompts}" method="post" class="d-inline-block"
+                        data-feature="prompts.external.enabled">
                         <button type="submit" class="btn btn-warning">
                             <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Prompts
                         </button>
@@ -1125,7 +1193,8 @@
                             <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Auto-Responses
                         </button>
                     </form>
-                    <form th:action="@{/admin-web/reload-easter-eggs}" method="post" class="d-inline-block">
+                    <form th:action="@{/admin-web/reload-easter-eggs}" method="post" class="d-inline-block"
+                        data-feature="easter.eggs.enabled">
                         <button type="submit" class="btn btn-secondary">
                             <span class="bi bi-emoji-smile" aria-hidden="true"></span> Recarregar Easter Eggs
                         </button>
@@ -1133,9 +1202,10 @@
                 </fieldset>
 
                 <!-- Podcast -->
-                <div class="card mt-3">
+                <div class="card mt-3" data-feature="podcast.enabled">
                     <div class="card-header">
                         <span class="bi bi-podcast" aria-hidden="true"></span> Podcast
+                        <span class="feature-off-badge" hidden>🔒 Desativado</span>
                     </div>
                     <div class="card-body">
                         <form th:action="@{/admin-web/test-podcast}" method="post"
@@ -1190,10 +1260,11 @@
                         </div>
 
                         <!-- Reenvio de podcast por sexta-feira -->
-                        <div class="podcast-resend">
+                        <div class="podcast-resend" data-feature="podcast.fallback-text.enabled">
                             <h6 class="mb-2">
                                 <span class="bi bi-arrow-repeat" aria-hidden="true"></span>
                                 Reenviar Podcast por Semana
+                                <span class="feature-off-badge" hidden>🔒 Desativado</span>
                             </h6>
                             <p class="text-muted small mb-2">
                                 Escolha a <b>sexta-feira de referência</b> e o sistema gera o podcast
@@ -1319,9 +1390,10 @@
                     </div>
                 </div>
                 <!-- Migração -->
-                <div class="card mt-3">
+                <div class="card mt-3" data-feature="migration.enabled">
                     <div class="card-header">
                         <span class="bi bi-database-up" aria-hidden="true"></span> Migração SQLite → Postgres/Mongo
+                        <span class="feature-off-badge" hidden>🔒 Desativado</span>
                     </div>
                     <div class="card-body">
                         <div class="alert alert-warning small mb-3">
@@ -1381,9 +1453,10 @@
                     </a>
                 </fieldset>
 
-                <div class="card mt-3">
+                <div class="card mt-3" data-feature="admin.debug-cache.enabled">
                     <div class="card-header">
                         <span class="bi bi-bug" aria-hidden="true"></span> Debug Cache (por fileId)
+                        <span class="feature-off-badge" hidden>🔒 Desativado</span>
                     </div>
                     <div class="card-body">
                         <form onsubmit="debugCache(event, this)" class="row g-2 align-items-center">
@@ -1405,8 +1478,8 @@
             </div>
 
             <!-- ==================== ABA ANÚNCIOS (REMINDERS) ==================== -->
-            <div class="tab-pane fade" id="reminders" role="tabpanel" aria-labelledby="tab-reminders">
-
+            <div class="tab-pane fade" id="reminders" role="tabpanel" aria-labelledby="tab-reminders"
+                data-feature="reminders.enabled">
                 <!-- Barra de ações -->
                 <div class="d-flex flex-wrap align-items-center gap-2 mt-2 mb-3">
                     <button type="button" class="btn btn-primary" onclick="openReminderModal()">
@@ -1625,6 +1698,19 @@
                     }
                 }
             }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                updateThemeUI();
+
+                // Fase 3: aplica o estado das feature flags em todos os data-feature
+                applyFeatureFlags();
+
+                var tabAniv = document.getElementById('tab-aniversarios');
+                if (tabAniv) tabAniv.addEventListener('shown.bs.tab', loadBirthdays);
+
+                var tabFeat = document.getElementById('tab-features');
+                if (tabFeat) tabFeat.addEventListener('shown.bs.tab', loadFeatureFlags);
+            });
 
             // ================================================================
             // CSRF — helpers tolerantes a null
@@ -1891,6 +1977,11 @@
                         'Flag "' + key + '" ' + (data.enabled ? 'ativada' : 'desativada'),
                         'success'
                     );
+                    // Fase 3: reaplica em todos os data-feature
+                    // (a flag alterada pode ter mudado o estado de algum elemento)
+                    if (typeof applyFeatureFlags === 'function') {
+                        applyFeatureFlags();
+                    }
                 } catch (e) {
                     showToast('Erro ao alterar flag: ' + e.message, 'danger');
                     checkbox.checked = !enabled;
@@ -2343,6 +2434,64 @@
                     }
                 });
             })();
+
+            // ================================================================
+            // FEATURE FLAGS — feedback visual (Fase 3)
+            // ================================================================
+            /**
+             * Busca /admin-web/features e aplica o estado em todos os elementos
+             * com data-feature="<key>".
+             *
+             * - Se a flag está desabilitada OU não existe (undefined), o elemento
+             *   fica com data-feature-disabled="true":
+             *     * opacity reduzida (via CSS)
+             *     * pointer-events: none (via CSS)
+             *     * todos os controles internos ficam disabled (via JS)
+             *     * badge "🔒 Desativado" aparece
+             * - Se a flag está habilitada, o elemento volta ao normal.
+             *
+             * Tolerante a falhas: se a requisição falhar, mantém o estado atual
+             * (não bloqueia tudo por causa de um 500).
+             */
+            window.applyFeatureFlags = async function () {
+                var flags;
+                try {
+                    flags = await fetchJson('/admin-web/features');
+                } catch (e) {
+                    console.warn('[feature-flags] falha ao carregar; mantendo estado atual:', e);
+                    return;
+                }
+
+                document.querySelectorAll('[data-feature]').forEach(function (el) {
+                    var key = el.getAttribute('data-feature');
+                    var info = flags[key];
+
+                    // Se a chave não existe no mapa, assume DESABILITADO (fail-safe):
+                    // melhor esconder um módulo por engano do que expor algo que
+                    // o backend nem reconhece.
+                    var enabled = info && info.enabled !== false;
+
+                    el.setAttribute('data-feature-disabled', enabled ? 'false' : 'true');
+                    el.title = enabled ? '' : 'Módulo desativado via Feature Flag';
+
+                    // Desabilita/ habilita controles internos
+                    el.querySelectorAll('button, input, select, textarea').forEach(function (control) {
+                        control.disabled = !enabled;
+                    });
+
+                    // Badge "🔒 Desativado" visível em touch (não depende de title)
+                    var badge = el.querySelector(':scope > .card-header .feature-off-badge, '
+                        + ':scope > .feature-off-badge, '
+                        + ':scope > h6 > .feature-off-badge, '
+                        + ':scope > legend + .feature-off-badge');
+                    if (badge) {
+                        badge.hidden = enabled;
+                    }
+                });
+
+                // Persiste no DOM para consultas futuras (debug)
+                document.documentElement.dataset.featureFlagsLoaded = 'true';
+            };
 
             // ================================================================
             // INIT
