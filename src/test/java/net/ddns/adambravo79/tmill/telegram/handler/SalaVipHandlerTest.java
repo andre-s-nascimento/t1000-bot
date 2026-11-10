@@ -461,9 +461,13 @@ class SalaVipHandlerTest {
     class FilmeSemNumero {
 
         @Test
-        @DisplayName("Number null: usa '?'")
+        @DisplayName("Episode null: usa '?'")
         void numberNull() {
-            SalaVipMovie m = new SalaVipMovie(null, 1, "test", "Test", 2020, "url", null);
+            // ✅ CORREÇÃO: Passando null no episódio (segundo parâmetro) e não no primeiro.
+            // A assinatura do construtor auxiliar é: (salaVipNumber, salaVipEpisode, slug, title,
+            // year, url, note)
+            SalaVipMovie m = new SalaVipMovie(null, null, "test", "Test", 2020, "url", null);
+
             when(salaVipService.buscarPorEpisodio(1)).thenReturn(List.of(m));
             Update update = mockUpdate("t1000 salavip episodio 1");
 
@@ -471,6 +475,8 @@ class SalaVipHandlerTest {
 
             ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
             verify(telegramFacade).enviarMensagemHtml(eq(CHAT_ID), captor.capture());
+
+            // Agora a saída será "... Sala VIP #?."
             assertThat(captor.getValue()).contains("#?");
         }
     }

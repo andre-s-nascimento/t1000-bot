@@ -18,132 +18,24 @@ import net.ddns.adambravo79.tmill.telegram.core.TelegramFacade;
 import net.ddns.adambravo79.tmill.telegram.util.TelegramUtils;
 import net.ddns.adambravo79.tmill.util.LogSanitizer;
 
-/**
- * Handler especializado para os comandos da Sala VIP do RapaduraCast.
- *
- * <h2>Comandos tratados</h2>
- *
- * <ul>
- *   <li>{@code t1000 salavip <numero>} — busca por episódio (ex.: {@code t1000 salavip 15})
- *   <li>{@code t1000 salavip numero <numero>} — idem, com palavra-chave opcional
- *   <li>{@code t1000 sala vip <numero>} — idem, com espaço
- *   <li>{@code t1000 salavip episodio <numero>} — idem, com palavra-chave opcional
- *   <li>{@code t1000 salavip filme <titulo>} — busca por título/nota
- *   <li>{@code t1000 salavip tem filme <titulo>} — idem, com prefixo opcional
- * </ul>
- *
- * <h2>Histórico</h2>
- *
- * <p>Este handler vivia em {@code service/} e não herdava de nenhuma superclasse. A refatoração o
- * moveu para {@code telegram/handler/} e adotou a hierarquia {@link AbstractCommandHandler}, o que
- * trouxe:
- *
- * <ul>
- *   <li>Verificação de autorização automática via {@link #processarComando}
- *   <li>Wrappers seguros de envio ({@link #sendHtml}, {@link #sendPlain}) que tratam erros de rede
- *   <li>Centralização do tratamento de exceções via {@link #executarComProtecao}
- * </ul>
- *
- * <h2>Regex</h2>
- *
- * <p>Os três padrões são pré-compilados como {@code static final}. O {@code FLAGS} centraliza
- * {@code CASE_INSENSITIVE}, {@code UNICODE_CASE} e {@code UNICODE_CHARACTER_CLASS} (este último
- * garante que {@code \d} reconheça dígitos Unicode, e {@code \w} reconheça letras acentuadas).
- * O {@code CANON_EQ} adicional garante que caracteres acentuados sejam tratados equivalentes
- * independentemente da forma de normalização Unicode usada (NFC vs NFD).
- *
- * <h2>Padrões de regex (compatibilidade)</h2>
- *
- * <table border="1">
- *   <caption>Inputs aceitos</caption>
- *   <tr><th>Comando</th><th>REGEX</th></tr>
- *   <tr><td>{@code t1000 salavip 15}</td><td>{@link #REGEX_NUMERO}</td></tr>
- *   <tr><td>{@code t1000 salavip numero 15}</td><td>{@link #REGEX_NUMERO}</td></tr>
- *   <tr><td>{@code t1000 salavip nº 15}</td><td>{@link #REGEX_NUMERO}</td></tr>
- *   <tr><td>{@code t1000 salavip #15}</td><td>{@link #REGEX_NUMERO}</td></tr>
- *   <tr><td>{@code t1000 salavip filme matrix}</td><td>{@link #REGEX_TITULO}</td></tr>
- *   <tr><td>{@code t1000 salavip tem filme matrix}</td><td>{@link #REGEX_TITULO}</td></tr>
- *   <tr><td>{@code t1000 salavip episodio 15}</td><td>{@link #REGEX_EPISODIO}</td></tr>
- *   <tr><td>{@code t1000 salavip ep 15}</td><td>{@link #REGEX_EPISODIO}</td></tr>
- * </table>
- *
- * <h2>Sem métricas</h2>
- *
- * <p>O {@code MetricsService} é usado pelo {@code CommandHandler} roteador (métrica {@code
- * comando_salavip}), não aqui. Manter o handler "puro" (só lógica) facilita os testes.
- */
 @Slf4j
 @Component
-@SuppressWarnings("java:S3457") // \n é intencional: Telegram usa \n, não \r\n (não trocar por %n)
+@SuppressWarnings("java:S3457")
 public class SalaVipHandler extends AbstractCommandHandler {
 
-    /** Prefixo canônico. */
     public static final String PREFIXO = "t1000 salavip";
-
-    /** Prefixo alternativo (com espaço). */
     public static final String PREFIXO_ALT = "t1000 sala vip";
 
-    /**
-     * Flags comuns dos padrões.
-     *
-     * <ul>
-     *   <li>{@code CASE_INSENSITIVE}: aceita "T1000 SALAVIP"
-     *   <li>{@code UNICODE_CASE}: case-insensitive funciona com acentos
-     *   <li>{@code UNICODE_CHARACTER_CLASS}: {@code \d} e {@code \w} reconhecem Unicode
-     *   <li>{@code CANON_EQ}: trata NFC e NFD como equivalentes (ex.: "ó" pré-composto vs "o" +
-     *       acento combinante) — atende {@code java:S5854}
-     * </ul>
-     */
     private static final int FLAGS =
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
 
-    /**
-     * Padrão para comando de busca por número.
-     *
-     * <p>Aceita: {@code salavip 15}, {@code salavip numero 15}, {@code salavip número 15},
-     * {@code salavip nº 15}, {@code salavip #15}, {@code sala vip 15}, etc.
-     *
-     * <p><b>Nota sobre {@code n[uú]mer[oó]?}:</b> o {@code [uú]} é necessário porque o
-     * {@code CANON_EQ} foi removido (quebrava classes de caracteres com acentos). Sem ele,
-     * precisamos cobrir explicitamente {@code u} e {@code ú}. O mesmo vale para {@code [oó]}.
-     */
     private static final Pattern REGEX_NUMERO =
             Pattern.compile(
                     "t1000\\s+sala\\s*vip\\s*+(?:n[uú]mer[oó]?|n[º°]?|#)?\\s*+(-?\\d+)", FLAGS);
 
-    /**
-     * Padrão para comando de busca por título.
-     *
-     * <p>Aceita: {@code salavip filme <titulo>} ou {@code salavip tem filme <titulo>}.
-     *
-     * <h3>Correções S5843 (complexidade) + S8786 (backtracking)</h3>
-     *
-     * <ul>
-     *   <li>{@code (?:tem\s*+)?filme} substitui a alternância redundante {@code (?:tem\s+filme|filme)}
-     *       — reduz complexidade de 26 para ~10.
-     *   <li>{@code \s*+} (possessivo) após "vip" e após "filme" evita o backtracking entre o
-     *       {@code \s+} do prefixo e o {@code \s+} interno de "tem ". Como os dois são
-     *       possessivos, o engine não os reverterá.
-     *   <li>O {@code \s*+} após "vip" também absorve o caso de usuário digitar
-     *       {@code "salavipfilme x"} (improvável, mas inofensivo).
-     * </ul>
-     */
     private static final Pattern REGEX_TITULO =
             Pattern.compile("t1000\\s+sala\\s*vip\\s*+(?:tem\\s*+)?filme\\s*+(.+)", FLAGS);
 
-    /**
-     * Padrão para comando de busca por episódio (com palavra-chave explícita).
-     *
-     * <p>Aceita: {@code salavip episodio 15}, {@code salavip episódio 15}, {@code salavip ep 15}.
-     *
-     * <h3>Correções S5855 + S8786</h3>
-     *
-     * <ul>
-     *   <li>{@code ep(?:is[oó]dio)?} substitui {@code episodio|episódio|ep} (S5855 — redundância).
-     *   <li>{@code \s*+} (possessivo) antes de {@code \d+} elimina o backtracking do quantificador
-     *       em inputs onde o número está ausente (ex.: {@code "salavip ep xyz"}) (S8786).
-     * </ul>
-     */
     private static final Pattern REGEX_EPISODIO =
             Pattern.compile("t1000\\s+sala\\s*vip\\s+ep(?:is[oó]dio)?\\s*+(\\d+)", FLAGS);
 
@@ -158,30 +50,16 @@ public class SalaVipHandler extends AbstractCommandHandler {
         this.salaVipService = salaVipService;
     }
 
-    // =========================================================================
-    // CONTRATO
-    // =========================================================================
-
     @Override
     public String getPrefixo() {
         return PREFIXO;
     }
 
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Nota: o retorno {@code boolean} original foi removido. O roteador decide se a mensagem é
-     * deste handler com base no prefixo (via {@link #getPrefixo} + {@link #getPrefixoAlternativo}).
-     * Se por algum motivo o texto chegar aqui mas não casar com nenhum padrão, apenas loga e
-     * retorna.
-     */
     @Override
     protected void handleCommand(Update update, String textoNormalizado) {
-        // Usa o texto bruto para preservar acentos nos títulos/notas
         String rawText = textoBruto(update).trim();
         long chatId = chatId(update);
 
-        // Ordem dos matchers: do mais específico (título) para o mais genérico (número)
         Matcher matcherTitulo = REGEX_TITULO.matcher(rawText);
         if (matcherTitulo.matches()) {
             String termo = matcherTitulo.group(1).trim();
@@ -212,21 +90,9 @@ public class SalaVipHandler extends AbstractCommandHandler {
                 LogSanitizer.sanitize(rawText));
     }
 
-    /**
-     * Retorna o prefixo alternativo (com espaço) para o roteador testar.
-     *
-     * <p>O roteador do {@code CommandHandler} precisa saber que este handler cobre tanto {@code
-     * "t1000 salavip"} quanto {@code "t1000 sala vip"}. Como a interface {@link
-     * AbstractCommandHandler} só expõe um {@code getPrefixo()}, adicionamos este método extra para
-     * o roteador consultar.
-     */
     public String getPrefixoAlternativo() {
         return PREFIXO_ALT;
     }
-
-    // =========================================================================
-    // BUSCA POR NÚMERO (tratado como episódio)
-    // =========================================================================
 
     private void buscarPorNumero(long chatId, int numero) {
         Optional<SalaVipMovie> movieOpt = salaVipService.buscarPrimeiroPorEpisodio(numero);
@@ -251,15 +117,12 @@ public class SalaVipHandler extends AbstractCommandHandler {
                                 + "🔗 <a href=\"%s\">Link no Letterboxd</a>",
                         utils.escapeHtml(movie.title()),
                         movie.year(),
-                        movie.salaVipEpisode(),
+                        // Proteção extra caso o episódio venha nulo do banco
+                        movie.salaVipEpisode() != null ? movie.salaVipEpisode() : "?",
                         notaStr,
                         movie.letterboxdUrl());
         sendHtml(chatId, resposta);
     }
-
-    // =========================================================================
-    // BUSCA POR EPISÓDIO (comando explícito "episodio")
-    // =========================================================================
 
     private void buscarPorEpisodio(long chatId, int episodio) {
         List<SalaVipMovie> movies = salaVipService.buscarPorEpisodio(episodio);
@@ -281,13 +144,12 @@ public class SalaVipHandler extends AbstractCommandHandler {
                             episodio,
                             utils.escapeHtml(movie.title()),
                             movie.year(),
-                            movie.salaVipNumber() != null ? movie.salaVipNumber() : "?",
+                            movie.salaVipEpisode() != null ? movie.salaVipEpisode() : "?",
                             movie.letterboxdUrl());
             sendHtml(chatId, resposta);
             return;
         }
 
-        // Episódio cobre 2+ filmes (ex.: episódio 15 = Mad Max + Mad Max 2)
         StringBuilder sb =
                 new StringBuilder(
                         String.format(
@@ -300,15 +162,11 @@ public class SalaVipHandler extends AbstractCommandHandler {
                             "• <b>%s</b> (%d) — Sala VIP #%s\n",
                             utils.escapeHtml(m.title()),
                             m.year(),
-                            m.salaVipNumber() != null ? m.salaVipNumber() : "?"));
+                            m.salaVipEpisode() != null ? m.salaVipEpisode() : "?"));
         }
 
         sendHtml(chatId, sb.toString());
     }
-
-    // =========================================================================
-    // BUSCA POR TÍTULO
-    // =========================================================================
 
     private void buscarPorTitulo(long chatId, String termo) {
         List<SalaVipMovie> movies = salaVipService.buscarPorTitulo(termo);
@@ -323,7 +181,6 @@ public class SalaVipHandler extends AbstractCommandHandler {
         if (movies.size() == 1) {
             SalaVipMovie movie = movies.get(0);
 
-            // Verifica se o match foi pelo título ou pela nota
             boolean matchNaNota =
                     !movie.title().toLowerCase().contains(termo.toLowerCase())
                             && movie.noteText() != null
@@ -333,19 +190,18 @@ public class SalaVipHandler extends AbstractCommandHandler {
 
             String resposta =
                     String.format(
-                            "✅ Sim! O filme <b>%s</b> (%d) está na Sala VIP sob o número"
+                            "✅ Sim! O filme <b>%s</b> (%d) está na Sala VIP sob o episódio"
                                     + " <b>#%s</b>.%s\n"
                                     + "🔗 <a href=\"%s\">Link no Letterboxd</a>",
                             utils.escapeHtml(movie.title()),
                             movie.year(),
-                            movie.salaVipNumber() != null ? movie.salaVipNumber() : "?",
+                            movie.salaVipEpisode() != null ? movie.salaVipEpisode() : "?",
                             aviso,
                             movie.letterboxdUrl());
             sendHtml(chatId, resposta);
             return;
         }
 
-        // Múltiplos resultados (limita a 5)
         StringBuilder sb =
                 new StringBuilder("🤔 Encontrei mais de um filme com esse nome na Sala VIP:\n\n");
 
@@ -357,7 +213,7 @@ public class SalaVipHandler extends AbstractCommandHandler {
                             "• <b>%s</b> (%d) — Sala VIP #%s\n",
                             utils.escapeHtml(m.title()),
                             m.year(),
-                            m.salaVipNumber() != null ? m.salaVipNumber() : "?"));
+                            m.salaVipEpisode() != null ? m.salaVipEpisode() : "?"));
         }
 
         if (movies.size() > 5) {
