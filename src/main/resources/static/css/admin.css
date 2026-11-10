@@ -371,21 +371,29 @@ a:hover {
 }
 
 /* Badge de cadeado visível (não depende de title, funciona em touch) */
-.feature-off-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin-left: 0.5rem;
-    padding: 0.15rem 0.4rem;
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: var(--bs-secondary-color);
-    background: var(--bs-tertiary-bg);
-    border: 1px solid var(--bs-border-color-translucent);
-    border-radius: 0.35rem;
-    vertical-align: middle;
-    white-space: nowrap;
-}
+        /* Badge de cadeado visível (não depende de title, funciona em touch) */
+        .feature-off-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-left: 0.5rem;
+            padding: 0.15rem 0.4rem;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--bs-secondary-color);
+            background: var(--bs-tertiary-bg);
+            border: 1px solid var(--bs-border-color-translucent);
+            border-radius: 0.35rem;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        /* Dark mode: garante contraste legível em fundo escuro */
+        [data-bs-theme="dark"] .feature-off-badge {
+            color: #ffc107;            /* amarelo Bootstrap (warning) */
+            background: rgba(255, 193, 7, 0.12);
+            border-color: rgba(255, 193, 7, 0.35);
+        }
 
 /* Em telas pequenas, o badge pode quebrar para a linha de baixo */
 @media (max-width: 575.98px) {

@@ -524,75 +524,45 @@
 
             </div><!-- /#digest -->
 
-            <!-- ==================== ABA MODERAÇÃO ==================== -->
-            <div class="tab-pane fade" id="moderacao" role="tabpanel" aria-labelledby="tab-mod">
-                <div class="row g-3 mt-1">
-                    <div class="col-12 col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <span class="bi bi-mic-mute" aria-hidden="true"></span> Silenciar Usuário (Mute)
-                            </div>
-                            <div class="card-body">
-                                <form th:action="@{/admin-web/mute}" method="post">
-                                    <div class="mb-2">
-                                        <label for="muteChatId" class="form-label">Chat ID do Grupo</label>
-                                        <select class="form-select" name="chatId" id="muteChatId" required>
-                                            <option value="">-- Selecione --</option>
-                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div class="mb-2">
-                                        <label for="muteUserId" class="form-label">User ID do Alvo</label>
-                                        <input type="number" class="form-control" name="userId" id="muteUserId" required
-                                            placeholder="ex: 1400513378">
-                                    </div>
-                                    <div class="mb-2">
-                                        <label for="muteDuration" class="form-label">Duração (Minutos)</label>
-                                        <select class="form-select" name="durationMinutes" id="muteDuration">
-                                            <option value="0">Permanente</option>
-                                            <option value="60">1 Hora</option>
-                                            <option value="1440">24 Horas</option>
-                                            <option value="10080">7 Dias</option>
-                                        </select>
-                                    </div>
-                                    <button type="submit" class="btn btn-danger w-100"
-                                        data-confirm="Silenciar este usuário?">
-                                        <span class="bi bi-mic-mute" aria-hidden="true"></span> Aplicar Silenciamento
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <span class="bi bi-mic" aria-hidden="true"></span> Remover Silenciamento (Unmute)
-                            </div>
-                            <div class="card-body">
-                                <form th:action="@{/admin-web/unmute}" method="post">
-                                    <div class="mb-2">
-                                        <label for="unmuteChatId" class="form-label">Chat ID do Grupo</label>
-                                        <select class="form-select" name="chatId" id="unmuteChatId" required>
-                                            <option value="">-- Selecione --</option>
-                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div class="mb-2">
-                                        <label for="unmuteUserId" class="form-label">User ID do Alvo</label>
-                                        <input type="number" class="form-control" name="userId" id="unmuteUserId"
-                                            required placeholder="ex: 1400513378">
-                                    </div>
-                                    <button type="submit" class="btn btn-success w-100" style="margin-top: 31px;"
-                                        data-confirm="Remover silenciamento deste usuário?">
-                                        <span class="bi bi-mic" aria-hidden="true"></span> Remover Restrição
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
+            <!-- ==================== ABA ANÚNCIOS (REMINDERS) ==================== -->
+            <div class="tab-pane fade" id="reminders" role="tabpanel" aria-labelledby="tab-reminders"
+                data-feature="reminders.enabled">
+                <!-- Barra de ações -->
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-2 mb-3">
+                    <button type="button" class="btn btn-primary" onclick="openReminderModal()">
+                        <span class="bi bi-plus-circle" aria-hidden="true"></span> Novo Anúncio
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="loadReminders()">
+                        <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Recarregar
+                    </button>
+                    <button type="button" class="btn btn-outline-info" onclick="reloadRemindersFromDisk()">
+                        <span class="bi bi-hdd" aria-hidden="true"></span> Recarregar do disco
+                    </button>
+                    <button type="button" class="btn btn-outline-warning btn-sm"
+                        onclick="openReminderModal('quatro-horas-quarta')"
+                        title="Editar o lembrete semanal (antigo 'Lembretes')">
+                        <span class="bi bi-bell" aria-hidden="true"></span> Editar "Quatro Horas de Quarta"
+                    </button>
+                    <span class="text-muted small ms-auto" id="remindersStatus" aria-live="polite"></span>
+                </div>
+
+                <!-- Container da lista -->
+                <div id="remindersContainer" aria-live="polite" aria-busy="true">
+                    <div class="text-center p-4">
+                        <output class="spinner-border text-primary" aria-label="Carregando anúncios"></output>
                     </div>
                 </div>
+
+                <!-- Painel de diagnóstico (status) -->
+                <details class="mt-3">
+                    <summary class="text-muted small" style="cursor: pointer;">
+                        <span class="bi bi-info-circle" aria-hidden="true"></span>
+                        Diagnóstico (total vs. agendados)
+                    </summary>
+                    <output id="remindersDiagnostics" class="result-box d-block mt-2" aria-live="polite">
+                        <span class="text-muted small">Clique para carregar.</span>
+                    </output>
+                </details>
             </div>
 
             <!-- ==================== ABA CONFIGURAÇÕES ==================== -->
@@ -1041,45 +1011,75 @@
                 </div>
             </div>
 
-            <!-- ==================== ABA ANÚNCIOS (REMINDERS) ==================== -->
-            <div class="tab-pane fade" id="reminders" role="tabpanel" aria-labelledby="tab-reminders"
-                data-feature="reminders.enabled">
-                <!-- Barra de ações -->
-                <div class="d-flex flex-wrap align-items-center gap-2 mt-2 mb-3">
-                    <button type="button" class="btn btn-primary" onclick="openReminderModal()">
-                        <span class="bi bi-plus-circle" aria-hidden="true"></span> Novo Anúncio
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="loadReminders()">
-                        <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Recarregar
-                    </button>
-                    <button type="button" class="btn btn-outline-info" onclick="reloadRemindersFromDisk()">
-                        <span class="bi bi-hdd" aria-hidden="true"></span> Recarregar do disco
-                    </button>
-                    <button type="button" class="btn btn-outline-warning btn-sm"
-                        onclick="openReminderModal('quatro-horas-quarta')"
-                        title="Editar o lembrete semanal (antigo 'Lembretes')">
-                        <span class="bi bi-bell" aria-hidden="true"></span> Editar "Quatro Horas de Quarta"
-                    </button>
-                    <span class="text-muted small ms-auto" id="remindersStatus" aria-live="polite"></span>
-                </div>
-
-                <!-- Container da lista -->
-                <div id="remindersContainer" aria-live="polite" aria-busy="true">
-                    <div class="text-center p-4">
-                        <output class="spinner-border text-primary" aria-label="Carregando anúncios"></output>
+            <!-- ==================== ABA MODERAÇÃO ==================== -->
+            <div class="tab-pane fade" id="moderacao" role="tabpanel" aria-labelledby="tab-mod">
+                <div class="row g-3 mt-1">
+                    <div class="col-12 col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="bi bi-mic-mute" aria-hidden="true"></span> Silenciar Usuário (Mute)
+                            </div>
+                            <div class="card-body">
+                                <form th:action="@{/admin-web/mute}" method="post">
+                                    <div class="mb-2">
+                                        <label for="muteChatId" class="form-label">Chat ID do Grupo</label>
+                                        <select class="form-select" name="chatId" id="muteChatId" required>
+                                            <option value="">-- Selecione --</option>
+                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="muteUserId" class="form-label">User ID do Alvo</label>
+                                        <input type="number" class="form-control" name="userId" id="muteUserId" required
+                                            placeholder="ex: 1400513378">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="muteDuration" class="form-label">Duração (Minutos)</label>
+                                        <select class="form-select" name="durationMinutes" id="muteDuration">
+                                            <option value="0">Permanente</option>
+                                            <option value="60">1 Hora</option>
+                                            <option value="1440">24 Horas</option>
+                                            <option value="10080">7 Dias</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-danger w-100"
+                                        data-confirm="Silenciar este usuário?">
+                                        <span class="bi bi-mic-mute" aria-hidden="true"></span> Aplicar Silenciamento
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="bi bi-mic" aria-hidden="true"></span> Remover Silenciamento (Unmute)
+                            </div>
+                            <div class="card-body">
+                                <form th:action="@{/admin-web/unmute}" method="post">
+                                    <div class="mb-2">
+                                        <label for="unmuteChatId" class="form-label">Chat ID do Grupo</label>
+                                        <select class="form-select" name="chatId" id="unmuteChatId" required>
+                                            <option value="">-- Selecione --</option>
+                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label for="unmuteUserId" class="form-label">User ID do Alvo</label>
+                                        <input type="number" class="form-control" name="userId" id="unmuteUserId"
+                                            required placeholder="ex: 1400513378">
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100" style="margin-top: 31px;"
+                                        data-confirm="Remover silenciamento deste usuário?">
+                                        <span class="bi bi-mic" aria-hidden="true"></span> Remover Restrição
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <!-- Painel de diagnóstico (status) -->
-                <details class="mt-3">
-                    <summary class="text-muted small" style="cursor: pointer;">
-                        <span class="bi bi-info-circle" aria-hidden="true"></span>
-                        Diagnóstico (total vs. agendados)
-                    </summary>
-                    <output id="remindersDiagnostics" class="result-box d-block mt-2" aria-live="polite">
-                        <span class="text-muted small">Clique para carregar.</span>
-                    </output>
-                </details>
             </div>
 
             <!-- ==================== MODAL: CRIAR/EDITAR ANÚNCIO ==================== -->

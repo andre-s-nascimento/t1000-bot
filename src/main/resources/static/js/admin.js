@@ -863,6 +863,26 @@
                 loadBirthdays();
             });
         }
+        
+        // ------------------------------------------------------------
+        // Fase 5c: sincroniza aria-selected nos sub-pills
+        // ------------------------------------------------------------
+        // O Bootstrap 5.3 adiciona `.active` mas não atualiza
+        // `aria-selected`. Leitores de tela dependem desse atributo
+        // para anunciar "tab 2 de 3, selecionada". Corrigimos via JS
+        // no `shown.bs.tab` de cada grupo de sub-tabs.
+        document.querySelectorAll('.sub-nav-tabs').forEach(function (navList) {
+            navList.querySelectorAll('.nav-link').forEach(function (link) {
+                link.addEventListener('shown.bs.tab', function () {
+                    // Desmarca todos os irmãos do mesmo grupo
+                    navList.querySelectorAll('.nav-link').forEach(function (sibling) {
+                        var isCurrent = sibling === link;
+                        sibling.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+                        sibling.setAttribute('tabindex', isCurrent ? '0' : '-1');
+                    });
+                });
+            });
+        });
 
         // Sempre que qualquer sub-tab de Configurações for ativada,
         // reaplica o estado das flags nos `data-feature`.
@@ -902,13 +922,23 @@
         if (!hash) return;
 
         // Mapa: hash antigo → [id da tab principal, id do sub-pill]
-        var map = {
-            'copa':         ['tab-conteudo', 'sub-tab-copa'],
-            'auto':         ['tab-conteudo', 'sub-tab-auto'],
-            'features':     ['tab-config',   'sub-tab-features'],
-            'aniversarios': ['tab-config',   'sub-tab-aniversarios'],
-            'digest':       ['tab-conteudo', 'sub-tab-digest'],
-            'admin':        ['tab-config',   'sub-tab-admin']
+                var map = {
+            // Sub-panes de Conteúdo & Automação
+            'copa':           ['tab-conteudo', 'sub-tab-copa'],
+            'auto':           ['tab-conteudo', 'sub-tab-auto'],
+            'digest':         ['tab-conteudo', 'sub-tab-digest'],
+            // Sub-panes de Configurações
+            'features':       ['tab-config',   'sub-tab-features'],
+            'aniversarios':   ['tab-config',   'sub-tab-aniversarios'],
+            'admin':          ['tab-config',   'sub-tab-admin'],
+            // Aliases dos labels da nav principal (o link aponta para
+            // #monitor e #reminders, mas o usuário pode digitar o nome
+            // do label no hash).
+            'monitoramento':  ['tab-monitor',  null],
+            'anuncios':       ['tab-reminders', null],
+            // Aliases PT-BR de "Conteúdo" (label da nav)
+            'conteudo':       ['tab-conteudo', 'sub-tab-digest'],
+            'configuracoes':  ['tab-config',   'sub-tab-admin']
         };
 
         var target = map[hash];
