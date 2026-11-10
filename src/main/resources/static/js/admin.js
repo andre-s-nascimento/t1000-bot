@@ -840,10 +840,101 @@
         // Fase 3: aplica o estado das feature flags em todos os data-feature
         applyFeatureFlags();
 
-        var tabAniv = document.getElementById('tab-aniversarios');
-        if (tabAniv) tabAniv.addEventListener('shown.bs.tab', loadBirthdays);
+        // ------------------------------------------------------------
+        // Fase 4c: listeners dos sub-panes de "Configurações"
+        // ------------------------------------------------------------
+        var subTabFeat = document.getElementById('sub-tab-features');
+        if (subTabFeat) {
+            subTabFeat.addEventListener('shown.bs.tab', function () {
+                // Sempre recarrega: o painel de flags pode ter mudado
+                // desde a última visita (outro admin, ou a própria ação
+                // de toggleFeatureFlag() já re-renderiza, mas se a sessão
+                // expirou, o load anterior falhou).
+                loadFeatureFlags();
+            });
+        }
 
-        var tabFeat = document.getElementById('tab-features');
-        if (tabFeat) tabFeat.addEventListener('shown.bs.tab', loadFeatureFlags);
+        var subTabAniv = document.getElementById('sub-tab-aniversarios');
+        if (subTabAniv) {
+            subTabAniv.addEventListener('shown.bs.tab', function () {
+                // Recarrega sempre: o cache do `#birthdaysList` fica stale
+                // se o usuário adicionou/removeu um aniversário em outra
+                // sessão, ou se o load anterior falhou (sessão expirada).
+                loadBirthdays();
+            });
+        }
+
+        // Sempre que qualquer sub-tab de Configurações for ativada,
+        // reaplica o estado das flags nos `data-feature`.
+        // (Mais barato que recarregar tudo, e cobre o caso de o usuário
+        // ter alterado a flag em outra sub-pill e agora estar olhando
+        // para o card que ela controla.)
+        document.querySelectorAll('#subTabsConfig .nav-link').forEach(function (link) {
+            link.addEventListener('shown.bs.tab', function () {
+                applyFeatureFlags();
+            });
+        });
+
+        // ------------------------------------------------------------
+        // Fase 4c: deep links antigos (#copa, #auto, #features, #aniversarios)
+        // ------------------------------------------------------------
+        handleLegacyDeepLinks();
     });
+
+    /**
+     * Mapeia deep links legados para as novas sub-tabs.
+     *
+     * Exemplos:
+     *   #copa         → #tab-conteudo + #sub-tab-copa
+     *   #auto         → #tab-conteudo + #sub-tab-auto
+     *   #features     → #tab-config   + #sub-tab-features
+     *   #aniversarios → #tab-config   + #sub-tab-aniversarios
+     *
+     * Também trata os deep links "pai":
+     *   #digest → #tab-conteudo + #sub-tab-digest (default)
+     *   #admin  → #tab-config   + #sub-tab-admin   (default)
+     *
+     * Se o hash não bater com nenhum mapeamento, não faz nada (o Bootstrap
+     * já resolve deep links diretos de panes existentes, ex.: #mensagens).
+     */
+    function handleLegacyDeepLinks() {
+        var hash = (window.location.hash || '').replace('#', '').toLowerCase();
+        if (!hash) return;
+
+        // Mapa: hash antigo → [id da tab principal, id do sub-pill]
+        var map = {
+            'copa':         ['tab-conteudo', 'sub-tab-copa'],
+            'auto':         ['tab-conteudo', 'sub-tab-auto'],
+            'features':     ['tab-config',   'sub-tab-features'],
+            'aniversarios': ['tab-config',   'sub-tab-aniversarios'],
+            'digest':       ['tab-conteudo', 'sub-tab-digest'],
+            'admin':        ['tab-config',   'sub-tab-admin']
+        };
+
+        var target = map[hash];
+        if (!target) return;
+
+        var parentTab = document.getElementById(target[0]);
+        var subTab = document.getElementById(target[1]);
+
+        if (!parentTab) return;
+
+        // setTimeout(0) garante que o DOMContentLoaded terminou e o
+        // Bootstrap já inicializou as tabs. Sem isso, `.show()` pode
+        // ser chamado antes de o componente estar pronto, e a sub-tab
+        // não é ativada.
+        setTimeout(function () {
+            if (!parentTab.classList.contains('active')) {
+                bootstrap.Tab.getOrCreateInstance(parentTab).show();
+            }
+            // Segundo tick: a parent pode ter sido ativada, mas o
+            // sub-content só é renderizado depois que o evento
+            // `shown.bs.tab` da parent é processado.
+            setTimeout(function () {
+                if (subTab && !subTab.classList.contains('active')) {
+                    bootstrap.Tab.getOrCreateInstance(subTab).show();
+                }
+            }, 0);
+        }, 0);
+    }
 })();

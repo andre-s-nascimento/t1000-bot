@@ -524,100 +524,6 @@
 
             </div><!-- /#digest -->
 
-            <!-- ==================== ABA ANIVERSÁRIOS ==================== -->
-            <div class="tab-pane fade" id="aniversarios" role="tabpanel" aria-labelledby="tab-aniversarios">
-                <div class="row g-3 mt-1">
-                    <div class="col-12 col-md-6">
-                        <div class="card" data-feature="birthday.enabled">
-                            <div class="card-header">
-                                <span class="bi bi-cake2" aria-hidden="true"></span> Disparar Parabéns Manualmente
-                                <span class="feature-off-badge" hidden>🔒 Desativado</span>
-                            </div>
-                            <div class="card-body">
-                                <form th:action="@{/admin-web/test-birthday}" method="post"
-                                    class="row g-2 align-items-center mb-3">
-                                    <div class="col-auto">
-                                        <label for="birthdayDay" class="visually-hidden">Dia</label>
-                                        <input type="number" class="form-control" id="birthdayDay" name="day" min="1"
-                                            max="31" placeholder="Dia" required>
-                                    </div>
-                                    <div class="col-auto">
-                                        <label for="birthdayMonth" class="visually-hidden">Mês</label>
-                                        <input type="number" class="form-control" id="birthdayMonth" name="month"
-                                            min="1" max="12" placeholder="Mês" required>
-                                    </div>
-                                    <div class="col-auto">
-                                        <button type="submit" class="btn btn-primary">
-                                            <span class="bi bi-send" aria-hidden="true"></span> Disparar
-                                        </button>
-                                    </div>
-                                </form>
-
-                                <form th:action="@{/admin-web/test-birthday-today}" method="post">
-                                    <button type="submit" class="btn btn-success w-100">
-                                        <span class="bi bi-calendar-check" aria-hidden="true"></span>
-                                        Disparar para hoje
-                                    </button>
-                                </form>
-
-                                <div class="result-box mt-3">
-                                    Dispara os parabéns para quem faz aniversário em <b>DD/MM</b>.
-                                    Útil pra testar sem esperar o cron.
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <span class="bi bi-list-ul" aria-hidden="true"></span> Aniversários Cadastrados
-                            </div>
-                            <div class="card-body">
-                                <output id="birthdaysList" aria-live="polite" aria-busy="true" class="d-block">
-                                    <span class="spinner-border text-primary" aria-label="Carregando"></span>
-                                </output>
-                                <div class="mt-2 d-flex gap-2 flex-wrap">
-                                    <a href="/admin-web/birthdays-json" target="_blank"
-                                        class="btn btn-outline-secondary btn-sm">
-                                        <span class="bi bi-file-earmark-code" aria-hidden="true"></span> Ver JSON
-                                    </a>
-                                    <form th:action="@{/admin-web/clear-birthdays}" method="post"
-                                        data-confirm="Apagar TODOS os aniversários?" class="d-inline-block">
-                                        <button type="submit" class="btn btn-danger btn-sm">
-                                            <span class="bi bi-trash3" aria-hidden="true"></span> Limpar Todos
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ==================== ABA FEATURES ==================== -->
-            <div class="tab-pane fade" id="features" role="tabpanel" aria-labelledby="tab-features">
-                <div class="card mt-2">
-                    <div class="card-header">
-                        <span class="bi bi-toggles" aria-hidden="true"></span> Feature Flags (runtime)
-                        <button type="button" class="btn btn-sm btn-outline-secondary float-end"
-                            onclick="loadFeatureFlags()" aria-label="Recarregar feature flags">
-                            <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Recarregar
-                        </button>
-                    </div>
-                    <div class="card-body p-0" id="featureFlagsContainer" aria-live="polite" aria-busy="true">
-                        <div class="text-center p-3">
-                            <output class="spinner-border text-primary" aria-label="Carregando feature flags"></output>
-                        </div>
-                    </div>
-                    <div class="card-footer text-muted small">
-                        <span class="bi bi-info-circle" aria-hidden="true"></span>
-                        Alterações aplicam-se imediatamente, sem reiniciar a aplicação.
-                        Flags marcadas como <span class="badge text-bg-warning">read-only</span>
-                        só podem ser alteradas no <code>application.properties</code> e exigem restart.
-                    </div>
-                </div>
-            </div>
-
             <!-- ==================== ABA MODERAÇÃO ==================== -->
             <div class="tab-pane fade" id="moderacao" role="tabpanel" aria-labelledby="tab-mod">
                 <div class="row g-3 mt-1">
@@ -689,274 +595,407 @@
                 </div>
             </div>
 
-            <!-- ==================== ABA ADMIN ==================== -->
-            <div class="tab-pane fade" id="admin" role="tabpanel" aria-labelledby="tab-admin">
+            <!-- ==================== ABA CONFIGURAÇÕES ==================== -->
+            <div class="tab-pane fade" id="admin" role="tabpanel" aria-labelledby="tab-config">
 
-                <!-- Limpeza e Recarregamentos -->
-                <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações administrativas">
-                    <legend class="sr-only">Ações administrativas</legend>
-                    <form th:action="@{/admin-web/clear-releases}" method="post"
-                        data-confirm="Tem certeza que deseja limpar a tabela de releases?" class="d-inline-block">
-                        <button type="submit" class="btn btn-danger">
-                            <span class="bi bi-trash3" aria-hidden="true"></span> Limpar Releases
-                        </button>
-                    </form>
-                    <form th:action="@{/admin-web/clear-all-data}" method="post"
-                        data-confirm="Isso apagará TODOS os dados. Continuar?" class="d-inline-block">
-                        <button type="submit" class="btn btn-danger">
-                            <span class="bi bi-database-x" aria-hidden="true"></span> Limpar Todos os Dados
-                        </button>
-                    </form>
-                    <form th:action="@{/admin-web/reload-prompts}" method="post" class="d-inline-block"
-                        data-feature="prompts.external.enabled">
-                        <button type="submit" class="btn btn-warning">
-                            <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Prompts
-                        </button>
-                    </form>
-                    <form th:action="@{/admin-web/reload-auto-responses}" method="post" class="d-inline-block">
-                        <button type="submit" class="btn btn-secondary">
-                            <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Auto-Responses
-                        </button>
-                    </form>
-                    <form th:action="@{/admin-web/reload-easter-eggs}" method="post" class="d-inline-block"
-                        data-feature="easter.eggs.enabled">
-                        <button type="submit" class="btn btn-secondary">
-                            <span class="bi bi-emoji-smile" aria-hidden="true"></span> Recarregar Easter Eggs
-                        </button>
-                    </form>
-                </fieldset>
+                <!-- Sub-nav: Admin | Features | Aniversários -->
+                <ul class="nav nav-pills sub-nav-tabs" id="subTabsConfig" role="tablist"
+                    aria-label="Sub-seções de Configurações">
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link active" id="sub-tab-admin" data-bs-toggle="pill" href="#sub-admin" role="tab"
+                            aria-controls="sub-admin" aria-selected="true">⚙️ Admin</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="sub-tab-features" data-bs-toggle="pill" href="#sub-features" role="tab"
+                            aria-controls="sub-features" aria-selected="false">🎛️ Features</a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link" id="sub-tab-aniversarios" data-bs-toggle="pill" href="#sub-aniversarios"
+                            role="tab" aria-controls="sub-aniversarios" aria-selected="false">🎂 Aniversários</a>
+                    </li>
+                </ul>
 
-                <!-- Podcast -->
-                <div class="card mt-3" data-feature="podcast.enabled">
-                    <div class="card-header">
-                        <span class="bi bi-podcast" aria-hidden="true"></span> Podcast
-                        <span class="feature-off-badge" hidden>🔒 Desativado</span>
-                    </div>
-                    <div class="card-body">
-                        <form th:action="@{/admin-web/test-podcast}" method="post"
-                            class="row g-2 align-items-center mb-2">
-                            <div class="col-auto">
-                                <label for="podcastStart" class="visually-hidden">Data início</label>
-                                <input type="date" class="form-control" id="podcastStart" name="start"
-                                    placeholder="Data início">
-                            </div>
-                            <div class="col-auto">
-                                <label for="podcastEnd" class="visually-hidden">Data fim</label>
-                                <input type="date" class="form-control" id="podcastEnd" name="end"
-                                    placeholder="Data fim">
-                            </div>
-                            <div class="col-auto">
-                                <label for="podcastChat" class="visually-hidden">Chat ID</label>
-                                <select class="form-select" name="chatId" id="podcastChat">
-                                    <option value="">-- Vazio (Padrão) --</option>
-                                    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
-                                    </option>
-                                </select>
-                            </div>
-                            <div class="col-auto">
-                                <button type="submit" class="btn btn-outline-dark">
-                                    <span class="bi bi-podcast" aria-hidden="true"></span> Gerar Podcast
-                                </button>
-                            </div>
-                        </form>
+                <div class="tab-content" id="subContentConfig">
 
-                        <div class="d-flex gap-2 flex-wrap">
-                            <form th:action="@{/admin-web/test-podcast-latest}" method="post" class="d-inline-block">
-                                <button type="submit" class="btn btn-outline-dark btn-sm">
-                                    <span class="bi bi-clock-history" aria-hidden="true"></span> Últimos 7 dias
+                    <!-- Sub-pane: Admin (conteúdo original de #admin) -->
+                    <div class="tab-pane fade show active" id="sub-admin" role="tabpanel"
+                        aria-labelledby="sub-tab-admin">
+
+                        <!-- Limpeza e Recarregamentos -->
+                        <fieldset class="btn-group-vertical-mobile mb-2 mt-2" aria-label="Ações administrativas">
+                            <legend class="sr-only">Ações administrativas</legend>
+                            <form th:action="@{/admin-web/clear-releases}" method="post"
+                                data-confirm="Tem certeza que deseja limpar a tabela de releases?"
+                                class="d-inline-block">
+                                <button type="submit" class="btn btn-danger">
+                                    <span class="bi bi-trash3" aria-hidden="true"></span> Limpar Releases
                                 </button>
                             </form>
-
-                            <form th:action="@{/admin-web/test-podcast-days}" method="post"
-                                class="d-flex align-items-center gap-1">
-                                <label for="podcastDays" class="visually-hidden">Dias</label>
-                                <input type="number" class="form-control form-control-sm" id="podcastDays" name="days"
-                                    value="3" min="1" max="30" style="width: 80px">
-                                <label for="podcastDaysChat" class="visually-hidden">Chat ID</label>
-                                <select class="form-select form-select-sm" name="chatId" id="podcastDaysChat">
-                                    <option value="">Vazio</option>
-                                    <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
-                                    </option>
-                                </select>
-                                <button type="submit" class="btn btn-outline-dark btn-sm">
-                                    <span class="bi bi-calendar-range" aria-hidden="true"></span> N dias
+                            <form th:action="@{/admin-web/clear-all-data}" method="post"
+                                data-confirm="Isso apagará TODOS os dados. Continuar?" class="d-inline-block">
+                                <button type="submit" class="btn btn-danger">
+                                    <span class="bi bi-database-x" aria-hidden="true"></span> Limpar Todos os Dados
                                 </button>
                             </form>
-                        </div>
-
-                        <!-- Reenvio de podcast por sexta-feira -->
-                        <div class="podcast-resend" data-feature="podcast.fallback-text.enabled">
-                            <h6 class="mb-2">
-                                <span class="bi bi-arrow-repeat" aria-hidden="true"></span>
-                                Reenviar Podcast por Semana
-                                <span class="feature-off-badge" hidden>🔒 Desativado</span>
-                            </h6>
-                            <p class="text-muted small mb-2">
-                                Escolha a <b>sexta-feira de referência</b> e o sistema gera o podcast
-                                do período de <b>sexta anterior 12:00</b> até <b>sexta escolhida 11:59</b>.
-                                Deixe em branco para usar a <b>última sexta-feira</b>.
-                                Útil quando o envio automático falha.
-                            </p>
-
-                            <form th:action="@{/admin-web/podcast/resend}" method="post"
-                                class="row g-2 align-items-center"
-                                data-confirm="Reenviar o podcast da semana escolhida?">
-
-                                <div class="col-auto">
-                                    <label for="resendFriday" class="form-label small mb-0">
-                                        Sexta de referência
-                                    </label>
-                                    <input type="date" class="form-control" id="resendFriday" name="friday"
-                                        placeholder="2026-10-09">
-                                    <div class="form-text small">
-                                        Em branco = última sexta
-                                    </div>
-                                </div>
-
-                                <div class="col-auto">
-                                    <label for="resendChat" class="form-label small mb-0">Chat destino</label>
-                                    <select class="form-select" name="chatId" id="resendChat">
-                                        <option value="">-- Vazio (Padrão) --</option>
-                                        <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="col-auto align-self-end">
-                                    <button type="submit" class="btn btn-warning">
-                                        <span class="bi bi-arrow-repeat" aria-hidden="true"></span>
-                                        Reenviar Podcast da Semana
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Sala VIP -->
-                <div class="card mt-3">
-                    <div class="card-header">
-                        <span class="bi bi-film" aria-hidden="true"></span> Sala VIP (Letterboxd)
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted small mb-3">
-                            Gerencie a integração com a lista do Letterboxd.
-                            O <b>Sync</b> busca os filmes da lista; o <b>Reload</b> recarrega o
-                            <code>salavip-config.json</code> (URL, cron, etc.) sem reiniciar a aplicação.
-                        </p>
-                        <fieldset class="btn-group-vertical-mobile" aria-label="Ações da Sala VIP">
-                            <legend class="sr-only">Ações da Sala VIP</legend>
-                            <form th:action="@{/admin-web/salavip/sync}" method="post" class="d-inline-block"
-                                data-confirm="Forçar sincronização da lista do Letterboxd agora?">
-                                <button type="submit" class="btn btn-primary">
-                                    <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Forçar Sincronização
+                            <form th:action="@{/admin-web/reload-prompts}" method="post" class="d-inline-block"
+                                data-feature="prompts.external.enabled">
+                                <button type="submit" class="btn btn-warning">
+                                    <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar Prompts
                                 </button>
                             </form>
-                            <form th:action="@{/admin-web/salavip/reload}" method="post" class="d-inline-block"
-                                data-confirm="Recarregar o salavip-config.json?">
+                            <form th:action="@{/admin-web/reload-auto-responses}" method="post" class="d-inline-block">
                                 <button type="submit" class="btn btn-secondary">
-                                    <span class="bi bi-gear" aria-hidden="true"></span> Recarregar Configurações (JSON)
+                                    <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Recarregar
+                                    Auto-Responses
+                                </button>
+                            </form>
+                            <form th:action="@{/admin-web/reload-easter-eggs}" method="post" class="d-inline-block"
+                                data-feature="easter.eggs.enabled">
+                                <button type="submit" class="btn btn-secondary">
+                                    <span class="bi bi-emoji-smile" aria-hidden="true"></span> Recarregar Easter Eggs
                                 </button>
                             </form>
                         </fieldset>
-                    </div>
-                </div>
 
-                <!-- Upload de arquivos de configuração (.json) -->
-                <div class="card mt-3">
-                    <div class="card-header">
-                        <span class="bi bi-cloud-arrow-up" aria-hidden="true"></span>
-                        Carregar Arquivo de Configuração (.json)
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted small mb-3">
-                            Envie um <code>.json</code> para substituir o arquivo correspondente
-                            em <code>./data/config/</code>. O serviço associado é recarregado
-                            automaticamente após o upload — <b>sem reiniciar a aplicação</b>.
-                        </p>
-
-                        <form th:action="@{/admin-web/upload-json}" method="post" enctype="multipart/form-data"
-                            class="row g-2 align-items-end" onsubmit="return confirmUploadJson(this)">
-
-                            <div class="col-12 col-md-4">
-                                <label for="uploadTarget" class="form-label small mb-0">
-                                    Alvo <span class="text-danger">*</span>
-                                </label>
-                                <select class="form-select" id="uploadTarget" name="target" required
-                                    aria-label="Qual arquivo será substituído">
-                                    <option value="">-- Selecione --</option>
-                                    <option value="easter-eggs">Easter Eggs</option>
-                                    <option value="auto-responses">Auto-Responses</option>
-                                    <option value="worldcup">Copa do Mundo</option>
-                                    <option value="salavip">Sala VIP (lista de filmes)</option>
-                                    <option value="salavip-config">Sala VIP (config)</option>
-                                    <option value="torrent">Lançamentos Torrent</option>
-                                </select>
+                        <!-- Podcast -->
+                        <div class="card mt-3" data-feature="podcast.enabled">
+                            <div class="card-header">
+                                <span class="bi bi-podcast" aria-hidden="true"></span> Podcast
+                                <span class="feature-off-badge" hidden>🔒 Desativado</span>
                             </div>
+                            <div class="card-body">
+                                <form th:action="@{/admin-web/test-podcast}" method="post"
+                                    class="row g-2 align-items-center mb-2">
+                                    <div class="col-auto">
+                                        <label for="podcastStart" class="visually-hidden">Data início</label>
+                                        <input type="date" class="form-control" id="podcastStart" name="start"
+                                            placeholder="Data início">
+                                    </div>
+                                    <div class="col-auto">
+                                        <label for="podcastEnd" class="visually-hidden">Data fim</label>
+                                        <input type="date" class="form-control" id="podcastEnd" name="end"
+                                            placeholder="Data fim">
+                                    </div>
+                                    <div class="col-auto">
+                                        <label for="podcastChat" class="visually-hidden">Chat ID</label>
+                                        <select class="form-select" name="chatId" id="podcastChat">
+                                            <option value="">-- Vazio (Padrão) --</option>
+                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <button type="submit" class="btn btn-outline-dark">
+                                            <span class="bi bi-podcast" aria-hidden="true"></span> Gerar Podcast
+                                        </button>
+                                    </div>
+                                </form>
 
-                            <div class="col-12 col-md-5">
-                                <label for="uploadFile" class="form-label small mb-0">
-                                    Arquivo JSON <span class="text-danger">*</span>
-                                </label>
-                                <input type="file" class="form-control" id="uploadFile" name="file"
-                                    accept="application/json,.json" required aria-describedby="uploadFileHelp">
-                                <div id="uploadFileHelp" class="form-text small">
-                                    Máximo 2&nbsp;MB. O JSON será validado antes de ser gravado.
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <form th:action="@{/admin-web/test-podcast-latest}" method="post"
+                                        class="d-inline-block">
+                                        <button type="submit" class="btn btn-outline-dark btn-sm">
+                                            <span class="bi bi-clock-history" aria-hidden="true"></span> Últimos 7 dias
+                                        </button>
+                                    </form>
+
+                                    <form th:action="@{/admin-web/test-podcast-days}" method="post"
+                                        class="d-flex align-items-center gap-1">
+                                        <label for="podcastDays" class="visually-hidden">Dias</label>
+                                        <input type="number" class="form-control form-control-sm" id="podcastDays"
+                                            name="days" value="3" min="1" max="30" style="width: 80px">
+                                        <label for="podcastDaysChat" class="visually-hidden">Chat ID</label>
+                                        <select class="form-select form-select-sm" name="chatId" id="podcastDaysChat">
+                                            <option value="">Vazio</option>
+                                            <option th:each="id : ${availableChatIds}" th:value="${id}" th:text="${id}">
+                                            </option>
+                                        </select>
+                                        <button type="submit" class="btn btn-outline-dark btn-sm">
+                                            <span class="bi bi-calendar-range" aria-hidden="true"></span> N dias
+                                        </button>
+                                    </form>
+                                </div>
+
+                                <!-- Reenvio de podcast por sexta-feira -->
+                                <div class="podcast-resend" data-feature="podcast.fallback-text.enabled">
+                                    <h6 class="mb-2">
+                                        <span class="bi bi-arrow-repeat" aria-hidden="true"></span>
+                                        Reenviar Podcast por Semana
+                                        <span class="feature-off-badge" hidden>🔒 Desativado</span>
+                                    </h6>
+                                    <p class="text-muted small mb-2">
+                                        Escolha a <b>sexta-feira de referência</b> e o sistema gera o podcast
+                                        do período de <b>sexta anterior 12:00</b> até <b>sexta escolhida 11:59</b>.
+                                        Deixe em branco para usar a <b>última sexta-feira</b>.
+                                        Útil quando o envio automático falha.
+                                    </p>
+
+                                    <form th:action="@{/admin-web/podcast/resend}" method="post"
+                                        class="row g-2 align-items-center"
+                                        data-confirm="Reenviar o podcast da semana escolhida?">
+
+                                        <div class="col-auto">
+                                            <label for="resendFriday" class="form-label small mb-0">
+                                                Sexta de referência
+                                            </label>
+                                            <input type="date" class="form-control" id="resendFriday" name="friday"
+                                                placeholder="2026-10-09">
+                                            <div class="form-text small">
+                                                Em branco = última sexta
+                                            </div>
+                                        </div>
+
+                                        <div class="col-auto">
+                                            <label for="resendChat" class="form-label small mb-0">Chat destino</label>
+                                            <select class="form-select" name="chatId" id="resendChat">
+                                                <option value="">-- Vazio (Padrão) --</option>
+                                                <option th:each="id : ${availableChatIds}" th:value="${id}"
+                                                    th:text="${id}">
+                                                </option>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-auto align-self-end">
+                                            <button type="submit" class="btn btn-warning">
+                                                <span class="bi bi-arrow-repeat" aria-hidden="true"></span>
+                                                Reenviar Podcast da Semana
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="col-12 col-md-3">
-                                <button type="submit" class="btn btn-primary w-100"
-                                    aria-label="Enviar e recarregar JSON">
-                                    <span class="bi bi-upload" aria-hidden="true"></span> Enviar e Recarregar
+                        <!-- Sala VIP -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <span class="bi bi-film" aria-hidden="true"></span> Sala VIP (Letterboxd)
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted small mb-3">
+                                    Gerencie a integração com a lista do Letterboxd.
+                                    O <b>Sync</b> busca os filmes da lista; o <b>Reload</b> recarrega o
+                                    <code>salavip-config.json</code> (URL, cron, etc.) sem reiniciar a aplicação.
+                                </p>
+                                <fieldset class="btn-group-vertical-mobile" aria-label="Ações da Sala VIP">
+                                    <legend class="sr-only">Ações da Sala VIP</legend>
+                                    <form th:action="@{/admin-web/salavip/sync}" method="post" class="d-inline-block"
+                                        data-confirm="Forçar sincronização da lista do Letterboxd agora?">
+                                        <button type="submit" class="btn btn-primary">
+                                            <span class="bi bi-arrow-repeat" aria-hidden="true"></span> Forçar
+                                            Sincronização
+                                        </button>
+                                    </form>
+                                    <form th:action="@{/admin-web/salavip/reload}" method="post" class="d-inline-block"
+                                        data-confirm="Recarregar o salavip-config.json?">
+                                        <button type="submit" class="btn btn-secondary">
+                                            <span class="bi bi-gear" aria-hidden="true"></span> Recarregar Configurações
+                                            (JSON)
+                                        </button>
+                                    </form>
+                                </fieldset>
+                            </div>
+                        </div>
+
+                        <!-- Upload de arquivos de configuração (.json) -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <span class="bi bi-cloud-arrow-up" aria-hidden="true"></span>
+                                Carregar Arquivo de Configuração (.json)
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted small mb-3">
+                                    Envie um <code>.json</code> para substituir o arquivo correspondente
+                                    em <code>./data/config/</code>. O serviço associado é recarregado
+                                    automaticamente após o upload — <b>sem reiniciar a aplicação</b>.
+                                </p>
+
+                                <form th:action="@{/admin-web/upload-json}" method="post" enctype="multipart/form-data"
+                                    class="row g-2 align-items-end" onsubmit="return confirmUploadJson(this)">
+
+                                    <div class="col-12 col-md-4">
+                                        <label for="uploadTarget" class="form-label small mb-0">
+                                            Alvo <span class="text-danger">*</span>
+                                        </label>
+                                        <select class="form-select" id="uploadTarget" name="target" required
+                                            aria-label="Qual arquivo será substituído">
+                                            <option value="">-- Selecione --</option>
+                                            <option value="easter-eggs">Easter Eggs</option>
+                                            <option value="auto-responses">Auto-Responses</option>
+                                            <option value="worldcup">Copa do Mundo</option>
+                                            <option value="salavip">Sala VIP (lista de filmes)</option>
+                                            <option value="salavip-config">Sala VIP (config)</option>
+                                            <option value="torrent">Lançamentos Torrent</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-12 col-md-5">
+                                        <label for="uploadFile" class="form-label small mb-0">
+                                            Arquivo JSON <span class="text-danger">*</span>
+                                        </label>
+                                        <input type="file" class="form-control" id="uploadFile" name="file"
+                                            accept="application/json,.json" required aria-describedby="uploadFileHelp">
+                                        <div id="uploadFileHelp" class="form-text small">
+                                            Máximo 2&nbsp;MB. O JSON será validado antes de ser gravado.
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 col-md-3">
+                                        <button type="submit" class="btn btn-primary w-100"
+                                            aria-label="Enviar e recarregar JSON">
+                                            <span class="bi bi-upload" aria-hidden="true"></span> Enviar e Recarregar
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        <!-- Migração -->
+                        <div class="card mt-3" data-feature="migration.enabled">
+                            <div class="card-header">
+                                <span class="bi bi-database-up" aria-hidden="true"></span> Migração SQLite →
+                                Postgres/Mongo
+                                <span class="feature-off-badge" hidden>🔒 Desativado</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-warning small mb-3">
+                                    <span class="bi bi-exclamation-triangle" aria-hidden="true"></span>
+                                    <b>Atenção:</b> a migração <b>não é idempotente</b>. Rode uma única vez em ambiente
+                                    limpo.
+                                    Sempre faça <b>preview</b> e <b>dry-run</b> antes da migração real.
+                                </div>
+
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <button type="button" class="btn btn-outline-info" onclick="previewMigration()"
+                                        aria-label="Preview da migração">
+                                        <span class="bi bi-search" aria-hidden="true"></span> Preview
+                                    </button>
+
+                                    <form th:action="@{/admin-web/migrate-sqlite}" method="post" class="d-inline-block"
+                                        data-confirm="Rodar migração em DRY-RUN (não grava nada)?">
+                                        <input type="hidden" name="dryRun" value="true">
+                                        <button type="submit" class="btn btn-outline-warning">
+                                            <span class="bi bi-clipboard-check" aria-hidden="true"></span> Dry-run
+                                        </button>
+                                    </form>
+
+                                    <form th:action="@{/admin-web/migrate-sqlite}" method="post" class="d-inline-block"
+                                        data-confirm="⚠️ Rodar migração REAL? Isso vai gravar nos bancos novos.">
+                                        <input type="hidden" name="dryRun" value="false">
+                                        <button type="submit" class="btn btn-danger">
+                                            <span class="bi bi-database-add" aria-hidden="true"></span> Migrar de
+                                            verdade
+                                        </button>
+                                    </form>
+                                </div>
+
+                                <output id="migrationPreview" class="result-box d-block" style="display:none"
+                                    aria-live="polite"></output>
+                            </div>
+                        </div>
+                    </div><!-- /#sub-admin -->
+
+                    <!-- Sub-pane: Features (conteúdo original de #features) -->
+                    <div class="tab-pane fade" id="sub-features" role="tabpanel" aria-labelledby="sub-tab-features">
+                        <div class="card mt-2">
+                            <div class="card-header">
+                                <span class="bi bi-toggles" aria-hidden="true"></span> Feature Flags (runtime)
+                                <button type="button" class="btn btn-sm btn-outline-secondary float-end"
+                                    onclick="loadFeatureFlags()" aria-label="Recarregar feature flags">
+                                    <span class="bi bi-arrow-clockwise" aria-hidden="true"></span> Recarregar
                                 </button>
                             </div>
-                        </form>
-                    </div>
-                </div>
-                <!-- Migração -->
-                <div class="card mt-3" data-feature="migration.enabled">
-                    <div class="card-header">
-                        <span class="bi bi-database-up" aria-hidden="true"></span> Migração SQLite → Postgres/Mongo
-                        <span class="feature-off-badge" hidden>🔒 Desativado</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-warning small mb-3">
-                            <span class="bi bi-exclamation-triangle" aria-hidden="true"></span>
-                            <b>Atenção:</b> a migração <b>não é idempotente</b>. Rode uma única vez em ambiente limpo.
-                            Sempre faça <b>preview</b> e <b>dry-run</b> antes da migração real.
+                            <div class="card-body p-0" id="featureFlagsContainer" aria-live="polite" aria-busy="true">
+                                <div class="text-center p-3">
+                                    <output class="spinner-border text-primary"
+                                        aria-label="Carregando feature flags"></output>
+                                </div>
+                            </div>
+                            <div class="card-footer text-muted small">
+                                <span class="bi bi-info-circle" aria-hidden="true"></span>
+                                Alterações aplicam-se imediatamente, sem reiniciar a aplicação.
+                                Flags marcadas como <span class="badge text-bg-warning">read-only</span>
+                                só podem ser alteradas no <code>application.properties</code> e exigem restart.
+                            </div>
                         </div>
+                    </div><!-- /#sub-features -->
 
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-outline-info" onclick="previewMigration()"
-                                aria-label="Preview da migração">
-                                <span class="bi bi-search" aria-hidden="true"></span> Preview
-                            </button>
+                    <!-- Sub-pane: Aniversários (conteúdo original de #aniversarios) -->
+                    <div class="tab-pane fade" id="sub-aniversarios" role="tabpanel"
+                        aria-labelledby="sub-tab-aniversarios">
+                        <div class="row g-3 mt-1">
+                            <div class="col-12 col-md-6">
+                                <div class="card" data-feature="birthday.enabled">
+                                    <div class="card-header">
+                                        <span class="bi bi-cake2" aria-hidden="true"></span> Disparar Parabéns
+                                        Manualmente
+                                        <span class="feature-off-badge" hidden>🔒 Desativado</span>
+                                    </div>
+                                    <div class="card-body">
+                                        <form th:action="@{/admin-web/test-birthday}" method="post"
+                                            class="row g-2 align-items-center mb-3">
+                                            <div class="col-auto">
+                                                <label for="birthdayDay" class="visually-hidden">Dia</label>
+                                                <input type="number" class="form-control" id="birthdayDay" name="day"
+                                                    min="1" max="31" placeholder="Dia" required>
+                                            </div>
+                                            <div class="col-auto">
+                                                <label for="birthdayMonth" class="visually-hidden">Mês</label>
+                                                <input type="number" class="form-control" id="birthdayMonth"
+                                                    name="month" min="1" max="12" placeholder="Mês" required>
+                                            </div>
+                                            <div class="col-auto">
+                                                <button type="submit" class="btn btn-primary">
+                                                    <span class="bi bi-send" aria-hidden="true"></span> Disparar
+                                                </button>
+                                            </div>
+                                        </form>
 
-                            <form th:action="@{/admin-web/migrate-sqlite}" method="post" class="d-inline-block"
-                                data-confirm="Rodar migração em DRY-RUN (não grava nada)?">
-                                <input type="hidden" name="dryRun" value="true">
-                                <button type="submit" class="btn btn-outline-warning">
-                                    <span class="bi bi-clipboard-check" aria-hidden="true"></span> Dry-run
-                                </button>
-                            </form>
+                                        <form th:action="@{/admin-web/test-birthday-today}" method="post">
+                                            <button type="submit" class="btn btn-success w-100">
+                                                <span class="bi bi-calendar-check" aria-hidden="true"></span>
+                                                Disparar para hoje
+                                            </button>
+                                        </form>
 
-                            <form th:action="@{/admin-web/migrate-sqlite}" method="post" class="d-inline-block"
-                                data-confirm="⚠️ Rodar migração REAL? Isso vai gravar nos bancos novos.">
-                                <input type="hidden" name="dryRun" value="false">
-                                <button type="submit" class="btn btn-danger">
-                                    <span class="bi bi-database-add" aria-hidden="true"></span> Migrar de verdade
-                                </button>
-                            </form>
+                                        <div class="result-box mt-3">
+                                            Dispara os parabéns para quem faz aniversário em <b>DD/MM</b>.
+                                            Útil pra testar sem esperar o cron.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <span class="bi bi-list-ul" aria-hidden="true"></span> Aniversários Cadastrados
+                                    </div>
+                                    <div class="card-body">
+                                        <output id="birthdaysList" aria-live="polite" aria-busy="true" class="d-block">
+                                            <span class="spinner-border text-primary" aria-label="Carregando"></span>
+                                        </output>
+                                        <div class="mt-2 d-flex gap-2 flex-wrap">
+                                            <a href="/admin-web/birthdays-json" target="_blank"
+                                                class="btn btn-outline-secondary btn-sm">
+                                                <span class="bi bi-file-earmark-code" aria-hidden="true"></span> Ver
+                                                JSON
+                                            </a>
+                                            <form th:action="@{/admin-web/clear-birthdays}" method="post"
+                                                data-confirm="Apagar TODOS os aniversários?" class="d-inline-block">
+                                                <button type="submit" class="btn btn-danger btn-sm">
+                                                    <span class="bi bi-trash3" aria-hidden="true"></span> Limpar Todos
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                    </div><!-- /#sub-aniversarios -->
 
-                        <output id="migrationPreview" class="result-box d-block" style="display:none"
-                            aria-live="polite"></output>
-                    </div>
-                </div>
-            </div>
+                </div><!-- /#subContentConfig -->
 
-            <!-- ==================== ABA MONITOR ==================== -->
+            </div><!-- /#admin -->
+
             <div class="tab-pane fade" id="monitor" role="tabpanel" aria-labelledby="tab-monitor">
                 <fieldset class="btn-group-vertical-mobile mt-2 mb-2" aria-label="Monitoramento">
                     <legend class="sr-only">Monitoramento</legend>
