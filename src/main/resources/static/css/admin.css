@@ -1,0 +1,496 @@
+/* ============================================================
+   T-Mill Admin — CSS
+   Extraído do <style> inline do admin.html (Fase 4a)
+   Depende de: bootstrap.min.css (variáveis --bs-*)
+   ============================================================ */
+
+:root {
+    --tmill-transition: 0.2s ease;
+}
+
+body {
+    background: var(--bs-body-bg);
+    padding-top: 65px;
+    font-size: 0.95rem;
+    transition: background-color var(--tmill-transition), color var(--tmill-transition);
+}
+
+.container {
+    max-width: 1400px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+/* Navbar */
+.navbar-brand {
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.navbar-brand .bi {
+    font-size: 1.5rem;
+    vertical-align: middle;
+}
+
+/* Cards */
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.06);
+    margin-bottom: 1rem;
+    border-radius: 0.6rem;
+    border: 1px solid var(--bs-border-color-translucent);
+    transition: box-shadow var(--tmill-transition), transform var(--tmill-transition);
+}
+
+.card:hover {
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.10);
+}
+
+.card-header {
+    background: var(--bs-secondary-bg);
+    font-weight: 600;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+    border-radius: 0.6rem 0.6rem 0 0 !important;
+}
+
+.card-body {
+    padding: 1rem;
+}
+
+/* Status bar */
+.status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: 0.6rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+}
+
+.status-bar span {
+    white-space: nowrap;
+}
+
+/* Tabs */
+.nav-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0.15rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid var(--bs-border-color);
+}
+
+.nav-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.nav-tabs .nav-item {
+    flex-shrink: 0;
+}
+
+.nav-tabs .nav-link {
+    padding: 0.55rem 0.85rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    border-radius: 0.5rem 0.5rem 0 0;
+    border: 1px solid transparent;
+    color: var(--bs-secondary-color);
+    transition: all var(--tmill-transition);
+    position: relative;
+}
+
+.nav-tabs .nav-link:hover {
+    background: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+}
+
+.nav-tabs .nav-link.active {
+    background: var(--bs-body-bg);
+    border-color: var(--bs-border-color) var(--bs-border-color) var(--bs-body-bg);
+    font-weight: 600;
+    color: var(--bs-primary);
+}
+
+/* Botões em mobile */
+.btn-group-vertical-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    border: 0;
+    padding: 0;
+    margin: 0;
+}
+
+.btn-group-vertical-mobile .btn {
+    width: 100%;
+    text-align: left;
+    justify-content: flex-start;
+}
+
+.btn-group-vertical-mobile .btn .bi {
+    margin-right: 0.5rem;
+}
+
+@media (min-width: 768px) {
+    .btn-group-vertical-mobile {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .btn-group-vertical-mobile .btn {
+        width: auto;
+        min-width: 120px;
+    }
+}
+
+/* Flash */
+.flash-message {
+    position: fixed;
+    top: 75px;
+    right: 12px;
+    z-index: 9999;
+    max-width: 90%;
+    min-width: 200px;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Spinner */
+.spinner {
+    display: none;
+}
+
+.loading .spinner {
+    display: inline-block;
+}
+
+.btn .bi {
+    margin-right: 0.3rem;
+}
+
+/* Inputs */
+.form-control,
+.form-select {
+    font-size: 0.95rem;
+    padding: 0.5rem 0.75rem;
+}
+
+/* Result box */
+.result-box {
+    margin-top: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--bs-secondary-bg);
+    border-radius: 0.4rem;
+    border-left: 3px solid var(--bs-primary);
+    font-size: 0.9rem;
+}
+
+.result-box.error {
+    border-left-color: var(--bs-danger);
+}
+
+.result-box pre {
+    margin: 0;
+    font-size: 0.85rem;
+    max-height: 400px;
+    overflow: auto;
+}
+
+/* Theme toggle */
+.theme-toggle {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    border-radius: 0.5rem;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    transition: all var(--tmill-transition);
+}
+
+.theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Feature flags */
+.feature-flag-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.feature-flag-row:last-child {
+    border-bottom: none;
+}
+
+.feature-flag-row .flag-name {
+    font-family: var(--bs-font-monospace);
+    font-size: 0.85rem;
+    color: var(--bs-secondary-color);
+}
+
+.feature-flag-row .flag-desc {
+    font-size: 0.9rem;
+    margin-top: 0.15rem;
+}
+
+.form-check-input {
+    cursor: pointer;
+}
+
+.form-check-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Tab indicator */
+.nav-tabs .nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--bs-primary);
+}
+
+/* Footer */
+footer {
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+/* Acessibilidade */
+*:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+a {
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Dark mode tweaks */
+[data-bs-theme="dark"] .card-header {
+    background: #2b3035;
+}
+
+[data-bs-theme="dark"] .status-bar {
+    background: #212529;
+}
+
+[data-bs-theme="dark"] .result-box {
+    background: #2b3035;
+}
+
+/* ============================================================
+   Ajustes de modal (scroll em telas pequenas)
+   ============================================================ */
+.modal-dialog.modal-dialog-scrollable .modal-content {
+    max-height: calc(100dvh - 3.5rem);
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-dialog.modal-dialog-scrollable .modal-body {
+    overflow-y: auto;
+    max-height: calc(100vh - 12rem);
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 576px) {
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+
+    .modal-dialog.modal-dialog-scrollable .modal-content {
+        max-height: calc(100dvh - 1rem);
+    }
+}
+
+.podcast-resend {
+    border-left: 3px solid var(--bs-warning);
+    padding-left: 0.75rem;
+    margin-top: 1rem;
+}
+
+/* ============================================================
+   Fase 3 — Feature Flags (feedback visual)
+   ============================================================ */
+
+/* Estado padrão: elemento habilitado (sem estilo extra) */
+[data-feature] {
+    transition: opacity 0.2s ease;
+}
+
+/* Módulo desabilitado via feature flag */
+[data-feature-disabled="true"] {
+    opacity: 0.45;
+    position: relative;
+}
+
+[data-feature-disabled="true"] * {
+    pointer-events: none;
+}
+
+/* Badge de cadeado visível (não depende de title, funciona em touch) */
+.feature-off-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--bs-secondary-color);
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color-translucent);
+    border-radius: 0.35rem;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* Em telas pequenas, o badge pode quebrar para a linha de baixo */
+@media (max-width: 575.98px) {
+    .feature-off-badge {
+        display: block;
+        margin-left: 0;
+        margin-top: 0.25rem;
+        width: fit-content;
+    }
+}
+
+/* Feedback visual no hover do card (não interativo) */
+[data-feature-disabled="true"]:hover {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================================
+   Fase 2a — MOBILE BASE (a11y + responsividade)
+   ============================================================ */
+
+/* iOS: evita zoom automático ao focar input (font-size < 16px) */
+@media (max-width: 767.98px) {
+
+    .form-control,
+    .form-select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    /* Alvos de toque mínimos (WCAG 2.5.5) */
+    .btn,
+    .nav-link,
+    .btn-close {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .btn-sm {
+        min-height: 40px;
+        min-width: 40px;
+    }
+
+    .form-check-input[role="switch"] {
+        min-height: 32px;
+        min-width: 56px;
+    }
+
+    /* Cards ocupam largura toda com respiro */
+    .row>[class*="col-"] {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    /* Status bar quebra em coluna sem bagunça */
+    .status-bar {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    /* Tabelas: scroll horizontal controlado + toque suave */
+    .table-responsive {
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* Abas com scroll-snap para parar em cada aba */
+.nav-tabs {
+    scroll-snap-type: x proximity;
+}
+
+.nav-tabs .nav-item {
+    scroll-snap-align: start;
+}
+
+/* Indicador visual de overflow à direita (mobile/tablet) */
+.nav-tabs-wrapper {
+    position: relative;
+}
+
+.nav-tabs-wrapper::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 32px;
+    background: linear-gradient(to right, transparent, var(--bs-body-bg));
+    pointer-events: none;
+    opacity: 0.9;
+    border-radius: 0 0.5rem 0 0;
+}
+
+@media (min-width: 992px) {
+    .nav-tabs-wrapper::after {
+        display: none;
+    }
+}
+
+/* Modal: rodapé sticky em mobile para "Salvar/Cancelar" sempre visível */
+@media (max-width: 575.98px) {
+    .modal-dialog-scrollable .modal-footer {
+        position: sticky;
+        bottom: 0;
+        background: var(--bs-body-bg);
+        z-index: 2;
+        border-top: 1px solid var(--bs-border-color);
+    }
+}

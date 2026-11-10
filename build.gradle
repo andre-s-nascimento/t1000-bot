@@ -399,3 +399,7 @@ tasks.register('copyDependencies', Copy) {
     from configurations.runtimeClasspath
     into layout.buildDirectory.dir('dependencies')
 }
+
+springBoot {
+    buildInfo()
+}
