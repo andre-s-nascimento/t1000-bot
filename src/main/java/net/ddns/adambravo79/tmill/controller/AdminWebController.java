@@ -266,7 +266,44 @@ public class AdminWebController {
         }
         model.addAttribute("availableChatIds", allChats);
 
+        // Fase 4: cache-busting de CSS/JS
+        // Usa o build.timestamp do build-info.properties (gerado pelo
+        // spring-boot-maven-plugin no `./gradlew build`). Fallback para
+        // timestamp atual caso o arquivo não exista (dev, testes).
+        model.addAttribute("assetVersion", resolveAssetVersion());
+
         return "admin";
+    }
+
+    /**
+     * Resolve a versão usada como query string de cache-busting em {@code ?v=}.
+     *
+     * <p>Ordem de precedência:
+     *
+     * <ol>
+     *   <li>{@code build.timestamp} — gerado pelo {@code spring-boot-maven-plugin} no build
+     *   <li>{@code build.time} — idem, mas em formato ISO-8601 (fallback de compatibilidade)
+     *   <li>{@code app.version} — versão semântica do {@code build.gradle}
+     *   <li>{@code System.currentTimeMillis()} — último recurso (dev/testes)
+     * </ol>
+     *
+     * <p>O valor é sanitizado para conter apenas {@code [A-Za-z0-9._-]} para não quebrar a URL.
+     */
+    private String resolveAssetVersion() {
+        String[] candidates = {
+            environment.getProperty("build.timestamp"),
+            environment.getProperty("build.time"),
+            environment.getProperty("app.version")
+        };
+        for (String candidate : candidates) {
+            if (candidate != null && !candidate.isBlank()) {
+                String sanitized = candidate.replaceAll("[^A-Za-z0-9._-]", "");
+                if (!sanitized.isEmpty()) {
+                    return sanitized;
+                }
+            }
+        }
+        return String.valueOf(System.currentTimeMillis());
     }
 
     // =========================================================================

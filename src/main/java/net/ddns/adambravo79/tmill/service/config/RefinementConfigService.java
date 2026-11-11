@@ -38,7 +38,7 @@ public class RefinementConfigService {
         reload();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({})
     public void reload() {
         try {
             var loaded =

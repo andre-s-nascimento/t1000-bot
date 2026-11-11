@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'net.ddns.adambravo79'
-version = '2.11.2'
+version = '2.12.0'
 
 java {
     toolchain {
@@ -398,4 +398,8 @@ tasks.register('copyDependencies', Copy) {
 
     from configurations.runtimeClasspath
     into layout.buildDirectory.dir('dependencies')
+}
+
+springBoot {
+    buildInfo()
 }
