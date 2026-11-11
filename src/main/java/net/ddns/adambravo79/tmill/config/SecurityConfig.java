@@ -12,6 +12,7 @@ import org.springframework.core.env.Profiles;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
@@ -281,5 +282,14 @@ public class SecurityConfig {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         response.getWriter().write(body);
+    }
+
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        // Ignora completamente a cadeia de segurança para recursos estáticos
+        return web ->
+                web.ignoring()
+                        .requestMatchers(
+                                "/css/**", "/js/**", "/fonts/**", "/icons/**", "/favicon.ico");
     }
 }
