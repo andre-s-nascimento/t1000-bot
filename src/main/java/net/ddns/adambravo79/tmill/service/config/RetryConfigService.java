@@ -42,7 +42,6 @@ public class RetryConfigService {
         reload();
     }
 
-    @SuppressWarnings({})
     public void reload() {
         try {
             var loaded =
