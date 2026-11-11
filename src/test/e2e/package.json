@@ -1,0 +1,15 @@
+{
+  "name": "tmill-admin-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Testes E2E do painel admin (Playwright)",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "install-browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

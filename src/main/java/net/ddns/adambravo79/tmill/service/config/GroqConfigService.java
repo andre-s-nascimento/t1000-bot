@@ -40,7 +40,6 @@ public class GroqConfigService {
         reload();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public void reload() {
         try {
             var loaded =

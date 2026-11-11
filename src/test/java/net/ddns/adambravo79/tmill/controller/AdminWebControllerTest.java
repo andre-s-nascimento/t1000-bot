@@ -2,6 +2,7 @@
 package net.ddns.adambravo79.tmill.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -23,17 +24,21 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.ui.Model;
+import org.springframework.util.ReflectionUtils;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
@@ -1652,9 +1657,8 @@ class AdminWebControllerTest {
 
     @Test
     @DisplayName("uploadJson: sucesso no salavip → grava e recarrega")
-    void uploadJson_sucesso_salavip(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
-            throws Exception {
-        java.nio.file.Path destino = tmp.resolve("sala-vip.json");
+    void uploadJson_sucesso_salavip(@org.junit.jupiter.api.io.TempDir Path tmp) throws Exception {
+        Path destino = tmp.resolve("sala-vip.json");
         when(environment.getProperty("salavip.data.file")).thenReturn("file:" + destino);
         when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
 
@@ -1665,16 +1669,16 @@ class AdminWebControllerTest {
 
         controller.uploadJson(file, "salavip", attrs);
 
-        assertThat(java.nio.file.Files.exists(destino)).isTrue();
+        assertThat(Files.exists(destino)).isTrue();
         verify(salaVipService).sincronizarLista();
         assertThat(attrs.getFlashAttributes().get("success")).isNotNull();
     }
 
     @Test
     @DisplayName("uploadJson: salavip-config → recarrega config")
-    void uploadJson_sucesso_salavipConfig(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+    void uploadJson_sucesso_salavipConfig(@org.junit.jupiter.api.io.TempDir Path tmp)
             throws Exception {
-        java.nio.file.Path destino = tmp.resolve("salavip-config.json");
+        Path destino = tmp.resolve("salavip-config.json");
         when(environment.getProperty("salavip.config.file")).thenReturn("file:" + destino);
         when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
 
@@ -1684,15 +1688,15 @@ class AdminWebControllerTest {
 
         controller.uploadJson(file, "salavip-config", attrs);
 
-        assertThat(java.nio.file.Files.exists(destino)).isTrue();
+        assertThat(Files.exists(destino)).isTrue();
         verify(salaVipConfigService).reload();
     }
 
     @Test
     @DisplayName("uploadJson: easter-eggs → recarrega")
-    void uploadJson_sucesso_easterEggs(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+    void uploadJson_sucesso_easterEggs(@org.junit.jupiter.api.io.TempDir Path tmp)
             throws Exception {
-        java.nio.file.Path destino = tmp.resolve("easter-eggs.json");
+        Path destino = tmp.resolve("easter-eggs.json");
         when(environment.getProperty("easter-egg.file")).thenReturn("file:" + destino);
         when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
 
@@ -1707,9 +1711,9 @@ class AdminWebControllerTest {
 
     @Test
     @DisplayName("uploadJson: auto-responses → recarrega")
-    void uploadJson_sucesso_autoResponses(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
+    void uploadJson_sucesso_autoResponses(@org.junit.jupiter.api.io.TempDir Path tmp)
             throws Exception {
-        java.nio.file.Path destino = tmp.resolve("auto-responses.json");
+        Path destino = tmp.resolve("auto-responses.json");
         when(environment.getProperty("auto.response.file")).thenReturn("file:" + destino);
         when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
 
@@ -1724,9 +1728,8 @@ class AdminWebControllerTest {
 
     @Test
     @DisplayName("uploadJson: worldcup → recarrega")
-    void uploadJson_sucesso_worldcup(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp)
-            throws Exception {
-        java.nio.file.Path destino = tmp.resolve("worldcup2026.json");
+    void uploadJson_sucesso_worldcup(@org.junit.jupiter.api.io.TempDir Path tmp) throws Exception {
+        Path destino = tmp.resolve("worldcup2026.json");
         when(environment.getProperty("worldcup.data.file")).thenReturn("file:" + destino);
         when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
 
@@ -1763,9 +1766,9 @@ class AdminWebControllerTest {
     @Test
     @DisplayName("uploadJson: alvo torrent → grava e recarrega")
     @SneakyThrows
-    void uploadJson_sucesso_torrent(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) {
+    void uploadJson_sucesso_torrent(@org.junit.jupiter.api.io.TempDir Path tmp) {
         // Cria um arquivo JSON de mentira no temp dir
-        java.nio.file.Path destino = tmp.resolve("torrent-lancamentos.json");
+        Path destino = tmp.resolve("torrent-lancamentos.json");
         when(environment.getProperty("torrent.data.file")).thenReturn("file:" + destino);
         when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
 
@@ -1778,7 +1781,7 @@ class AdminWebControllerTest {
 
         // Verifica o redirecionamento e o recarregamento
         assertThat(view).isEqualTo("redirect:/admin-web");
-        assertThat(java.nio.file.Files.exists(destino)).isTrue();
+        assertThat(Files.exists(destino)).isTrue();
         verify(torrentLaunchService).carregar();
         assertThat(attrs.getFlashAttributes().get("success")).isNotNull();
     }
@@ -1833,5 +1836,167 @@ class AdminWebControllerTest {
 
             verify(reminderDispatcher).dispatchToChat("quatro-horas-quarta", 123L);
         }
+    }
+
+    // =========================================================================
+    // 🆕 COBERTURA ADICIONAL — resolveAssetVersion
+    // =========================================================================
+
+    @Nested
+    @DisplayName("resolveAssetVersion (via adminPage)")
+    class ResolveAssetVersionTest {
+
+        @Test
+        @DisplayName("build.timestamp válido → usa sanitizado")
+        void buildTimestampValido() {
+            when(environment.getProperty("build.timestamp")).thenReturn("2026-11-11T10:00:00");
+            Model model = new ExtendedModelMap();
+            controller.adminPage(model);
+            assertThat(model.getAttribute("assetVersion"))
+                    .isEqualTo("2026-11-11T10:00:00".replaceAll("[^A-Za-z0-9._-]", ""));
+        }
+
+        @Test
+        @DisplayName("build.timestamp sanitiza para vazio → cai para build.time")
+        void buildTimestampSanitizaVazio_caiParaBuildTime() {
+            when(environment.getProperty("build.timestamp")).thenReturn("!!!");
+            when(environment.getProperty("build.time")).thenReturn("2026-11-11");
+            Model model = new ExtendedModelMap();
+            controller.adminPage(model);
+            assertThat(model.getAttribute("assetVersion")).isEqualTo("2026-11-11");
+        }
+
+        @Test
+        @DisplayName("todos null/blank → retorna System.currentTimeMillis()")
+        void todosVazios_usaCurrentTimeMillis() {
+            when(environment.getProperty("build.timestamp")).thenReturn(null);
+            when(environment.getProperty("build.time")).thenReturn("   ");
+            when(environment.getProperty("app.version")).thenReturn(null);
+            Model model = new ExtendedModelMap();
+            controller.adminPage(model);
+            String version = (String) model.getAttribute("assetVersion");
+            assertThat(version).matches("\\d+");
+        }
+
+        @Test
+        @DisplayName("app.version como fallback final")
+        void appVersionFallback() {
+            when(environment.getProperty("build.timestamp")).thenReturn(null);
+            when(environment.getProperty("build.time")).thenReturn(null);
+            when(environment.getProperty("app.version")).thenReturn("2.12.0");
+            Model model = new ExtendedModelMap();
+            controller.adminPage(model);
+            assertThat(model.getAttribute("assetVersion")).isEqualTo("2.12.0");
+        }
+    }
+
+    // =========================================================================
+    // 🆕 COBERTURA ADICIONAL — uploadJson (MaxUploadSizeExceededException)
+    // =========================================================================
+
+    @Test
+    @DisplayName("uploadJson: MaxUploadSizeExceededException → flash error específico")
+    void uploadJson_maxUploadSizeExceeded() {
+        MockMultipartFile file =
+                new MockMultipartFile("file", "{}".getBytes()) {
+                    @Override
+                    public long getSize() {
+                        return 10;
+                    }
+
+                    @Override
+                    public byte[] getBytes() {
+                        throw new MaxUploadSizeExceededException(1L);
+                    }
+                };
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "salavip", attrs);
+
+        assertThat(attrs.getFlashAttributes().get("error").toString())
+                .contains("excede o limite do servidor");
+        assertThat(file.getName()).isEqualTo("file");
+    }
+
+    // =========================================================================
+    // 🆕 COBERTURA ADICIONAL — resolveTargetChatId (NumberFormatException)
+    // =========================================================================
+
+    @Test
+    @DisplayName(
+            "resolveTargetChatId: digestChatIdsStr com valor não numérico → ignora e usa próximo")
+    void resolve_digestChatIdInvalido_ignora() {
+        ReflectionTestUtils.setField(controller, "ownerId", 0L);
+        ReflectionTestUtils.setField(controller, "digestChatIdsStr", "abc,456");
+
+        RedirectAttributes attrs = newRedirectAttributes();
+        controller.testWorldCupShowcase(null, attrs);
+
+        verify(worldCupSchedulerService).sendManualTestToChat(456L);
+    }
+
+    @Test
+    @DisplayName("resolveTargetChatId: digestChatIdsStr todo inválido → usa showcase")
+    void resolve_digestChatIdTodoInvalido_usaShowcase() {
+        ReflectionTestUtils.setField(controller, "ownerId", 0L);
+        ReflectionTestUtils.setField(controller, "digestChatIdsStr", "abc,xyz");
+
+        RedirectAttributes attrs = newRedirectAttributes();
+        controller.testWorldCupShowcase(null, attrs);
+
+        verify(worldCupSchedulerService).sendManualTestToChat(SHOWCASE_CHAT_ID);
+    }
+
+    // =========================================================================
+    // 🆕 COBERTURA ADICIONAL — toPath (sem prefixo "file:")
+    // =========================================================================
+
+    @Test
+    @DisplayName("uploadJson: salavip com path sem 'file:' → usa direto")
+    void uploadJson_salavipSemPrefixo(@TempDir java.nio.file.Path tmp) throws Exception {
+        java.nio.file.Path destino = tmp.resolve("sala-vip.json");
+        // sem prefixo "file:"
+        when(environment.getProperty("salavip.data.file")).thenReturn(destino.toString());
+        when(objectMapper.readTree(any(byte[].class))).thenReturn(null);
+
+        MockMultipartFile file = new MockMultipartFile("file", "{}".getBytes());
+        RedirectAttributes attrs = newRedirectAttributes();
+
+        controller.uploadJson(file, "salavip", attrs);
+
+        assertThat(java.nio.file.Files.exists(destino)).isTrue();
+        verify(salaVipService).sincronizarLista();
+    }
+
+    // =========================================================================
+    // 🆕 COBERTURA ADICIONAL — switch defaults (defensive programming)
+    // =========================================================================
+
+    @Test
+    @DisplayName("resolverDestinoUpload: alvo desconhecido → IllegalArgumentException")
+    void resolverDestinoUpload_alvoDesconhecido() {
+        var method =
+                ReflectionUtils.findMethod(
+                        AdminWebController.class, "resolverDestinoUpload", String.class);
+        ReflectionUtils.makeAccessible(method);
+
+        assertThatThrownBy(
+                        () -> ReflectionUtils.invokeMethod(method, controller, "alvo-inexistente"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Alvo desconhecido");
+    }
+
+    @Test
+    @DisplayName("recarregarServicoUpload: alvo desconhecido → IllegalArgumentException")
+    void recarregarServicoUpload_alvoDesconhecido() {
+        var method =
+                ReflectionUtils.findMethod(
+                        AdminWebController.class, "recarregarServicoUpload", String.class);
+        ReflectionUtils.makeAccessible(method);
+
+        assertThatThrownBy(
+                        () -> ReflectionUtils.invokeMethod(method, controller, "alvo-inexistente"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Alvo desconhecido");
     }
 }

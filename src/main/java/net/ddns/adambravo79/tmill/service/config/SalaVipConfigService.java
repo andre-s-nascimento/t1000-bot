@@ -36,7 +36,7 @@ public class SalaVipConfigService {
         reload();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({"unchecked"})
     public synchronized void reload() {
         try {
             var loaded = jsonConfigLoader.loadConfig("salavip-config.json", Map.class, configFile);
