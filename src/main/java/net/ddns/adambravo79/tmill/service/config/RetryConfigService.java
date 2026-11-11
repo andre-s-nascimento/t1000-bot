@@ -42,7 +42,7 @@ public class RetryConfigService {
         reload();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({})
     public void reload() {
         try {
             var loaded =

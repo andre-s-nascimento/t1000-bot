@@ -5,6 +5,26 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.12.0] — 2026-11-10
+
+### Added
+
+- **Testes E2E com Playwright**: cobertura completa dos deep links (aliases e legacy) do painel web, garantindo que os atalhos de navegação (`#copa`, `#features`, `#aniversarios`, `#monitoramento`, `#anuncios`, `#mensagens`) continuem funcionando após refatorações.
+- **Configuração de projetos Playwright**: `chromium` (desktop) e `mobile-chrome` (emulação mobile) para validar a responsividade do painel.
+
+### Fixed
+
+- **Testes E2E falhando por ausência da aplicação**: os testes agora exigem que o servidor de desenvolvimento esteja rodando (`localhost:9323`) antes da execução. Documentado no fluxo de testes.
+
+### Changed
+
+- **`deep-links.spec.ts`**: ajustado para refletir a estrutura atual do painel após o merge da `develop` (v2.11.1).
+
+### Tests
+
+- **Cobertura E2E**: 12 cenários (6 deep links × 2 projetos) cobrindo navegação e legacy aliases.
+- **Status**: ✅ Todos os testes passando em `chromium` e `mobile-chrome`.
+
 ## [2.11.1] — 2026-11-08
 
 ### Fixed
