@@ -125,7 +125,12 @@ public class SecurityConfig {
                                                 "/",
                                                 "/actuator/health",
                                                 "/favicon.ico",
-                                                "/access-denied")
+                                                "/access-denied",
+                                                // 🆕 ADICIONE ESTAS LINHAS AQUI
+                                                "/css/**",
+                                                "/js/**",
+                                                "/fonts/**",
+                                                "/icons/**")
                                         .permitAll()
                                         .requestMatchers("/admin/**", "/admin-web/**")
                                         .authenticated()
