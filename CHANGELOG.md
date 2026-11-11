@@ -5,6 +5,12 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.12.1] — 2026-11-11
+
+### Fixed
+
+- **Permissão no SecurityConfig**: Para permitir a leitura correta dos arquivos de css e js.
+
 ## [2.12.0] — 2026-11-10
 
 ### Added
