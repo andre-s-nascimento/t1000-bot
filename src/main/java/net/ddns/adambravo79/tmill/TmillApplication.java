@@ -14,7 +14,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * {@link EnableAsync}, permitindo uso de {@code @Async} em serviços como {@link
  * net.ddns.adambravo79.tmill.service.AudioService}.
  *
- * <p>O método {@link #main(String[])} é o ponto de entrada da aplicação.
+ * <p>O método {@link #main(String[])} é o ponto de entrada da aplicação
  */
 @EnableAsync
 @EnableScheduling
