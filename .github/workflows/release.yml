@@ -32,7 +32,7 @@ jobs:
 
       - name: Generate changelog
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@fa551cd71bbe77843d06f6b0310c215347c0c32e
+        uses: mikepenz/release-changelog-builder-action@e6f455f2729f99099466b3a3c299dce0d586b425
         with:
           configurationJson: |
             {
