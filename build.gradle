@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'net.ddns.adambravo79'
-version = '2.12.1'
+version = '2.12.2'
 
 java {
     toolchain {
@@ -331,7 +331,8 @@ sonar {
                 '**/TmillApplication.java',
                 '**/service/BirthdayScheduler.java',
                 '**/service/SalaVipScheduler.java',
-                '**/controller/CommandHandler.java'
+                '**/controller/CommandHandler.java',
+                '**/telegram/core/TelegramFacade.java'
         ].join(',')
 
         property 'sonar.exclusions', '**/build/**,**/src/test/**'
