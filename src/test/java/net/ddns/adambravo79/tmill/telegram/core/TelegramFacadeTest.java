@@ -557,4 +557,84 @@ class TelegramFacadeTest {
             java.nio.file.Files.deleteIfExists(temp);
         }
     }
+
+    // =========================================================================
+    // COBERTURA DOS CATCHES — Sonar New Code Coverage
+    // =========================================================================
+
+    @Test
+    @DisplayName("sendMediaByUrl: exceção no executor retorna false (cobre catch)")
+    void sendMediaByUrl_excecao_retornaFalse() {
+        mockSafeExecutorToRunAction();
+        doThrow(new RuntimeException("falha de rede")).when(executor).execute(any(SendPhoto.class));
+
+        // URL com extensão desconhecida → SendPhoto → lança exceção → catch retorna false
+        // O enviarMidia vai cair no fallback, mas o catch do sendMediaByUrl é exercitado.
+        boolean ok = facade.enviarMidia(123L, "http://exemplo.com/arquivo.xyz", "legenda");
+
+        // sendMediaByUrl retornou false → enviarMidia chamou fallback (HTML) → sucesso=true
+        assertThat(ok).isTrue();
+        verify(executor).execute(any(SendPhoto.class));
+        verify(executor).execute(any(SendMessage.class)); // fallback
+        verify(metricsService).success("telegram_enviar_mensagem_html");
+    }
+
+    @Test
+    @DisplayName("sendMediaByFile: exceção no executor retorna false (cobre catch)")
+    void sendMediaByFile_excecao_retornaFalse() throws Exception {
+        mockSafeExecutorToRunAction();
+        doThrow(new RuntimeException("falha de disco"))
+                .when(executor)
+                .execute(any(SendDocument.class));
+
+        java.nio.file.Path temp = java.nio.file.Files.createTempFile("test-", ".xyz");
+        java.nio.file.Files.writeString(temp, "data");
+
+        try {
+            boolean ok = facade.enviarMidia(123L, temp.toString(), "legenda");
+
+            // sendMediaByFile retornou false → enviarMidia chamou fallback → sucesso=true
+            assertThat(ok).isTrue();
+            verify(executor).execute(any(SendDocument.class));
+            verify(executor).execute(any(SendMessage.class));
+            verify(metricsService).success("telegram_enviar_mensagem_html");
+        } finally {
+            java.nio.file.Files.deleteIfExists(temp);
+        }
+    }
+
+    @Test
+    @DisplayName(
+            "enviarMidia: fallback também lança exceção → sucesso permanece false (cobre catch"
+                    + " aninhado)")
+    void enviarMidia_fallbackTambemFalha_retornaFalse() {
+        mockSafeExecutorToRunAction();
+
+        // Qualquer execute() lança — mídia falha E fallback falha
+        doThrow(new RuntimeException("falha total")).when(executor).execute(any());
+
+        boolean ok = facade.enviarMidia(123L, "video.mp4", "legenda");
+
+        assertThat(ok).isFalse();
+        // Nenhuma métrica de fallback (porque o fallback em si falhou)
+        verify(metricsService, never()).success("telegram_enviar_mensagem_html");
+    }
+
+    @Test
+    @DisplayName("enviarMidia: exceção na exceção do fallback (catch aninhado) — caminho completo")
+    void enviarMidia_excecaoNoEnvioEFallbackFalha_cobreCatchAninhado() {
+        mockSafeExecutorToRunAction();
+
+        // Força o primeiro execute (mídia) a lançar
+        doThrow(new RuntimeException("erro mídia")).when(executor).execute(any(SendPhoto.class));
+
+        // Mas o executor.execute(any()) para SendMessage também lança (fallback falha)
+        doThrow(new RuntimeException("erro fallback"))
+                .when(executor)
+                .execute(any(SendMessage.class));
+
+        boolean ok = facade.enviarMidia(123L, "foto.jpg", "legenda");
+
+        assertThat(ok).isFalse();
+    }
 }
