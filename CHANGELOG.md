@@ -5,6 +5,34 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e o projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [2.12.2] — 2026-11-20
+
+### Fixed
+
+- **Silas Cast: áudio não chegava ao Telegram e caption saía com tags HTML cruas.** Três causas-raiz:
+  1. **Timeout do upload:** o `TelegramBotExecutor` do ksilisk usa um `OkHttpClient` com `writeTimeout` default de 5s. Uploads de áudio de ~4 MB estouravam esse limite em redes com jitter (log: `Request failed due to IO error: timeout`), e o `enviarMidia` caía no fallback de texto.
+  2. **Fallback sem formatação:** o `catch` de `enviarMidia` chamava `enviarMensagem(chatId, caption)` (sem `parseMode=HTML`). A caption do podcast usa `<b>`, `<a href>`, `<code>` e `<i>`, então as tags apareciam literais no chat.
+  3. **Log mentiroso:** `sucesso[0] = true` era setado **antes** do `executor.execute(...)` (assíncrono no ksilisk) terminar. O `PodcastPublisherService` logava `✅ Áudio enviado` mesmo quando o upload falhava — mascarando o bug há semanas.
+
+### Added
+
+- **`TelegramExecutorConfig`** (novo `@Configuration`): fornece um `TelegramBotExecutor` bean próprio, com `OkHttpClient` configurável (`connect=30s`, `read=180s`, `write=180s`, `call=300s`). O ksilisk 0.7.0 **não** permite customizar o client do executor via properties, então o bean é a única forma de resolver o timeout de upload. O bean tem precedência sobre o default do starter.
+
+### Changed
+
+- **`TelegramFacade.enviarMidia`** agora retorna `true` apenas se a mídia foi confirmada pelo Telegram (`response.isOk()`). O fallback de texto (`enviarMensagemHtml`) só é acionado quando a mídia **realmente** falha, e o retorno `true` reflete "algo chegou ao usuário" (áudio **ou** fallback formatado).
+- **`TelegramFacade.sendMediaByUrl`** e **`sendMediaByFile`** retornam `boolean` (antes `void`), permitindo que `enviarMidia` saiba o resultado real do `executor.execute`.
+- **`TelegramFacade.sendAudioOrDocument`** retorna `BaseResponse` (antes `void`).
+- **`TelegramFacade.init()`** agora configura `callTimeout` (`writeTimeout * 2`) no `httpClient` interno do `downloadFile` — antes só `connect/read/write` estavam setados, e um download travado podia ficar pendurado indefinidamente.
+- **`application.properties`:** timeouts do Telegram reduzidos de `300/600/600` para `30/180/180` + novo `call-timeout=300`. Removidas as properties placebo `telegram.bot.client.timeout` e `telegram.bot.timeout` (não eram lidas pelo ksilisk).
+
+### Tests
+
+- **`TelegramFacadeTest`** (ajustado, ~5 testes):
+  - Novo helper `mockExecutorReturningOk()` que stuba `executor.execute(...)` com `BaseResponse.isOk()=true` — sem isso, o `Mockito` retornava `null` e o novo contrato (`response != null && response.isOk()`) caía no fallback indevidamente.
+  - Testes de mídia (`video`, `gif`, `imagem`, `tipoDesconhecido`) trocaram `verifyNoInteractions(metricsService)` por `verify(metricsService, never()).success("telegram_enviar_mensagem_html")` — mais preciso e alinhado ao novo contrato.
+  - Teste `enviarMidia_excecao_generica_enviaTexto` verifica `telegram_enviar_mensagem_html` (antes `telegram_enviar_mensagem`), reflexo do fallback formatado.
+
 ## [2.12.1] — 2026-11-11
 
 ### Fixed
