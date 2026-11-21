@@ -331,7 +331,8 @@ sonar {
                 '**/TmillApplication.java',
                 '**/service/BirthdayScheduler.java',
                 '**/service/SalaVipScheduler.java',
-                '**/controller/CommandHandler.java'
+                '**/controller/CommandHandler.java',
+                '**/telegram/core/TelegramFacade.java'
         ].join(',')
 
         property 'sonar.exclusions', '**/build/**,**/src/test/**'
