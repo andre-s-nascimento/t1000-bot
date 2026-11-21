@@ -637,4 +637,103 @@ class TelegramFacadeTest {
 
         assertThat(ok).isFalse();
     }
+
+    // =========================================================================
+    // COBERTURA DOS CATCHES — Sonar Quality Gate
+    // =========================================================================
+
+    @Test
+    @DisplayName("sendMediaByUrl: exceção no executor cobre o catch (linhas 244-246)")
+    void sendMediaByUrl_excecao_cobreCatch() {
+        mockSafeExecutorToRunAction();
+
+        // Lança exceção APENAS em SendPhoto (que é o fallback do URL desconhecido)
+        doThrow(new RuntimeException("falha de rede simulada"))
+                .when(executor)
+                .execute(any(SendPhoto.class));
+
+        // arquivo.xyz → SendPhoto (URL) → lança → catch retorna false → enviarMidia usa fallback
+        // HTML
+        boolean ok = facade.enviarMidia(123L, "http://exemplo.com/arquivo.xyz", "legenda");
+
+        assertThat(ok).isTrue(); // fallback HTML funcionou
+        verify(executor).execute(any(SendPhoto.class));
+        verify(executor).execute(any(SendMessage.class)); // fallback
+        verify(metricsService).success("telegram_enviar_mensagem_html");
+    }
+
+    @Test
+    @DisplayName("sendMediaByFile: exceção no executor cobre o catch (linhas 285-287)")
+    void sendMediaByFile_excecao_cobreCatch() throws Exception {
+        mockSafeExecutorToRunAction();
+
+        // Lança exceção APENAS em SendDocument (arquivo desconhecido)
+        doThrow(new RuntimeException("falha de disco simulada"))
+                .when(executor)
+                .execute(any(SendDocument.class));
+
+        java.nio.file.Path temp = java.nio.file.Files.createTempFile("test-", ".xyz");
+        java.nio.file.Files.writeString(temp, "data");
+
+        try {
+            // arquivo local .xyz → SendDocument → lança → catch retorna false → fallback HTML
+            boolean ok = facade.enviarMidia(123L, temp.toString(), "legenda");
+
+            assertThat(ok).isTrue();
+            verify(executor).execute(any(SendDocument.class));
+            verify(executor).execute(any(SendMessage.class));
+            verify(metricsService).success("telegram_enviar_mensagem_html");
+        } finally {
+            java.nio.file.Files.deleteIfExists(temp);
+        }
+    }
+
+    @Test
+    @DisplayName("enviarMidia: mídia falha, fallback lança exceção (cobre linhas 200-201)")
+    void enviarMidia_midiaFalhaECatchFallback_cobreCatchAninhado() {
+        mockSafeExecutorToRunAction();
+
+        // Qualquer chamada ao executor lança exceção
+        doThrow(new RuntimeException("falha total simulada")).when(executor).execute(any());
+
+        boolean ok = facade.enviarMidia(123L, "video.mp4", "legenda");
+
+        // mídia falhou (catch interno) → tentou fallback → fallback lançou → catch aninhado →
+        // retorno false
+        assertThat(ok).isFalse();
+        verify(metricsService, never()).success("telegram_enviar_mensagem_html");
+    }
+
+    @Test
+    @DisplayName("enviarFallback: exceção no executor cobre o catch (linha 316)")
+    void enviarFallback_excecao_cobreCatch() {
+        // Configura o safeExecutor para NÃO executar a action e chamar o fallback diretamente
+        doAnswer(
+                        inv -> {
+                            Long chatId = inv.getArgument(0);
+                            TelegramSender fallback = inv.getArgument(1);
+
+                            // Simula a falha na action principal (enviarMensagem)
+                            // O safeExecutor chamaria o fallback, que também vai falhar
+                            fallback.enviar(chatId, "⚠️ Erro ao processar. Tente novamente.");
+                            return null;
+                        })
+                .when(safeExecutor)
+                .run(
+                        anyLong(),
+                        any(TelegramSender.class),
+                        any(TelegramSafeExecutor.ThrowingRunnable.class));
+
+        // Força a exceção no envio
+        doThrow(new RuntimeException("falha simulada"))
+                .when(executor)
+                .execute(any(SendMessage.class));
+
+        // O enviarMensagem chama safeExecutor.run, que dispara o fallback
+        // O fallback (enviarFallback) tenta executar SendMessage, que lança exceção
+        // O catch do enviarFallback captura e loga (cobertura da linha 316)
+        facade.enviarMensagem(123L, "texto original");
+
+        verify(executor, times(1)).execute(any(SendMessage.class));
+    }
 }
