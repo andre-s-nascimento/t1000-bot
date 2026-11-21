@@ -40,7 +40,6 @@ public class TelegramFacade {
     @Value("${telegram.bot.token}")
     private String botToken;
 
-    // 🔥 NOVAS CONFIGURAÇÕES DE TIMEOUT
     @Value("${telegram.bot.client.connect-timeout:60}")
     private int connectTimeout;
 
@@ -56,17 +55,17 @@ public class TelegramFacade {
     public void init() {
         log.info("🔑 Token carregado: {}", maskToken(botToken));
         log.info(
-                "⏱️ Timeouts configurados: connect={}s, read={}s, write={}s",
+                "⏱️ Timeouts do httpClient interno (download): connect={}s, read={}s, write={}s",
                 connectTimeout,
                 readTimeout,
                 writeTimeout);
 
-        // 🔥 Cria cliente HTTP com timeouts configurados
         this.httpClient =
                 new OkHttpClient.Builder()
                         .connectTimeout(connectTimeout, TimeUnit.SECONDS)
                         .readTimeout(readTimeout, TimeUnit.SECONDS)
                         .writeTimeout(writeTimeout, TimeUnit.SECONDS)
+                        .callTimeout(writeTimeout * 2L, TimeUnit.SECONDS)
                         .build();
     }
 
@@ -152,63 +151,53 @@ public class TelegramFacade {
     /**
      * Envia mídia (URL ou arquivo local).
      *
-     * <p><b>KI-001 (fix):</b> este método agora <b>retorna</b> {@code true} se o envio foi
-     * confirmado e {@code false} se tudo falhou (mídia + fallback de texto). Antes, engolia
-     * exceções silenciosamente, o que causava falsos "sucesso" em {@code PodcastPublisherService}.
-     *
-     * <p><b>Áudios grandes:</b> arquivos {@code .mp3/.wav/.oga} acima de
-     * {@code audioConfig.getTelegram().useDocumentWhenOverMb()} são enviados como
-     * {@link SendDocument} em vez de {@link SendAudio} — mais tolerante a timeouts de rede.
-     *
-     * @return {@code true} se a mídia foi enviada; {@code false} se mídia e fallback falharam
+     * <p>Retorna {@code true} se o envio da mídia foi confirmado pelo Telegram, {@code false}
+     * caso contrário (mídia falhou E fallback de texto também falhou, ou mídia falhou mas fallback
+     * foi enviado — nesse caso retorna {@code true} porque algo chegou ao usuário).
      */
     public boolean enviarMidia(long chatId, String filePathOrUrl, String caption) {
         boolean[] sucesso = {false};
 
         safeExecutor.run(
                 chatId,
-                this::enviarMensagem,
+                this::enviarFallback,
                 () -> {
                     try {
-                        // 1. URL HTTP/HTTPS
                         if (filePathOrUrl.startsWith("http://")
                                 || filePathOrUrl.startsWith("https://")) {
-                            sendMediaByUrl(chatId, filePathOrUrl, caption);
-                            sucesso[0] = true;
-                            return;
+                            sucesso[0] = sendMediaByUrl(chatId, filePathOrUrl, caption);
+                        } else {
+                            java.io.File file = new java.io.File(filePathOrUrl);
+                            if (file.exists()) {
+                                sucesso[0] = sendMediaByFile(chatId, file, caption);
+                            } else {
+                                log.warn(
+                                        "⚠️ Arquivo não existe: {} — tentando como URL/file_id",
+                                        LogSanitizer.sanitize(filePathOrUrl));
+                                sucesso[0] = sendMediaByUrl(chatId, filePathOrUrl, caption);
+                            }
                         }
 
-                        // 2. Arquivo local existente
-                        java.io.File file = new java.io.File(filePathOrUrl);
-                        if (file.exists()) {
-                            sendMediaByFile(chatId, file, caption);
+                        if (!sucesso[0]) {
+                            log.warn(
+                                    "⚠️ Envio de mídia falhou para chatId={} — enviando fallback"
+                                            + " formatado",
+                                    LogSanitizer.sanitizeId(chatId));
+                            enviarMensagemHtml(chatId, caption);
                             sucesso[0] = true;
-                            return;
                         }
-
-                        // 3. Fallback: assume file_id ou string genérica → tenta URL
-                        log.debug("Tratando '{}' como file_id ou string genérica", filePathOrUrl);
-                        sendMediaByUrl(chatId, filePathOrUrl, caption);
-                        sucesso[0] = true;
-
                     } catch (Exception e) {
                         log.warn(
-                                "⚠️ Falha ao enviar mídia para chatId {}: {}. Tentando fallback"
-                                        + " de texto.",
+                                "⚠️ Exceção ao enviar mídia para chatId={}: {}",
                                 LogSanitizer.sanitizeId(chatId),
                                 LogSanitizer.sanitize(e.getMessage()));
-
-                        // Fallback: tenta enviar apenas a caption como texto.
-                        // Se o fallback também falhar, sucesso[0] permanece false.
                         try {
-                            enviarMensagem(chatId, caption);
+                            enviarMensagemHtml(chatId, caption);
                             sucesso[0] = true;
-                            log.info("✅ Fallback de texto enviado para chatId={}", chatId);
                         } catch (Exception fallbackErr) {
                             log.error(
-                                    "❌ Fallback de texto também falhou para chatId={}",
-                                    chatId,
-                                    fallbackErr);
+                                    "❌ Fallback também falhou: {}",
+                                    LogSanitizer.sanitize(fallbackErr.getMessage()));
                         }
                     }
                 });
@@ -220,66 +209,100 @@ public class TelegramFacade {
     // MÉTODOS AUXILIARES PRIVADOS — envio de mídia
     // =========================================================================
 
-    private void sendMediaByUrl(long chatId, String url, String caption) {
+    private boolean sendMediaByUrl(long chatId, String url, String caption) {
         String lower = url.toLowerCase();
-        if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
-            executor.execute(new SendVideo(chatId, url).caption(caption).parseMode(ParseMode.HTML));
-        } else if (lower.endsWith(".gif")) {
-            executor.execute(
-                    new SendAnimation(chatId, url).caption(caption).parseMode(ParseMode.HTML));
-        } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
-            executor.execute(new SendPhoto(chatId, url).caption(caption).parseMode(ParseMode.HTML));
-        } else {
-            // Fallback genérico: tenta enviar como foto
-            executor.execute(new SendPhoto(chatId, url).caption(caption).parseMode(ParseMode.HTML));
+        try {
+            BaseResponse response;
+            if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
+                response =
+                        executor.execute(
+                                new SendVideo(chatId, url)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            } else if (lower.endsWith(".gif")) {
+                response =
+                        executor.execute(
+                                new SendAnimation(chatId, url)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            } else if (lower.endsWith(".jpg")
+                    || lower.endsWith(".jpeg")
+                    || lower.endsWith(".png")) {
+                response =
+                        executor.execute(
+                                new SendPhoto(chatId, url)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            } else {
+                response =
+                        executor.execute(
+                                new SendPhoto(chatId, url)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            }
+            return response != null && response.isOk();
+        } catch (Exception e) {
+            log.error("❌ Erro no envio de mídia por URL: {}", e.getMessage(), e);
+            return false;
         }
     }
 
-    private void sendMediaByFile(long chatId, java.io.File file, String caption) {
+    private boolean sendMediaByFile(long chatId, java.io.File file, String caption) {
         String lower = file.getName().toLowerCase();
         long sizeBytes = file.length();
-
-        if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
-            executor.execute(
-                    new SendVideo(chatId, file).caption(caption).parseMode(ParseMode.HTML));
-        } else if (lower.endsWith(".gif")) {
-            executor.execute(
-                    new SendAnimation(chatId, file).caption(caption).parseMode(ParseMode.HTML));
-        } else if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".oga")) {
-            sendAudioOrDocument(chatId, file, caption, sizeBytes);
-        } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")) {
-            executor.execute(
-                    new SendPhoto(chatId, file).caption(caption).parseMode(ParseMode.HTML));
-        } else {
-            // Para outros tipos, usa SendDocument
-            executor.execute(
-                    new SendDocument(chatId, file).caption(caption).parseMode(ParseMode.HTML));
+        try {
+            BaseResponse response;
+            if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
+                response =
+                        executor.execute(
+                                new SendVideo(chatId, file)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            } else if (lower.endsWith(".gif")) {
+                response =
+                        executor.execute(
+                                new SendAnimation(chatId, file)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            } else if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".oga")) {
+                response = sendAudioOrDocument(chatId, file, caption, sizeBytes);
+            } else if (lower.endsWith(".jpg")
+                    || lower.endsWith(".jpeg")
+                    || lower.endsWith(".png")) {
+                response =
+                        executor.execute(
+                                new SendPhoto(chatId, file)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            } else {
+                response =
+                        executor.execute(
+                                new SendDocument(chatId, file)
+                                        .caption(caption)
+                                        .parseMode(ParseMode.HTML));
+            }
+            return response != null && response.isOk();
+        } catch (Exception e) {
+            log.error("❌ Erro no envio de mídia por arquivo: {}", e.getMessage(), e);
+            return false;
         }
     }
 
-    /**
-     * Decide entre {@link SendAudio} e {@link SendDocument} para arquivos de áudio.
-     *
-     * <p>Áudios acima de {@code audioConfig.getTelegram().useDocumentWhenOverMb()} MB são enviados
-     * como documento — o {@code SendAudio} tende a estourar timeout em redes mais lentas (ver
-     * KI-001).
-     */
-    private void sendAudioOrDocument(
+    private BaseResponse sendAudioOrDocument(
             long chatId, java.io.File file, String caption, long sizeBytes) {
         long thresholdBytes = audioConfig.getTelegram().useDocumentWhenOverMb() * 1024L * 1024L;
 
         if (sizeBytes > thresholdBytes) {
             log.info(
-                    "📎 Áudio de {} MB acima do limite de {} MB — enviando como DOCUMENTO"
-                            + " (mais resiliente a timeout)",
+                    "📎 Áudio de {} MB acima do limite de {} MB — enviando como DOCUMENTO",
                     String.format("%.2f", sizeBytes / 1024.0 / 1024.0),
                     audioConfig.getTelegram().useDocumentWhenOverMb());
-            executor.execute(
+            return executor.execute(
                     new SendDocument(chatId, file).caption(caption).parseMode(ParseMode.HTML));
-        } else {
-            executor.execute(
-                    new SendAudio(chatId, file).caption(caption).parseMode(ParseMode.HTML));
         }
+
+        return executor.execute(
+                new SendAudio(chatId, file).caption(caption).parseMode(ParseMode.HTML));
     }
 
     // =========================================================================
@@ -323,7 +346,6 @@ public class TelegramFacade {
         }
     }
 
-    /** Mascara um token para exibição em logs. */
     private static String maskToken(String token) {
         if (token == null) {
             return "***";
