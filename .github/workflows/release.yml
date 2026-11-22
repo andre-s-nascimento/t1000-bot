@@ -32,7 +32,7 @@ jobs:
 
       - name: Generate changelog
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@fa551cd71bbe77843d06f6b0310c215347c0c32e
+        uses: mikepenz/release-changelog-builder-action@674e9ff61731ac5f23fec3ce6c1e60401951162e
         with:
           configurationJson: |
             {
@@ -44,7 +44,7 @@ jobs:
             }
 
       - name: Criar Release no GitHub
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
           name: Release ${{ steps.vars.outputs.tag }}
