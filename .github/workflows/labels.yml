@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Sync labels
-        uses: crazy-max/ghaction-github-labeler@573dd2fc64c1d56e47ff3e3d0e8807832591688f
+        uses: crazy-max/ghaction-github-labeler@3e3d192d30934db43ec15550ec9ab5d9d60a9aa8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           yaml-file: .github/labels.yml
